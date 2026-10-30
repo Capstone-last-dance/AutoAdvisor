@@ -383,7 +383,37 @@ API 키 값은 묻지도 쓰지도 않는다 (R-16).
 
 ## 설치와 실행
 
-> **작성 예정** (D-01: 실행 환경, D-03: 주간 실행기, D-05: 대시보드)
+### 설치
+
+Python 3.12를 쓴다. 주요 라이브러리 버전은 `requirements.txt`에, 하위 의존성까지 포함한 전체 버전은 `requirements-lock.txt`에 고정되어 있다 (명세서 부록 3 Q-18, R-10). 설치는 `requirements-lock.txt`로 한다.
+
+pandas는 3.x를 쓴다. 문자열 열의 기본 자료형이 `str`이고 Copy-on-Write가 기본으로 켜져 있으므로, pandas 2 기준 예제 코드는 동작이 다를 수 있다.
+
+Windows (PowerShell):
+
+```powershell
+py -3.12 -m venv .venv
+.venv\Scripts\Activate.ps1
+python -m pip install --upgrade pip
+pip install -r requirements-lock.txt
+Copy-Item .env.example .env
+```
+
+macOS·Linux:
+
+```bash
+python3.12 -m venv .venv
+source .venv/bin/activate
+python -m pip install --upgrade pip
+pip install -r requirements-lock.txt
+cp .env.example .env
+```
+
+`.env`의 키 값은 PM에게 받아 채운다 ([기밀 정보](#기밀-정보)).
+
+### 실행
+
+> **작성 예정** (D-03: 주간 실행기, D-05: 대시보드)
 
 아래는 명세서에 정해진 실행 명령이다. 아직 구현 전이므로 지금은 동작하지 않는다.
 

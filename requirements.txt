@@ -1,0 +1,29 @@
+# Python 3.12 (부록 3 Q-18)
+# 버전은 2026-10-30 Python 3.12.10 새 가상환경에서 설치·동작 확인한 조합이다.
+# 버전을 바꿀 때는 새 가상환경에서 다시 확인하고 decisions.md에 기록한다.
+
+# 데이터 처리와 parquet 입출력 (9.3절)
+numpy==2.5.4
+pandas==3.1.0
+pyarrow==26.0.0
+scipy==1.18.1
+
+# 신호 모델과 평가 (6.3절, 6.4절, 6.6절)
+lightgbm==4.7.0
+scikit-learn==1.9.1
+statsmodels==0.15.0
+
+# 강화학습 (6.5절)
+gymnasium==1.4.0
+stable-baselines3==2.9.2
+torch==2.15.0
+
+# 해석 (6.13절)
+shap==0.54.1
+
+# 대시보드 (6.11절)
+streamlit==1.66.1
+
+# 설정과 기밀 정보 (부록 1, 6.12절)
+PyYAML==6.0.3
+python-dotenv==1.2.4
