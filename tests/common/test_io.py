@@ -162,6 +162,14 @@ class RoundTripTest(TempRootTest):
         with self.assertRaises(FileNotFoundError):
             io.read_table("signals", date=DAY)  # 스텁은 실제 경로에서 읽히지 않는다
 
+    def test_missing_file_raises_file_not_found(self):
+        # 호출하는 쪽(PM-04 등)은 FileNotFoundError로 '새 파일'을 판단한다
+        for name, date in [("disclosures", None), ("signals", DAY), ("forward_log", None)]:
+            with self.subTest(name=name), self.assertRaises(FileNotFoundError):
+                io.read_table(name, date=date)
+        with self.assertRaises(FileNotFoundError):
+            io.read_evidence(DAY)
+
     def test_empty_forward_log_file(self):
         (self.tmp / "forward_log.csv").write_bytes(b"")
         df = io.read_table("forward_log")
@@ -205,6 +213,10 @@ class ValidateRejectsTest(unittest.TestCase):
         self.assertRejects("prices", df)
         df = sample("prices"); df["ticker"] = ["CASH", "000660"]     # CASH는 positions만
         self.assertRejects("prices", df)
+        df = sample("prices"); df["ticker"] = ["0030r0", "000660"]   # 영문은 대문자만
+        self.assertRejects("prices", df)
+        df = sample("prices"); df["ticker"] = ["0030R0", "0120G0"]   # 2025년 하반기 이후 영문 포함 코드
+        io.validate("prices", df)
         df = sample("news"); df.loc[0, "ticker"] = None              # news는 결측 불가
         self.assertRejects("news", df)
 

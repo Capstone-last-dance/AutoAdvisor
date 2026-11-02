@@ -35,7 +35,8 @@ DISCLAIMER = (
 _KST_OFFSET = pd.Timedelta(hours=9)
 _DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 _RUN_ID_RE = re.compile(r"^\d{8}_(PM|A|B|C|D)_[A-Za-z0-9_\-]+$")  # 9.3절 run_id 형식
-_TICKER_RE = r"\d{6}"  # 0.4절: 6자리 문자열
+# 0.4절: 6자리 문자열. 2025년 하반기 신규 상장부터 영문이 섞인다 (예: "0030R0")
+_TICKER_RE = r"[0-9A-Z]{6}"
 
 
 class SchemaError(ValueError):
@@ -226,8 +227,10 @@ EVIDENCE_SIGNAL_TYPES = frozenset({"crash", "rank", "alert"})
 def read_table(name: str, date: str | None = None, run_id: str | None = None,
                stub: bool = False) -> pd.DataFrame:
     # stub=True는 _stub/ 아래 스텁을 읽는다. 6.12절 시그니처에 추가한 인자 (decisions.md 기록 대상)
+    # 파일이 없으면 FileNotFoundError만 낸다. 호출하는 쪽은 이것으로 '새 파일'을 판단한다.
     rel = _relative_path(name, date, run_id)
     path = ROOT / (Path(STUB_DIR) / rel if stub else rel)
+    _require_file(path)
     if name == "forward_log":
         df = _read_forward_log(path)
     else:
@@ -286,6 +289,7 @@ def validate(name: str, df: pd.DataFrame) -> None:
 def read_evidence(date: str, stub: bool = False) -> list[dict]:
     rel = _evidence_path(date)
     path = ROOT / (Path(STUB_DIR) / rel if stub else rel)
+    _require_file(path)
     with open(path, encoding="utf-8") as f:
         records = [json.loads(line) for line in f if line.strip()]
     _validate_evidence(records, date)
@@ -331,6 +335,11 @@ def _relative_path(name: str, date: str | None, run_id: str | None) -> Path:
     if name in DATED_FOLDERS:
         raise ValueError(f"{name}은 date(날짜별 파일) 또는 run_id(백테스트 파일)가 필요하다")
     return Path("data") / "processed" / f"{name}.parquet"
+
+
+def _require_file(path: Path) -> None:
+    if not path.is_file():
+        raise FileNotFoundError(f"파일이 없다: {path}")
 
 
 def _evidence_path(date: str) -> Path:
@@ -415,7 +424,7 @@ def _check_column(s: pd.Series, rule: Col) -> list[str]:
                 ok = ok | (values == "CASH")
             if not ok.all():
                 bad = values[~ok].head(3).tolist()
-                errors.append(f"6자리 종목코드 문자열이 아니다 (0.4절), 예: {bad}")
+                errors.append(f"6자리 종목코드 문자열(숫자·영문 대문자)이 아니다 (0.4절), 예: {bad}")
     elif kind in ("float64", "int64", "int32", "int8", "bool"):
         if s.dtype != np.dtype(kind):
             errors.append(f"자료형이 {kind}이 아니다 ({s.dtype})")
