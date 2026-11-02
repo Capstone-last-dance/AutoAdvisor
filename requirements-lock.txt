@@ -2,6 +2,8 @@
 # requirements.txt를 Python 3.12.10 새 가상환경에 설치한 뒤 pip freeze로 만들었다 (2026-10-30, Windows).
 # 직접 고치지 않는다. requirements.txt를 바꾸면 새 가상환경에서 다시 만든다.
 
+# 2026-11-02: 기존 잠금 버전을 유지한 채 pytest와 그 의존성만 추가했다.
+
 altair==6.3.0
 anyio==4.15.1
 attrs==26.1.0
@@ -17,6 +19,7 @@ fsspec==2026.9.0
 gymnasium==1.4.0
 h11==0.16.0
 idna==3.20
+iniconfig==2.3.1
 interface_meta==2.0.1
 itsdangerous==2.2.0
 Jinja2==3.1.6
@@ -33,9 +36,12 @@ packaging==26.3
 pandas==3.1.0
 patsy==1.0.3
 pillow==13.0.0
+pluggy==1.7.0
 protobuf==7.36.2
 pyarrow==26.0.0
 pydeck==0.9.3
+Pygments==2.21.0
+pytest==9.2.0
 python-dateutil==3.0.0
 python-dotenv==1.2.4
 python-multipart==0.0.32
