@@ -6,3 +6,5 @@ data/raw/*
 venv/
 env/
 __pycache__/
+_stub/*
+!_stub/.gitkeep
