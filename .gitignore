@@ -43,6 +43,8 @@ CLAUDE.local.md
 !/data/processed/.gitkeep
 /logs/*
 !/logs/.gitkeep
+_stub/*
+!_stub/.gitkeep
 
 # Personal PM investigations, collection runs, reviews and execution records
 # Keep team experiment reports and reports/final eligible for Git.
