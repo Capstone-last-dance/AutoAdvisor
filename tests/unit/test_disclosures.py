@@ -358,6 +358,34 @@ def test_refuse_on_shrink_without_reason(tmp_path, client_factory, monkeypatch):
     assert target.read_bytes() == b"existing file"
 
 
+class MissingTableIO(PreparedIO):
+    """공용 표가 아직 없을 때 FileNotFoundError를 내는 대역 (D-02 합의)."""
+    def read_table(self, name):
+        self.calls.append("read")
+        raise FileNotFoundError(name)
+
+
+def test_shrink_check_uses_common_io_not_cwd(tmp_path, client_factory, monkeypatch):
+    # 현재 폴더에 파일이 없어도 공용 I/O가 기존 표를 돌려주면 행 수 감소를 막는다.
+    monkeypatch.chdir(tmp_path)
+    result, _ = continuous_result(tmp_path, client_factory, [item(1, day="20100101"), item(2, day="20100102")])
+    monkeypatch.setattr(mod, "_common_io", lambda: PreparedIO(result.df))
+    assert not Path("data/processed/disclosures.parquet").exists()
+    smaller = replace(result, df=result.df.iloc[:1].copy())
+    with pytest.raises(PublishRefused, match="P3"):
+        publish_disclosures(smaller)
+
+
+def test_missing_public_table_skips_shrink_check(tmp_path, client_factory, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    result, _ = continuous_result(tmp_path, client_factory)
+    io = MissingTableIO()
+    monkeypatch.setattr(mod, "_common_io", lambda: io)
+    with pytest.raises(PublishRefused, match="DEC-09"):
+        publish_disclosures(result)
+    assert io.calls == ["read", "validate"]
+
+
 @pytest.mark.parametrize("dry_run", [False, True])
 def test_missing_common_io_never_reads_or_writes_public_file(tmp_path, client_factory, monkeypatch, dry_run):
     monkeypatch.chdir(tmp_path)
@@ -400,7 +428,7 @@ def test_common_io_cannot_approve_unagreed_time_contract(tmp_path, client_factor
     monkeypatch.setattr(mod, "_common_io", lambda: io)
     with pytest.raises(PublishRefused, match="DEC-09"):
         publish_disclosures(result, dry_run=dry_run)
-    assert io.calls == ["validate"]
+    assert io.calls == ["read", "validate"]
     assert not Path("data/processed/disclosures.parquet").exists()
 
 

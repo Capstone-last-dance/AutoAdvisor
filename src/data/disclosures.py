@@ -650,17 +650,20 @@ def publish_disclosures(result: BuildResult, *, allow_shrink_reason=None, dry_ru
     _coverage_check(result)
     if not result.conflicts.empty:
         raise PublishRefused("P2: 불변 필드 충돌이 있습니다")
-    target = Path("data/processed/disclosures.parquet")
     try:
         io = _common_io()
     except ImportError:
         raise PublishRefused("R-18: 공용 I/O를 불러올 수 없어 공개 저장을 거부합니다") from None
     if io is None or not all(callable(getattr(io, name, None)) for name in ("read_table", "validate", "write_table")):
         raise PublishRefused("R-18: 공용 I/O의 읽기·검증·쓰기가 준비되지 않아 공개 저장을 거부합니다")
-    if target.exists():
+    # 기존 파일 여부도 공용 I/O 경로로만 판단한다. 현재 폴더 기준 경로를 쓰면
+    # 다른 위치에서 실행할 때 기존 파일을 못 찾고 P3 검사를 건너뛴다.
+    try:
         old = io.read_table("disclosures")
-        if len(result.df) < len(old) and not (allow_shrink_reason and allow_shrink_reason.strip()):
-            raise PublishRefused("P3: 기존 파일보다 행 수가 줄어듭니다")
+    except FileNotFoundError:
+        old = None
+    if old is not None and len(result.df) < len(old) and not (allow_shrink_reason and allow_shrink_reason.strip()):
+        raise PublishRefused("P3: 기존 파일보다 행 수가 줄어듭니다")
     _validate_internal(result.df, result.schema_mode)
     try:
         io.validate("disclosures", result.df)
