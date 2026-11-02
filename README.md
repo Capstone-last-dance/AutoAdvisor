@@ -443,14 +443,23 @@ signals = read_table("signals", date="2026-11-06", stub=True)       # 스텁 읽
 
 ### 실행
 
-> **작성 예정** (D-03: 주간 실행기, D-05: 대시보드)
-
-아래는 명세서에 정해진 실행 명령이다. 아직 구현 전이므로 지금은 동작하지 않는다.
+#### 주간 실행
 
 ```bash
-# 주간 실행 (구현 예정, D-03)
 python -m src.pipeline.run_weekly --date YYYY-MM-DD
+```
 
+5.2절 1~7단계를 순서대로 실행하고, 로그를 `logs/{date}.log`에 남긴다. 한 단계라도 실패하면 이후 단계를 실행하지 않고 종료 코드 1로 끝난다.
+
+- 모듈과 연결되지 않은 단계는 9.3절 스키마의 빈 스텁을 `_stub/` 아래에 쓴다. 앞 단계가 스텁이면 뒤 단계의 출력도 `_stub/`에 쓴다.
+- 스텁이 하나라도 쓰인 실행은 forward test 커밋을 하지 않는다.
+- 모듈 연결: `src/pipeline/run_weekly.py`의 `STEPS`에서 해당 단계의 `entry`에 `"모듈경로:함수이름"`을 적는다. 함수는 `fn(ctx)` 형태로, 입력은 `ctx.read_table`, 출력은 `ctx.write_table`로 다룬다. 연결할 함수가 준비되면 D에게 알려 준다.
+
+#### 일간 경보와 대시보드
+
+> **작성 예정** (D-06: 일간 경보 실행기, D-05: 대시보드)
+
+```bash
 # 일간 경보 실행 (구현 예정, D-06)
 python -m src.pipeline.run_daily_alerts --date YYYY-MM-DD
 
