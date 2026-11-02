@@ -27,6 +27,10 @@ DATE_ONLY_AVAILABLE_TIME = time(23, 59, 59)
 V03_COLUMNS = ["rcept_no", "rcept_dt", "ticker", "corp_name", "report_nm", "report_nm_norm"]
 EXTENDED_COLUMNS = ["rcept_no", "rcept_date", "rcept_dt", "available_at", "ticker", "corp_code",
                     "corp_name", "flr_nm", "report_nm", "report_nm_norm"]
+# DEC-09 공개 스키마. 제출인(flr_nm)은 쓰는 곳이 없어 진단 결과에만 둔다.
+PUBLIC_COLUMNS = [c for c in EXTENDED_COLUMNS if c != "flr_nm"]
+TICKER_POLICY_LISTED = "listed_on_rcept_date"
+TICKER_POLICY_NO_SOURCE = "no_ticker_source_null"
 IMMUTABLE = ("rcept_dt", "report_nm", "corp_code", "flr_nm")
 MUTABLE = ("corp_name", "stock_code", "corp_cls", "rm")
 
@@ -64,7 +68,7 @@ class CollectionResult:
 
 @dataclass
 class BuildResult:
-    """공개 시점 계약 합의 전의 내부 진단 결과. 학습/평가 입력 승인이 아니다."""
+    """정제 결과. extended이고 상장 기간으로 종목코드를 붙인 결과만 공개할 수 있다 (DEC-09)."""
     df: pd.DataFrame
     conflicts: pd.DataFrame
     quality: dict[str, int]
@@ -78,6 +82,7 @@ class BuildResult:
     calls_total: int = 0
     report_dir: Path | None = None
     allow_shrink_reason: str | None = None
+    ticker_policy: str = TICKER_POLICY_NO_SOURCE
 
 
 class PublishRefused(ValueError):
@@ -461,10 +466,39 @@ def _read_observations(run_dirs, *, include_coverage=False):
     return observations, windows, runs, tuple(dict.fromkeys(types)), calls
 
 
-def build_disclosures(run_dirs: Sequence[Path] | None = None, *, schema_mode="extended", today: date) -> BuildResult:
-    """원본을 진단용으로 정제한다. 현재 관측 종목코드는 과거 매핑 근거가 아니다."""
+def _listing_periods(tickers: pd.DataFrame) -> dict[str, tuple[pd.Timestamp, pd.Timestamp | None]]:
+    """A의 tickers에서 종목코드별 상장 기간을 만든다 (DEC-09 (2))."""
+    missing = {"ticker", "listing_date", "delisting_date"} - set(tickers.columns)
+    if missing:
+        raise ValueError(f"tickers에 상장 기간 열이 없습니다: {sorted(missing)}")
+    periods = {}
+    for row in tickers.itertuples(index=False):
+        end = None if pd.isna(row.delisting_date) else pd.Timestamp(row.delisting_date)
+        periods[row.ticker] = (pd.Timestamp(row.listing_date), end)
+    return periods
+
+
+def load_listed_tickers() -> pd.DataFrame | None:
+    """공용 I/O의 tickers를 읽는다. 아직 없으면 None이고 종목코드는 결측으로 남는다."""
+    io = _common_io()
+    if io is None:
+        return None
+    try:
+        return io.read_table("tickers")
+    except FileNotFoundError:
+        return None
+
+
+def build_disclosures(run_dirs: Sequence[Path] | None = None, *, schema_mode="extended", today: date,
+                      tickers: pd.DataFrame | None = None) -> BuildResult:
+    """원본을 정제한다.
+
+    종목코드는 tickers가 있을 때만, 공시 접수일에 그 종목이 상장 중이었으면 붙인다 (DEC-09 (2)).
+    목록 응답의 stock_code는 수집 당시 값이라 상장 기간으로 확인하지 않으면 과거에 소급하지 않는다.
+    """
     if schema_mode not in ("v03", "extended"):
         raise ValueError("스키마 모드는 v03 또는 extended여야 합니다")
+    periods = _listing_periods(tickers) if tickers is not None else None
     if run_dirs is None:
         run_dirs = [p.parent for p in Path("data/raw").glob("*/*_PM_disclosures_*/opendart_list/manifest.json")]
     raw, windows, runs, types, calls = _read_observations(run_dirs)
@@ -503,16 +537,25 @@ def build_disclosures(run_dirs: Sequence[Path] | None = None, *, schema_mode="ex
                 quality[f"mutable_changed_{field_name}"] += 1
         if len({r["pblntf_ty"] for r in group}) > 1:
             quality["multi_type"] += 1
+        rcept_date = datetime.strptime(latest["rcept_dt"], "%Y%m%d").date()
+        # 목록 응답의 stock_code는 수집 당시 값이다. 접수일에 상장 중이었음을
+        # tickers로 확인한 경우에만 붙이고, 원본 코드·fetched_at은 observations에 보존한다.
         observed_code = latest["stock_code"] or None
+        ticker = None
         if observed_code is not None and not re.fullmatch(r"[0-9A-Z]{6}", observed_code):
             quality["invalid_stock_code"] += 1
-        elif observed_code is not None:
+        elif observed_code is not None and periods is None:
             quality["ticker_unverified_asof"] += 1
-        # 목록 응답의 stock_code는 수집 당시 값이다. 과거 유효 기간 근거가
-        # 없는 상태에서 earliest/latest 어느 관측도 과거 공시에 소급하지 않는다.
-        # 원본 코드·fetched_at은 observations에 보존한다.
-        ticker = None
-        rcept_date = datetime.strptime(latest["rcept_dt"], "%Y%m%d").date()
+        elif observed_code is not None:
+            period = periods.get(observed_code)
+            day = pd.Timestamp(rcept_date)
+            if period is None:
+                quality["ticker_code_not_in_tickers"] += 1
+            elif period[0] <= day and (period[1] is None or day <= period[1]):
+                ticker = observed_code
+                quality["ticker_listed_on_rcept_date"] += 1
+            else:
+                quality["ticker_not_listed_on_rcept_date"] += 1
         number_date = datetime.strptime(number[:8], "%Y%m%d").date()
         available = datetime.combine(max(rcept_date, number_date), DATE_ONLY_AVAILABLE_TIME, tzinfo=KST)
         quality["rcept_no_date_differs"] += rcept_date != number_date
@@ -535,12 +578,13 @@ def build_disclosures(run_dirs: Sequence[Path] | None = None, *, schema_mode="ex
     for column in frame.columns:
         if column not in {"rcept_date", "rcept_dt", "available_at"}:
             frame[column] = frame[column].astype(object).where(frame[column].notna(), None)
-    frame.attrs.update(diagnostic_only=True, actual_reception_times_available=False,
+    ticker_policy = TICKER_POLICY_LISTED if periods is not None else TICKER_POLICY_NO_SOURCE
+    frame.attrs.update(diagnostic_only=schema_mode == "v03", actual_reception_times_available=False,
                        rcept_dt_semantics="estimated_availability" if schema_mode == "v03" else "actual_time_missing",
-                       ticker_policy="unverified_mapping_is_null")
+                       ticker_policy=ticker_policy)
     result = BuildResult(frame, pd.DataFrame(conflicts, columns=["rcept_no", "field", "values", "run_ids"]),
                          dict(quality), pd.DataFrame(windows), runs, pd.DataFrame(raw), schema_mode,
-                         types or ("B", "I"), today, calls)
+                         types or ("B", "I"), today, calls, ticker_policy=ticker_policy)
     LOG.info("정제 지표: %s", json.dumps(build_metrics(result), ensure_ascii=False))
     return result
 
@@ -612,7 +656,7 @@ def _coverage_check(result):
 
 
 def _validate_internal(df, mode):
-    columns = V03_COLUMNS if mode == "v03" else EXTENDED_COLUMNS
+    columns = {"v03": V03_COLUMNS, "extended": EXTENDED_COLUMNS, "public": PUBLIC_COLUMNS}[mode]
     if list(df.columns) != columns or df.rcept_no.duplicated().any():
         raise PublishRefused("P4: 열 목록 또는 고유 접수번호 규약 위반")
     if not df.rcept_no.map(lambda x: isinstance(x, str) and re.fullmatch(r"\d{14}", x) is not None).all():
@@ -643,13 +687,16 @@ def _common_io():
 
 
 def publish_disclosures(result: BuildResult, *, allow_shrink_reason=None, dry_run=False):
-    """현재 날짜 전용 진단 결과는 공개하지 않는다. DEC-09 합의 후 다시 연결한다.
+    """DEC-09 공개 스키마로 공용 I/O에 저장한다. dry_run이면 검증만 하고 쓰지 않는다.
 
-    dry_run과 행 수 축소 사유도 미합의 계약을 우회하지 못한다.
+    v03 추정 시각 결과와 상장 기간 근거 없이 만든 결과는 공개하지 않는다.
     """
     _coverage_check(result)
     if not result.conflicts.empty:
         raise PublishRefused("P2: 불변 필드 충돌이 있습니다")
+    if result.schema_mode != "extended":
+        raise PublishRefused("DEC-09: v03의 rcept_dt는 추정 시각이라 공개하지 않습니다 (extended로 다시 정제)")
+    public = result.df[PUBLIC_COLUMNS].copy()
     try:
         io = _common_io()
     except ImportError:
@@ -662,16 +709,20 @@ def publish_disclosures(result: BuildResult, *, allow_shrink_reason=None, dry_ru
         old = io.read_table("disclosures")
     except FileNotFoundError:
         old = None
-    if old is not None and len(result.df) < len(old) and not (allow_shrink_reason and allow_shrink_reason.strip()):
+    if old is not None and len(public) < len(old) and not (allow_shrink_reason and allow_shrink_reason.strip()):
         raise PublishRefused("P3: 기존 파일보다 행 수가 줄어듭니다")
-    _validate_internal(result.df, result.schema_mode)
+    _validate_internal(public, "public")
     try:
-        io.validate("disclosures", result.df)
+        io.validate("disclosures", public)
     except (ValueError, TypeError, KeyError) as exc:
         raise PublishRefused(f"P4: 공용 스키마 검증 실패 ({type(exc).__name__})") from None
-    # 공용 I/O가 생겨도 합의되지 않은 v03 추정 시각/extended 스키마를
-    # 공개 계약으로 승인하지 않는다. 승인 플래그나 임시 writer 우회는 없다.
-    raise PublishRefused("DEC-09: 실제 접수 시각·이용 가능 시각의 공개 계약 미합의로 저장을 거부합니다")
+    # 종목코드가 '비상장이라 결측'인지 '근거가 없어 결측'인지 소비자가 구분할 수 없으므로
+    # 상장 기간(tickers)으로 확인하지 않은 결과는 공개하지 않는다.
+    if result.ticker_policy != TICKER_POLICY_LISTED:
+        raise PublishRefused("DEC-09: 상장 기간(tickers) 없이 만든 결과라 종목코드 결측의 뜻이 달라 공개하지 않습니다")
+    if dry_run:
+        return None
+    return io.write_table("disclosures", public)
 
 
 def build_metrics(result):
@@ -686,9 +737,13 @@ def build_metrics(result):
             "conflicts": len(result.conflicts), "quality": result.quality,
             "windows_by_state": dict(Counter(result.windows.state)) if not result.windows.empty else {},
             "calls_total": result.calls_total, "runs": result.runs,
-            "allow_shrink_reason": result.allow_shrink_reason,
-            "diagnostic_only": True, "public_publish_enabled": False,
-            "actual_reception_times_available": False, "ticker_policy": "unverified_mapping_is_null"}
+            "allow_shrink_reason": result.allow_shrink_reason, **_publish_flags(result)}
+
+
+def _publish_flags(result):
+    return {"diagnostic_only": result.schema_mode == "v03",
+            "public_publish_enabled": result.schema_mode == "extended" and result.ticker_policy == TICKER_POLICY_LISTED,
+            "actual_reception_times_available": False, "ticker_policy": result.ticker_policy}
 
 
 def _report_directory(kind, today, root=Path("reports")):
@@ -717,9 +772,7 @@ def _write_build_report_files(result, folder):
     config = {"runs": result.runs, "schema_mode": result.schema_mode, "types": list(result.types),
               "date_only_available_time": DATE_ONLY_AVAILABLE_TIME.isoformat(),
               "available_at_policy": "max(rcept_dt_date,rcept_no_date) 23:59:59+09:00",
-              "allow_shrink_reason": result.allow_shrink_reason,
-              "diagnostic_only": True, "public_publish_enabled": False,
-              "actual_reception_times_available": False, "ticker_policy": "unverified_mapping_is_null"}
+              "allow_shrink_reason": result.allow_shrink_reason, **_publish_flags(result)}
     atomic_write(folder / "config.yaml", yaml.safe_dump(config, allow_unicode=True).encode("utf-8"), overwrite=True)
     version = code_version()
     atomic_write(folder / "git_commit.txt", (json.dumps(version) + "\n").encode(), overwrite=True)
@@ -761,11 +814,11 @@ def _write_build_report_files(result, folder):
     summary = (f"# PM-04 공시 정제 리포트\n\n행 수: {len(result.df)} / 충돌: {len(result.conflicts)}\n\n"
                f"기간 연속성: {coverage}\n\n- [x] 보고서명 정규화 적용\n"
                f"- [{'x' if not len(gaps) else ' '}] 완결되지 않은 기간 없음 (tables/gaps.csv)\n"
-               "- [ ] 실제 접수 시각 확보: API는 날짜만 제공하므로 미충족 (DEC-09)\n\n"
-               "내부 진단 결과이며 공개 저장은 R-18/DEC-09 미해결 상태에서 차단된다.\n"
-               "기본 extended는 실제 rcept_dt를 결측으로 두고 available_at을 별도로 제공한다.\n"
-               "v03의 rcept_dt는 실제 접수 시각이 아니라 두 날짜 중 늦은 날 23:59:59 KST의 이용 가능 시점이다.\n"
-               "과거 매핑 근거가 없는 종목코드는 ticker에 넣지 않고 원본 관측에만 보존한다.\n"
+               "- [ ] 실제 접수 시각 확보: API는 날짜만 제공하므로 미충족. DEC-09로 available_at을 쓴다\n"
+               f"- [{'x' if result.ticker_policy == TICKER_POLICY_LISTED else ' '}] 종목코드를 접수일 상장 기간으로 확인 (DEC-09 (2))\n\n"
+               "extended는 실제 rcept_dt를 결측으로 두고 available_at(그날 23:59:59 KST)을 별도로 제공한다.\n"
+               "v03의 rcept_dt는 실제 접수 시각이 아니라 두 날짜 중 늦은 날 23:59:59 KST의 이용 가능 시점이며 공개하지 않는다.\n"
+               "접수일에 상장 중이었음을 확인하지 못한 종목코드는 ticker에 넣지 않고 원본 관측에만 보존한다.\n"
                f"\n행 수 축소 사유: {result.allow_shrink_reason or '없음'}\n")
     atomic_write(folder / "summary.md", summary.encode("utf-8"), overwrite=True)
 

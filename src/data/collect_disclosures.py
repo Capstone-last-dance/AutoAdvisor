@@ -14,7 +14,7 @@ from pathlib import Path
 
 from .dart_client import KST, CallBudget, DartClient, DartError
 from .disclosure_archive import RawArchive
-from .disclosures import (PublishRefused, build_disclosures, collect_daily, collect_run,
+from .disclosures import (PublishRefused, build_disclosures, collect_daily, collect_run, load_listed_tickers,
                           new_archive, plan_run, publish_disclosures, run_coverage, write_build_report)
 
 
@@ -84,11 +84,12 @@ def parser():
     daily.add_argument("--daily-budget", type=int, default=18000)
     status = subs.add_parser("status")
     status.add_argument("--run-id", required=True)
-    build = subs.add_parser("build", help="내부 진단용 정제 리포트 생성")
+    build = subs.add_parser("build", help="정제 리포트 생성, --publish면 공용 I/O로 저장")
     build.add_argument("--runs", default="all")
     build.add_argument("--schema-mode", choices=("v03", "extended"), default="extended",
-                       help="기본 extended는 실제 접수 시각과 추정 이용 가능 시각을 분리; v03는 과거 진단 호환용")
-    build.add_argument("--publish", action="store_true", help="공용 I/O·DEC-09 공개 계약 미준비 시 거부")
+                       help="기본 extended는 실제 접수 시각과 이용 가능 시각을 분리(DEC-09); v03는 과거 진단 호환용")
+    build.add_argument("--publish", action="store_true",
+                       help="DEC-09 공개 스키마로 저장. 공용 I/O·tickers(상장 기간)가 없으면 거부")
     build.add_argument("--allow-shrink", metavar="사유")
     coverage = subs.add_parser("coverage")
     coverage.add_argument("--quarters")
@@ -125,7 +126,8 @@ def main(argv=None):
         if args.command == "build":
             run_dirs = None if args.runs == "all" else [_find_archive(i).root for i in args.runs.split(",")]
             _configure_log(f"{today:%Y%m%d}_PM_disclosures_build")
-            result = build_disclosures(run_dirs, schema_mode=args.schema_mode, today=today)
+            result = build_disclosures(run_dirs, schema_mode=args.schema_mode, today=today,
+                                       tickers=load_listed_tickers())
             result.allow_shrink_reason = args.allow_shrink
             report = write_build_report(result)
             print(f"report={report} rows={len(result.df)} conflicts={len(result.conflicts)}")

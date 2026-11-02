@@ -1,10 +1,11 @@
 """뉴스의 종목코드·표준 시각·원문 URL 규약 검증."""
-from datetime import datetime
+from datetime import date, datetime
 
 import pytest
 
 from src.data.naver_client import KST
-from src.data.news import NEWS_COLUMNS, NewsRecordError, normalize_naver_item, parse_naver_time
+from src.data.news import (NEWS_COLUMNS, NewsRecordError, date_only_available_at, normalize_naver_item,
+                           parse_naver_time)
 
 OBSERVED = datetime(2026,11,1,16,0,tzinfo=KST)
 
@@ -21,9 +22,20 @@ def test_canonical_schema_html_and_kst_cutoff():
     assert list(row) == NEWS_COLUMNS
     assert row["ticker"] == "005930"
     assert row["published_at"] == observed
+    # 네이버는 발행 시각이 있으므로 그 시각부터 쓸 수 있다 (DEC-09).
+    assert row["available_at"] == observed
     assert row["title"] == "가나다전자 & 반도체 <기술>"
     assert row["url"] == "https://publisher.example/articles/1"
     assert row["sentiment"] is None and row["source"] == "naver"
+
+
+def test_date_only_news_available_at_end_of_day():
+    # 날짜만 아는 기사(빅카인즈 등)는 그날 23:59:59 KST로 보아 당일 15:30 신호에 넣지 않는다.
+    value = date_only_available_at(date(2026, 11, 6))
+    assert value.isoformat() == "2026-11-06T23:59:59+09:00"
+    assert not value < datetime(2026, 11, 6, 15, 30, tzinfo=KST)
+    with pytest.raises(NewsRecordError):
+        date_only_available_at(datetime(2026, 11, 6, 9, 0, tzinfo=KST))
 
 
 def test_url_identity_survives_title_edits_and_ticker_mapping():

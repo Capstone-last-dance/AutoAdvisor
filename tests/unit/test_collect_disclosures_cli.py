@@ -21,7 +21,10 @@ def test_help_without_key(monkeypatch, capsys):
 
 
 def test_cli_plan_collect_build_and_publish_refusal(tmp_path, monkeypatch, client_factory):
+    from src.data import disclosures
     monkeypatch.chdir(tmp_path)
+    # 저장소의 실제 공용 I/O(ROOT)를 읽거나 쓰지 않게 막는다.
+    monkeypatch.setattr(disclosures, "_common_io", lambda: None)
     client, session, _ = client_factory([page([item(1)], total=2, pages=2),
                                         page([item(2)], total=2, pages=2, number=2)])
     monkeypatch.setattr(cli, "DartClient", lambda **kwargs: client)
@@ -66,7 +69,9 @@ def test_complete_build_is_diagnostic_and_publish_refuses_missing_io(tmp_path, m
     assert cli.main(["collect", "--start", "2010-01-01", "--end", "2010-03-31", "--types", "B"]) == 0
     assert cli.main(["build"]) == 0
     metrics = json.loads(next(Path("reports").glob("*/metrics.json")).read_text(encoding="utf-8"))
-    assert metrics["diagnostic_only"] and not metrics["public_publish_enabled"]
+    # extended는 공개 가능한 형식이지만 상장 기간(tickers)이 없으면 공개 대상이 아니다.
+    assert not metrics["diagnostic_only"] and not metrics["public_publish_enabled"]
+    assert metrics["ticker_policy"] == "no_ticker_source_null"
     assert cli.main(["build", "--publish"]) == 3
     assert "R-18" in capsys.readouterr().err
     assert not Path("data/processed/disclosures.parquet").exists()

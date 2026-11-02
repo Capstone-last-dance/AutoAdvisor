@@ -3,14 +3,23 @@ from __future__ import annotations
 
 import hashlib
 import re
-from datetime import datetime
+from datetime import date, datetime, time
 from email.utils import parsedate_to_datetime
 from html.parser import HTMLParser
 from urllib.parse import urlsplit
 
 from .naver_client import KST
 
-NEWS_COLUMNS = ["news_id", "published_at", "ticker", "title", "url", "source", "sentiment"]
+# DEC-09: published_at은 실제 발행 시각(모르면 결측), available_at은 신호에 쓸 수 있게 되는 시각(필수).
+NEWS_COLUMNS = ["news_id", "published_at", "available_at", "ticker", "title", "url", "source", "sentiment"]
+DATE_ONLY_AVAILABLE_TIME = time(23, 59, 59)
+
+
+def date_only_available_at(day: date) -> datetime:
+    """발행 날짜만 아는 기사는 그날 23:59:59 KST에 나온 것으로 본다 (DEC-09 (1))."""
+    if not isinstance(day, date) or isinstance(day, datetime):
+        raise NewsRecordError("발행 날짜(date)가 필요합니다")
+    return datetime.combine(day, DATE_ONLY_AVAILABLE_TIME, tzinfo=KST)
 
 
 class NewsRecordError(ValueError):
@@ -73,5 +82,5 @@ def normalize_naver_item(item: dict, *, ticker: str, observed_at: datetime) -> d
     if url is None:
         raise NewsRecordError("HTTP(S) 기사 URL이 필요합니다")
     return {"news_id": "naver:" + hashlib.sha256(url.encode("utf-8")).hexdigest(),
-            "published_at": published_at, "ticker": ticker, "title": title, "url": url,
+            "published_at": published_at, "available_at": published_at, "ticker": ticker, "title": title, "url": url,
             "source": "naver", "sentiment": None}

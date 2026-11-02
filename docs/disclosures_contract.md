@@ -1,8 +1,17 @@
-# 공시 시각·종목 매핑 계약: PM 측 제안
+# 공시 시각·종목 매핑 계약
 
-상태: **PM 안 선정·진단 구현 완료, C/D 공동 확정 대기**. [PR #2](https://github.com/Capstone-last-dance/AutoAdvisor/pull/2)에서 검토한다. 명세 v0.3 9.3절의 공개 스키마를 이미 바꾼 문서가 아니다. C의 라벨 종료일/purge 규칙도 이 문서에서 대신 확정하지 않는다.
+상태: **2026-11-02 DEC-09로 PM 확정, D 동의, C 의견 대기**([decisions.md](decisions.md) DEC-09). C가 이견을 내면 다시 연다. [PR #2](https://github.com/Capstone-last-dance/AutoAdvisor/pull/2)에서 검토한다. 라벨 실제 종료일 기준 purge의 구현은 C 소유다.
 
-## PM 안
+## DEC-09 확정 내용 (11/2 후속)
+
+- 공개 스키마(`PUBLIC_COLUMNS`): `rcept_no, rcept_date, rcept_dt(결측 허용), available_at(필수), ticker(결측 허용), corp_code, corp_name, report_nm, report_nm_norm`. `flr_nm`은 진단 결과(`EXTENDED_COLUMNS`)에만 둔다.
+- 종목코드: A의 `tickers`에서 `listing_date ≤ 접수일 ≤ delisting_date`(상장 중이면 상한 없음)인 경우에만 관측 코드를 붙인다. tickers 없이 만든 결과는 공개하지 않는다(결측이 '비상장'인지 '근거 없음'인지 구분할 수 없으므로).
+- 공개 저장: extended 결과만 공용 I/O(`validate`·`write_table`)로 쓴다. v03 추정 시각 결과는 공개하지 않는다. D의 `io.py`가 DEC-09 스키마를 받기 전에는 공용 검증에서 거부된다.
+- 뉴스: `published_at`(실제 발행 시각, 모르면 결측)과 `available_at`(필수)을 둔다. 날짜만 아는 기사는 그날 23:59:59 KST다.
+
+아래는 11/2 오전에 낸 PM 안이며, 5·6번은 위 확정 내용으로 바뀌었다.
+
+## PM 안 (11/2 오전)
 
 1. 실제 접수 시각을 모르면 `rcept_dt`는 결측이다. 날짜 기반 추정 시각으로 채우지 않는다.
 2. 사용 가능 시점은 `available_at`으로 분리한다. 현재 날짜 전용 원본의 내부 후보값은 `max(rcept_dt 원본 날짜, rcept_no 앞 8자리 날짜) 23:59:59 KST`다. 당일 15:30 신호에는 들어가지 않는다.

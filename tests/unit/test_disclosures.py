@@ -318,10 +318,11 @@ def continuous_result(tmp_path, client_factory, records=None):
 
 
 class PreparedIO:
-    """공용 I/O가 준비돼도 미합의 데이터가 쓰이지 않는지 검증하는 대역."""
+    """공용 I/O 대역. 읽기·검증·쓰기 호출과 쓴 표를 기록한다."""
     def __init__(self, old=None):
         self.old = old
         self.calls = []
+        self.written = None
 
     def read_table(self, name):
         self.calls.append("read")
@@ -331,7 +332,19 @@ class PreparedIO:
         self.calls.append("validate")
 
     def write_table(self, name, df):
-        pytest.fail("미합의 진단 결과를 공용 경로에 쓰려고 했습니다")
+        self.calls.append("write")
+        self.written = (name, df)
+        return Path("data/processed") / f"{name}.parquet"
+
+
+def listed(code="005930", listing="2000-01-04", delisting=None):
+    return pd.DataFrame({"ticker": [code], "listing_date": [pd.Timestamp(listing)],
+                         "delisting_date": [pd.Timestamp(delisting) if delisting else pd.NaT]})
+
+
+def listed_result(tmp_path, client_factory, records=None):
+    _, archive = continuous_result(tmp_path, client_factory, records)
+    return build_disclosures([archive.root], today=TODAY, tickers=listed())
 
 
 def test_refuse_on_conflict(tmp_path, client_factory, monkeypatch):
@@ -418,18 +431,61 @@ def test_p1_accepts_provisional_tail_and_refuses_gap(tmp_path, client_factory):
         mod._coverage_check(result)
 
 
-@pytest.mark.parametrize("schema_mode", ["v03", "extended"])
 @pytest.mark.parametrize("dry_run", [False, True])
-def test_common_io_cannot_approve_unagreed_time_contract(tmp_path, client_factory, monkeypatch, schema_mode, dry_run):
+def test_v03_estimated_time_is_never_published(tmp_path, client_factory, monkeypatch, dry_run):
     monkeypatch.chdir(tmp_path)
     _, archive = continuous_result(tmp_path, client_factory)
-    result = build_disclosures([archive.root], schema_mode=schema_mode, today=TODAY)
+    result = build_disclosures([archive.root], schema_mode="v03", today=TODAY, tickers=listed())
     io = PreparedIO()
     monkeypatch.setattr(mod, "_common_io", lambda: io)
     with pytest.raises(PublishRefused, match="DEC-09"):
         publish_disclosures(result, dry_run=dry_run)
+    assert io.calls == []
+
+
+@pytest.mark.parametrize("dry_run", [False, True])
+def test_publish_without_listing_source_refused(tmp_path, client_factory, monkeypatch, dry_run):
+    # 상장 기간 근거 없이 만든 결과는 ticker 결측의 뜻이 달라 공개하지 않는다 (DEC-09 (2)).
+    monkeypatch.chdir(tmp_path)
+    result, _ = continuous_result(tmp_path, client_factory)
+    io = PreparedIO()
+    monkeypatch.setattr(mod, "_common_io", lambda: io)
+    with pytest.raises(PublishRefused, match="tickers"):
+        publish_disclosures(result, dry_run=dry_run)
     assert io.calls == ["read", "validate"]
-    assert not Path("data/processed/disclosures.parquet").exists()
+
+
+def test_publish_writes_dec09_public_columns(tmp_path, client_factory, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    result = listed_result(tmp_path, client_factory)
+    io = PreparedIO()
+    monkeypatch.setattr(mod, "_common_io", lambda: io)
+    assert publish_disclosures(result, dry_run=True) is None
+    assert io.calls == ["read", "validate"]
+    publish_disclosures(result)
+    name, written = io.written
+    assert name == "disclosures" and io.calls[-1] == "write"
+    assert list(written.columns) == mod.PUBLIC_COLUMNS and "flr_nm" not in written
+    assert written.ticker.tolist() == ["005930"]
+    assert written.rcept_dt.isna().all()
+    assert written.available_at.iloc[0].isoformat() == "2025-01-01T23:59:59+09:00"
+
+
+@pytest.mark.parametrize("tickers,expected,counter", [
+    (listed(listing="2000-01-04"), "005930", "ticker_listed_on_rcept_date"),
+    (listed(listing="2000-01-04", delisting="2025-01-01"), "005930", "ticker_listed_on_rcept_date"),
+    (listed(listing="2025-06-01"), None, "ticker_not_listed_on_rcept_date"),
+    (listed(listing="2000-01-04", delisting="2024-12-31"), None, "ticker_not_listed_on_rcept_date"),
+    (listed(code="000660"), None, "ticker_code_not_in_tickers"),
+])
+def test_ticker_only_when_listed_on_rcept_date(tmp_path, client_factory, tickers, expected, counter):
+    # 공시 접수일(2025-01-01)에 상장 중이었던 종목코드만 붙인다. 상장 전·상폐 후 공시에는 소급하지 않는다.
+    _, archive = built(tmp_path, client_factory)
+    result = build_disclosures([archive.root], today=TODAY, tickers=tickers)
+    assert result.df.ticker.tolist() == [expected]
+    assert result.quality[counter] == 1
+    assert result.ticker_policy == mod.TICKER_POLICY_LISTED
+    assert result.observations.stock_code.tolist() == ["005930"]
 
 
 def test_report_outputs_and_unique_name(tmp_path, client_factory, monkeypatch):
