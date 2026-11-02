@@ -240,8 +240,10 @@ def test_normalize_report_nm():
 
 def test_ticker_leading_zero_and_null(tmp_path, client_factory):
     result, _ = built(tmp_path, client_factory, [item(1), item(2, stock_code=""), item(3, stock_code="00AB12"), item(4, stock_code="bad")])
-    assert result.df.ticker.tolist() == ["005930", None, "00AB12", None]
+    assert result.df.ticker.tolist() == [None, None, None, None]
+    assert result.observations.stock_code.tolist() == ["005930", "", "00AB12", "bad"]
     assert result.quality["invalid_stock_code"] == 1
+    assert result.quality["ticker_unverified_asof"] == 2
 
 
 def test_available_at_uses_later_date(tmp_path, client_factory):
@@ -314,6 +316,23 @@ def continuous_result(tmp_path, client_factory, records=None):
     return built(tmp_path, client_factory, records, start=date(2010, 1, 1), end=date(2010, 3, 31))
 
 
+class PreparedIO:
+    """공용 I/O가 준비돼도 미합의 데이터가 쓰이지 않는지 검증하는 대역."""
+    def __init__(self, old=None):
+        self.old = old
+        self.calls = []
+
+    def read_table(self, name):
+        self.calls.append("read")
+        return self.old
+
+    def validate(self, name, df):
+        self.calls.append("validate")
+
+    def write_table(self, name, df):
+        pytest.fail("미합의 진단 결과를 공용 경로에 쓰려고 했습니다")
+
+
 def test_refuse_on_conflict(tmp_path, client_factory, monkeypatch):
     monkeypatch.chdir(tmp_path)
     result, _ = continuous_result(tmp_path, client_factory)
@@ -325,27 +344,33 @@ def test_refuse_on_conflict(tmp_path, client_factory, monkeypatch):
 def test_refuse_on_shrink_without_reason(tmp_path, client_factory, monkeypatch):
     monkeypatch.chdir(tmp_path)
     result, _ = continuous_result(tmp_path, client_factory, [item(1, day="20100101"), item(2, day="20100102")])
-    publish_disclosures(result)
+    io = PreparedIO(result.df)
+    monkeypatch.setattr(mod, "_common_io", lambda: io)
+    target = Path("data/processed/disclosures.parquet")
+    target.parent.mkdir(parents=True)
+    target.write_bytes(b"existing file")
     smaller = replace(result, df=result.df.iloc[:1].copy())
     with pytest.raises(PublishRefused, match="P3"):
         publish_disclosures(smaller)
-    assert publish_disclosures(smaller, allow_shrink_reason="승인된 오류 행 제거").exists()
-    assert len(pd.read_parquet("data/processed/disclosures.parquet")) == 1
+    with pytest.raises(PublishRefused, match="DEC-09"):
+        publish_disclosures(smaller, allow_shrink_reason="승인된 오류 행 제거")
+    assert target.read_bytes() == b"existing file"
 
 
-def test_atomic_publish(tmp_path, client_factory, monkeypatch):
+@pytest.mark.parametrize("dry_run", [False, True])
+def test_missing_common_io_never_reads_or_writes_public_file(tmp_path, client_factory, monkeypatch, dry_run):
     monkeypatch.chdir(tmp_path)
     result, _ = continuous_result(tmp_path, client_factory)
-    path = publish_disclosures(result)
-    before = path.read_bytes()
-    def fail(self, temp, **kwargs):
-        Path(temp).write_bytes(b"partial")
-        raise OSError("디스크 오류")
-    monkeypatch.setattr(pd.DataFrame, "to_parquet", fail)
-    with pytest.raises(OSError):
-        publish_disclosures(result)
-    assert path.read_bytes() == before
-    assert not path.with_name(path.name + ".tmp").exists()
+    target = Path("data/processed/disclosures.parquet")
+    target.parent.mkdir(parents=True)
+    target.write_bytes(b"existing file")
+    monkeypatch.setattr(mod, "_common_io", lambda: None)
+    monkeypatch.setattr(pd, "read_parquet", lambda *a, **k: pytest.fail("공용 I/O 우회 읽기"))
+    monkeypatch.setattr(pd.DataFrame, "to_parquet", lambda *a, **k: pytest.fail("공용 I/O 우회 쓰기"))
+    with pytest.raises(PublishRefused, match="R-18"):
+        publish_disclosures(result, dry_run=dry_run)
+    assert target.read_bytes() == b"existing file"
+    assert not target.with_name(target.name + ".tmp").exists()
 
 
 def test_p1_accepts_provisional_tail_and_refuses_gap(tmp_path, client_factory):
@@ -364,19 +389,18 @@ def test_p1_accepts_provisional_tail_and_refuses_gap(tmp_path, client_factory):
         mod._coverage_check(result)
 
 
-def test_common_io_used_when_present(tmp_path, client_factory, monkeypatch):
+@pytest.mark.parametrize("schema_mode", ["v03", "extended"])
+@pytest.mark.parametrize("dry_run", [False, True])
+def test_common_io_cannot_approve_unagreed_time_contract(tmp_path, client_factory, monkeypatch, schema_mode, dry_run):
     monkeypatch.chdir(tmp_path)
-    result, _ = continuous_result(tmp_path, client_factory)
-    calls = []
-    class IO:
-        def validate(self, name, df):
-            calls.append("validate")
-        def write_table(self, name, df):
-            calls.append("write")
-            return Path("from_common_io")
-    monkeypatch.setattr(mod, "_common_io", lambda: IO())
-    assert publish_disclosures(result) == Path("from_common_io")
-    assert calls == ["validate", "write"]
+    _, archive = continuous_result(tmp_path, client_factory)
+    result = build_disclosures([archive.root], schema_mode=schema_mode, today=TODAY)
+    io = PreparedIO()
+    monkeypatch.setattr(mod, "_common_io", lambda: io)
+    with pytest.raises(PublishRefused, match="DEC-09"):
+        publish_disclosures(result, dry_run=dry_run)
+    assert io.calls == ["validate"]
+    assert not Path("data/processed/disclosures.parquet").exists()
 
 
 def test_report_outputs_and_unique_name(tmp_path, client_factory, monkeypatch):
@@ -421,3 +445,82 @@ def test_coverage_workflow_reuses_backfill(tmp_path, client_factory, monkeypatch
     assert not pd.read_csv(report / "coverage.csv").empty
     assert archive.load_manifest()["mode"] == "coverage"
     assert build_disclosures([archive.root], today=TODAY).df.empty
+
+
+@pytest.mark.parametrize("missing", ["read_table", "validate", "write_table"])
+def test_incomplete_common_io_contract_refused(tmp_path, client_factory, monkeypatch, missing):
+    monkeypatch.chdir(tmp_path)
+    result, _ = continuous_result(tmp_path, client_factory)
+    io = PreparedIO()
+    setattr(io, missing, None)
+    monkeypatch.setattr(mod, "_common_io", lambda: io)
+    with pytest.raises(PublishRefused, match="R-18"):
+        publish_disclosures(result)
+    assert not io.calls
+    assert not Path("data/processed/disclosures.parquet").exists()
+
+
+def test_common_io_import_failure_is_refusal(tmp_path, client_factory, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    result, _ = continuous_result(tmp_path, client_factory)
+    def unavailable():
+        raise ImportError("비공개 외부 라이브러리 예외 내용")
+    monkeypatch.setattr(mod, "_common_io", unavailable)
+    with pytest.raises(PublishRefused, match="R-18") as exc:
+        publish_disclosures(result)
+    assert "비공개" not in str(exc.value)
+
+
+def test_common_schema_validation_failure_is_not_bypassed(tmp_path, client_factory, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    result, _ = continuous_result(tmp_path, client_factory)
+    io = PreparedIO()
+    def reject(name, df):
+        raise ValueError("민감한 상세 예외")
+    io.validate = reject
+    monkeypatch.setattr(mod, "_common_io", lambda: io)
+    with pytest.raises(PublishRefused, match="P4") as exc:
+        publish_disclosures(result)
+    assert "민감한" not in str(exc.value)
+
+
+@pytest.mark.parametrize("first_code,later_code", [("", "005930"), ("005930", "000660"), ("005930", "005930")])
+def test_later_observed_mapping_never_backfills_past_ticker(tmp_path, client_factory, first_code, later_code):
+    _, first = built(tmp_path / "first", client_factory, [item(stock_code=first_code)])
+    _, second = built(tmp_path / "second", client_factory, [item(stock_code=later_code)], name="20261028_PM_disclosures_backfill_2")
+    for path in second.root.rglob("*.meta.json"):
+        metadata = json.loads(path.read_text(encoding="utf-8"))
+        metadata["fetched_at"] = "2026-10-28T22:00:00+09:00"
+        path.write_text(json.dumps(metadata), encoding="utf-8")
+    result = build_disclosures([first.root, second.root], today=TODAY)
+    assert result.df.ticker.tolist() == [None]
+    assert result.observations.stock_code.tolist() == [first_code, later_code]
+    assert result.observations.fetched_at.nunique() == 2
+    assert result.quality["ticker_unverified_asof"] == 1
+    assert result.quality.get("mutable_changed_stock_code", 0) == int(first_code != later_code)
+
+
+@pytest.mark.parametrize("cutoff,estimate_visible", [
+    ("2010-01-04T15:29:59+09:00", False),
+    ("2010-01-04T15:30:00+09:00", False),
+    ("2010-01-04T15:30:01+09:00", False),
+    ("2010-01-04T23:59:59+09:00", True),
+    ("2010-01-05T15:30:00+09:00", True),
+])
+def test_cutoff_diagnostics_never_reach_public_contract(tmp_path, client_factory, monkeypatch, cutoff, estimate_visible):
+    monkeypatch.chdir(tmp_path)
+    result, archive = continuous_result(tmp_path, client_factory, [item(day="20100104")])
+    signal = pd.Timestamp(cutoff)
+    estimated = result.df.rcept_dt.iloc[0]
+    assert bool(estimated <= signal) == estimate_visible
+    # 날짜만 비교하면 C가 지적한 같은 날 조기 포함 반례가 재현된다.
+    assert estimated.date() <= signal.date()
+    assert result.df.attrs["diagnostic_only"] is True
+    assert result.df.attrs["actual_reception_times_available"] is False
+    extended = build_disclosures([archive.root], schema_mode="extended", today=TODAY)
+    assert extended.df.rcept_dt.isna().all()
+    assert extended.df.available_at.iloc[0] == estimated
+    monkeypatch.setattr(mod, "_common_io", lambda: PreparedIO())
+    with pytest.raises(PublishRefused, match="DEC-09"):
+        publish_disclosures(result)
+    assert not Path("data/processed/disclosures.parquet").exists()

@@ -1,16 +1,16 @@
 # 작업 진행 현황
 
-마지막 갱신: 2026-11-01
+마지막 갱신: 2026-11-02
 
 아래 표는 전체 명세의 작업 ID 단위 상태이며 세부 단계 완료와 구분한다. 개인 작업 기록·실행 로그·수집 원본은 Git에서 제외하고, 이 문서에는 팀 진행 현황과 남은 과제를 기록한다.
 
 | 작업 ID | 담당 | 기한 | 상태 | 근거 | 메모 |
 |---|---|---|---|---|---|
 | PM-01 | PM 장지원 | 10/28 | 진행 중 | docs/status.md; docs/decisions.md; docs/deviation_log.md; docs/preregistration.md | 명세에서 요구하는 공용 기록 4개 작성. 주간 회의 공지는 미완료 |
-| PM-02 | PM 장지원 | 10/30 | 진행 중 | README.md; .env.example; requirements-lock.txt; docs/decisions.md | D-01 설치 재현과 README의 기존 .env 보호 검증 완료. 명세 변수명 3개 유지. 변경 공유·키 공유/교체·팀원별 재현 남음. 네이버 실제 요청은 HTTP 401·024로 인증 설정 확인 대기 |
+| PM-02 | PM 장지원 | 10/30 | 진행 중 | README.md; .env.example; requirements-lock.txt; [PR #2](https://github.com/Capstone-last-dance/AutoAdvisor/pull/2); docs/decisions.md | D-01 설치 재현·README 기존 .env 보호 검증 및 PR 공유 완료. 변수명 OPENDART_API_KEY·NAVER_CLIENT_ID·NAVER_CLIENT_SECRET 유지. 키 공유/교체·팀원별 재현·네이버 인증 확인은 남음 |
 | PM-03 | PM 장지원 | 10/30 | 진행 중 | docs/프로젝트_구조_및_역할분담_v0.3.md 부록 3 Q-06·Q-08 | Q-08 문헌·DART 누락 반례·KRX 공식 CSV 2개·KIND 과거/상폐 표시 회사/해제 원문 3개 검증. 표본·실행 기록은 별도 보관. A 공동 확인·전체 기간 상태 데이터 검증 남음 |
-| PM-04 | PM 장지원 | 11/2 | 진행 중 | src/data/collect_disclosures.py; src/data/disclosures.py; tests/unit/test_disclosures.py; docs/decisions.md | 11/1 전체 수집 종료 및 정제 저장 실행 결과 확인: 859,133행, gaps/충돌 0·P1~P4 통과 기록. 파일 사후 검토·DEC-09·C 리뷰·종목 상장 기간 매핑 남음. 실제 접수 시각을 확보한 것으로 해석하지 않음 |
-| PM-05 | PM 장지원 | 11/6 | 진행 중 | src/data/naver_client.py; src/data/news.py; src/data/collect_news.py; tests/unit/test_news.py | 1회 원본 수집 CLI·키 비노출/무재시도·필수 관측 시각/종목 매핑 정규화 구현. 기존 포함 128개 테스트 통과. 실제 네이버 인증과 빅카인즈 계정 준비 후 기사 표본 확보 필요. news.parquet·BigKinds 가져오기·최종 뉴스 수집 미완료 |
+| PM-04 | PM 장지원 | 11/2 | 진행 중 | src/data/collect_disclosures.py; src/data/disclosures.py; tests/unit/test_disclosures.py; [PR #2](https://github.com/Capstone-last-dance/AutoAdvisor/pull/2); docs/decisions.md | B·I 2010-01-01~2026-10-28 수집·legacy 859,133건 전수 대조 완료. C 요청에 따라 임시 writer 제거, 공용 I/O 미준비/DEC-09 미합의 시 공개 저장 거부, 과거 근거 없는 ticker 결측과 원본 관측 보존, legacy 파일 공개 경로 밖 격리. 전체 146개 테스트 통과. 최종 시점/매핑 합의·D 연결·C 재리뷰는 남음 |
+| PM-05 | PM 장지원 | 11/6 | 진행 중 | src/data/naver_client.py; src/data/news.py; src/data/collect_news.py; tests/unit/test_news.py | 1회 원본 수집 CLI·키 비노출/무재시도·필수 관측 시각/종목 매핑 정규화 구현. 전체 회귀 146개 테스트 통과. 실제 네이버 인증과 빅카인즈 계정 준비 후 기사 표본 확보 필요. news.parquet·BigKinds 가져오기·최종 뉴스 수집 미완료 |
 | PM-06 | PM 장지원 | 11/8 | 대기 | | |
 | PM-07 | PM 장지원 | 11/9 | 대기 | | |
 | PM-08 | PM 장지원 | 11/16 | 대기 | | |

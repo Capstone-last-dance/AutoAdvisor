@@ -55,3 +55,18 @@ def test_schema_snapshot_matches_appendix():
     spec = Path("docs/프로젝트_구조_및_역할분담_v0.3.md").read_text(encoding="utf-8")
     expected = re.search(r"## 부록 1\..*?```yaml\n(.*?)```", spec, re.S).group(1)
     assert Path("configs/prereg.yaml").read_text(encoding="utf-8") == expected
+
+
+def test_complete_build_is_diagnostic_and_publish_refuses_missing_io(tmp_path, monkeypatch, client_factory, capsys):
+    from src.data import disclosures
+    monkeypatch.chdir(tmp_path)
+    client, _, _ = client_factory([page([item(day="20100104")])])
+    monkeypatch.setattr(cli, "DartClient", lambda **kwargs: client)
+    monkeypatch.setattr(disclosures, "_common_io", lambda: None)
+    assert cli.main(["collect", "--start", "2010-01-01", "--end", "2010-03-31", "--types", "B"]) == 0
+    assert cli.main(["build"]) == 0
+    metrics = json.loads(next(Path("reports").glob("*/metrics.json")).read_text(encoding="utf-8"))
+    assert metrics["diagnostic_only"] and not metrics["public_publish_enabled"]
+    assert cli.main(["build", "--publish"]) == 3
+    assert "R-18" in capsys.readouterr().err
+    assert not Path("data/processed/disclosures.parquet").exists()
