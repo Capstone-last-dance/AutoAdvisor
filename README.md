@@ -396,7 +396,9 @@ py -3.12 -m venv .venv
 .venv\Scripts\Activate.ps1
 python -m pip install --upgrade pip
 pip install -r requirements-lock.txt
-Copy-Item .env.example .env
+if (-not (Test-Path -LiteralPath .env)) {
+    Copy-Item -LiteralPath .env.example -Destination .env
+}
 ```
 
 macOS·Linux:
@@ -406,10 +408,12 @@ python3.12 -m venv .venv
 source .venv/bin/activate
 python -m pip install --upgrade pip
 pip install -r requirements-lock.txt
-cp .env.example .env
+if [ ! -e .env ]; then
+    cp .env.example .env
+fi
 ```
 
-`.env`의 키 값은 PM에게 받아 채운다 ([기밀 정보](#기밀-정보)).
+기존 `.env`가 있으면 그대로 유지한다. 새 `.env`의 키 값은 PM에게 받아 채운다 ([기밀 정보](#기밀-정보)).
 
 ### 실행
 
