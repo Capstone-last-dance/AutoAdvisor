@@ -174,11 +174,11 @@ C-01(`docs/design_C.md`, PR #3 병합)은 5.1절 형태를 `src.backtest.engine.
 
 ### 5.4 입출력과 실행 환경 (D 임소현)
 
-- B는 positions를 `io.write_table("positions", df, date=t)` 또는 `run_id=...`로 쓴다 (R-18). B가 만드는 `date` 열은 `datetime.date`다. `io.validate`의 자료형과 맞는지 확인이 필요하다.
-- 단위 테스트는 `tests/portfolio/`에 두었다 (`tests/__init__.py` 포함). 다른 역할도 `tests/{모듈}/`을 쓰면 실행 명령 하나로 모두 돌릴 수 있다.
+- B는 positions를 `io.write_table("positions", df, date=t)` 또는 `run_id=...`로 쓴다 (R-18). 앞 단계 파일이 아직 없으면 `stub=True`로 읽는다. B가 만드는 `date` 열은 io.py(D-02) 규칙대로 시각 없는 datetime64[ns]다. io.py로 쓰고 읽어도 그대로인지는 `test_positions_round_trip_through_io`가 확인한다.
+- 단위 테스트는 `tests/portfolio/`에 두었다 (`tests/__init__.py` 포함). README의 `tests/{영역}/` 규칙과 같다.
 - 검증한 환경:
   - B-01: macOS, Python 3.13.7, numpy 2.5.4, pandas 3.1.0, gymnasium 1.4.0, stable-baselines3 2.9.2, torch 2.14.1, PyYAML 6.0.3, pytest 9.2.0
-  - B-02부터: D-01 고정 버전(`requirements-lock.txt`), Windows, Python 3.12.10, torch 2.15.0+cpu. pytest 9.2.0은 lock에 없어 따로 설치했다
+  - B-02부터: D-01 고정 버전(`requirements-lock.txt`), Windows, Python 3.12.10, torch 2.15.0+cpu, pytest 9.2.0 (D-02에서 lock에 추가)
 
 ---
 
@@ -201,13 +201,15 @@ M5 `run_period`가 호출당 1 ms면 약 5.3시간이 더 든다. 폴드와 시�
 
 실행: `python -m pytest tests/portfolio -p no:cacheprovider` (README 절차로 만든 `.venv`에서)
 
+PPO를 실제로 학습하는 테스트 2개는 `slow`로 표시했다. `-m "not slow"`를 붙이면 뺀다. B의 Windows 환경에서 전체는 약 15초, `slow` 2개가 그중 약 10초다.
+
 | 파일 | 확인 내용 |
 |---|---|
 | `test_params.py` | 부록 1 값과 키 이름 (R-14), FILL_ 값을 쓰면 멈춤 (R-08), 구현하지 않은 설정값 거부, `configs/prereg.yaml` 커밋 뒤 테스트 입력과 같은지 (커밋 전에는 건너뜀) |
-| `test_risk_layer.py` | Step 4~5를 6.9절 식 그대로의 느린 구현과 비교, regime_mc = 1일 때 E_t 상한, t 이후 코스피 200 미사용 (R-03), Step 1~3·6 손계산, '미분류' 한 그룹, mode off, 무작위 입력 200건의 불변식, 위반 시 예외 |
+| `test_risk_layer.py` | Step 4~5를 6.9절 식 그대로의 느린 구현과 비교, regime_mc = 1일 때 E_t 상한, t 이후 코스피 200 미사용 (R-03), Step 1~3·6 손계산, '미분류' 한 그룹, mode off, 무작위 입력 200건의 불변식, 위반 시 예외, positions를 io.py로 쓰고 읽기 (io.py가 있을 때) |
 | `test_rl_env.py` | SB3·gymnasium 환경 검사, 관측 배치, 보유·U_t 밖 슬롯, 마스킹, 상위 20개와 min_weight, 전액 현금, 보상 식, 52스텝과 구간 경계, 슬롯 초과, 9.3절 표 → 스냅샷 |
-| `test_rl_train.py` | **B-01 완료 기준**: 합성 입력으로 λ 탐색 → 시드별 학습 → 체크포인트 저장·로드 → 결정적 운용이 끝까지 돈다. 저장한 체크포인트로 검증 IR 재현, 같은 시드면 같은 학습 결과, 연도 경계 모델 교체 |
-| `test_vol_target.py` | **B-02 완료 기준**: 2016년 이후 종가를 바꿔도 vol_target_annual이 같다. 6.9절 식 그대로의 느린 구현과 비교, 2010년 종가는 첫 sigma_t 창의 21개만 사용, 기간이 모자라면 예외. compute_regime_mc가 M8 표와 같고 vol_target_annual 없이 계산됨, t 이후 종가 미사용, 2011년 초 이력 부족(D4), io.py 없을 때 오류 안내 |
+| `test_rl_train.py` | **B-01 완료 기준** (`slow`): 합성 입력으로 λ 탐색 → 시드별 학습 → 체크포인트 저장·로드 → 결정적 운용이 끝까지 돈다. 저장한 체크포인트로 검증 IR 재현, 같은 시드면 같은 학습 결과 (`slow`). 연도 경계 모델 교체 |
+| `test_vol_target.py` | **B-02 완료 기준**: 2016년 이후 종가를 바꿔도 vol_target_annual이 같다. 6.9절 식 그대로의 느린 구현과 비교, 2010년 종가는 첫 sigma_t 창의 21개만 사용, 기간이 모자라면 예외. compute_regime_mc가 M8 표와 같고 vol_target_annual 없이 계산됨, t 이후 종가 미사용, 2011년 초 이력 부족(D4), io.py로 index를 읽어 계산 (io.py가 없으면 오류 안내) |
 
 `tests/portfolio/fakes.py`의 가짜 엔진과 합성 시장은 테스트 전용이다. 4.3절 상·하한가, 거래정지, 상장폐지, M9 청산은 구현하지 않았고, 실험과 보고서에 쓰지 않는다.
 

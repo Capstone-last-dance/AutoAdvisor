@@ -195,14 +195,17 @@ def positions_frame(
     exposure: float,
     regime_mc: int,
 ) -> pd.DataFrame:
-    """positions 행 (9.3절). 비중이 0보다 큰 종목과 "CASH" 행만 쓴다."""
+    """positions 행 (9.3절). 비중이 0보다 큰 종목과 "CASH" 행만 쓴다.
+
+    date 열은 io.py(D-02) 규칙대로 시각 없는 datetime64[ns]다.
+    """
     if constructor not in CONSTRUCTORS:
         raise ValueError(f"constructor = {constructor!r}: {CONSTRUCTORS} 중 하나여야 한다")
     tickers = sorted(t for t, w in targets.items() if w > 0.0)
     n = len(tickers) + 1
     return pd.DataFrame(
         {
-            "date": [pd.Timestamp(date).date()] * n,
+            "date": pd.DatetimeIndex([pd.Timestamp(date).normalize()] * n).as_unit("ns"),
             "ticker": tickers + [CASH],
             "target_weight": np.array([targets[t] for t in tickers] + [cash], dtype=np.float64),
             "constructor": [constructor] * n,

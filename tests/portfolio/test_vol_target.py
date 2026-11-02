@@ -18,6 +18,8 @@ from src.portfolio.risk_layer import (
 )
 from tests.portfolio.fakes import bm_crash_rebound_path
 
+HAS_IO = importlib.util.find_spec("src.common.io") is not None
+
 
 def _bm(start: str = "2009-01-02", end: str = "2017-12-29", seed: int = 0) -> pd.Series:
     """코스피 200 대용 무작위 경로. 거래일은 영업일로 근사한다."""
@@ -107,7 +109,21 @@ def test_regime_mc_early_2011_is_short_of_history(cfg):
         compute_regime_mc(first_2011, bm_close=bm, params=RiskLayerParams.from_prereg(cfg))
 
 
-@pytest.mark.skipif(importlib.util.find_spec("src.common.io") is not None, reason="io.py가 생기면 실제 경로로 확인한다")
+@pytest.mark.skipif(HAS_IO, reason="io.py가 있으면 test_regime_mc_reads_kospi200_through_io가 확인한다")
 def test_regime_mc_without_io_says_what_is_missing(cfg):
     with pytest.raises(RuntimeError, match="D-02"):
         compute_regime_mc("2015-06-30", params=RiskLayerParams.from_prereg(cfg))
+
+
+@pytest.mark.skipif(not HAS_IO, reason="io.py(D-02)가 병합되면 실행한다")
+def test_regime_mc_reads_kospi200_through_io(cfg, tmp_path, monkeypatch):
+    """bm_close를 넘기지 않으면 io.read_table("index")의 KOSPI200 종가로 계산한다 (R-18)."""
+    import src.common.io as io
+
+    monkeypatch.setattr(io, "ROOT", tmp_path)
+    params = RiskLayerParams.from_prereg(cfg)
+    bm = bm_crash_rebound_path()
+    io.write_table("index", pd.DataFrame({"date": bm.index, "index_code": "KOSPI200", "close": bm.to_numpy()}))
+    table = market_state_table(bm, params, mode="no_exposure")["regime_mc"].dropna()
+    days = table.index[::25]
+    assert [compute_regime_mc(d, params=params) for d in days] == [int(table[d]) for d in days]
