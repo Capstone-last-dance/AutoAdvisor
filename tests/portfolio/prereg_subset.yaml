@@ -1,0 +1,57 @@
+# 부록 1(configs/prereg.yaml) 중 B 코드가 읽는 절을 그대로 옮긴 테스트 입력.
+# configs/prereg.yaml이 커밋되면 test_params.py가 두 파일이 같은지 확인한다.
+calendar:
+  timezone: "Asia/Seoul"
+  signal_day: "last_trading_day_of_week"
+  signal_cutoff_time: "15:30"
+  execution: "next_trading_day_close"
+  annualization: {daily: 252, weekly: 52}
+
+costs:
+  sell_tax: 0.0020
+  commission_per_side: 0.00015
+  slippage_per_side: 0.0010
+  stress_multiplier: 2.0
+  cash_return: 0.0
+
+portfolio:
+  buffer_rule:
+    enter_rank_max: 20
+    exit_rank_greater_than: 40
+    max_holdings: 20
+    weighting: "equal"
+  rl:
+    library: "stable-baselines3"
+    algorithm: "PPO"
+    policy: "MlpPolicy"
+    candidate_top_k: 40
+    max_holdings: 20
+    min_weight: 0.005
+    slots: 60
+    episode_steps: 52
+    total_timesteps_per_seed: 300000
+    lambda_search: {grid: [0, 0.5, 1, 2], seed: 0, total_timesteps: 100000}
+    eval_every_steps: 10000
+    checkpoint_selection: "val_ir"
+    seeds: [0, 1, 2, 3, 4]
+    test_action: "deterministic_mean"
+    other_hyperparameters: "sb3_defaults"
+
+risk_layer:
+  stock_cap: 0.10
+  sector_cap: 0.30
+  sector_source: "KRX_industry"     # 시점별 이력이 없으면 Q-04 결정에 따름
+  unknown_sector_label: "미분류"
+  excess_weight_to: "cash"
+  vol_lookback_days: 20
+  vol_target_annual: "FILL_B_BY_2026-11-08"   # 2011~2015 매 거래일 sigma의 산술평균 (6.9절, Q-12)
+  exposure_min: 0.30
+  exposure_max: 1.00
+  momentum_crash_regime:
+    drawdown_threshold: 0.20
+    drawdown_high_lookback_days: 252
+    drawdown_recent_window_days: 60
+    rebound_lookback_days: 20
+    rebound_threshold: 0.10
+    exposure_cap: 0.70
+  invariant_tolerance: 1.0e-9
