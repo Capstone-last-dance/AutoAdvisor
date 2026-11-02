@@ -5,7 +5,7 @@ from datetime import date
 
 import pytest
 
-from conftest import item, page
+from tests.conftest import item, page
 from src.data.dart_client import ListRequest
 from src.data.disclosure_archive import ArchiveOverwriteError, RawArchive
 

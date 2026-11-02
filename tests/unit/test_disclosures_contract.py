@@ -4,7 +4,7 @@ from datetime import date, datetime
 import pandas as pd
 import pytest
 
-from conftest import item, page
+from tests.conftest import item, page
 from src.data.collect_disclosures import parser
 from src.data.dart_client import KST
 from src.data.disclosure_archive import RawArchive

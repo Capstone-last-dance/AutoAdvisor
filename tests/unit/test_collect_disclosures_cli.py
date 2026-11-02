@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from conftest import item, page
+from tests.conftest import item, page
 from src.data import collect_disclosures as cli
 from src.data.disclosures import plan_run
 from src.data.disclosure_archive import RawArchive

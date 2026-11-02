@@ -6,7 +6,7 @@ from datetime import timedelta
 import pytest
 import requests
 
-from conftest import FakeResponse, item, page
+from tests.conftest import FakeResponse, item, page
 from src.data.dart_client import (CallBudget, DailyBudgetExceeded, DartAuthError, DartClient,
                                   DartRateLimitError, DartRequestError, DartUnavailableError, ListRequest)
 

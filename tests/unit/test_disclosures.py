@@ -8,7 +8,7 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
-from conftest import FakeClock, item, page
+from tests.conftest import FakeClock, item, page
 from src.data import disclosures as mod
 from src.data.dart_client import KST
 from src.data.disclosure_archive import RawArchive
