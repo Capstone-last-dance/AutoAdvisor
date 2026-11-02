@@ -49,6 +49,7 @@ _stub/*
 # Personal PM investigations, collection runs, reviews and execution records
 # Keep team experiment reports and reports/final eligible for Git.
 /reports/*_PM03_sources/
+/reports/*_PM17_sources/
 /reports/*_PM_D01_review/
 /reports/*_PM_disclosures_*/
 /reports/*_PM_news_sample/
