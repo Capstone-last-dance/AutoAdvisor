@@ -72,7 +72,7 @@ class BuildResult:
     runs: list[str]
     # 공개 필드 외의 원본 맥락은 리포트와 저장 조건 검사에만 사용한다.
     observations: pd.DataFrame = field(default_factory=pd.DataFrame, repr=False)
-    schema_mode: str = "v03"
+    schema_mode: str = "extended"
     types: tuple[str, ...] = ("B", "I")
     today: date = field(default_factory=lambda: datetime.now(KST).date())
     calls_total: int = 0
@@ -461,7 +461,7 @@ def _read_observations(run_dirs, *, include_coverage=False):
     return observations, windows, runs, tuple(dict.fromkeys(types)), calls
 
 
-def build_disclosures(run_dirs: Sequence[Path] | None = None, *, schema_mode="v03", today: date) -> BuildResult:
+def build_disclosures(run_dirs: Sequence[Path] | None = None, *, schema_mode="extended", today: date) -> BuildResult:
     """원본을 진단용으로 정제한다. 현재 관측 종목코드는 과거 매핑 근거가 아니다."""
     if schema_mode not in ("v03", "extended"):
         raise ValueError("스키마 모드는 v03 또는 extended여야 합니다")
@@ -543,6 +543,38 @@ def build_disclosures(run_dirs: Sequence[Path] | None = None, *, schema_mode="v0
                          types or ("B", "I"), today, calls)
     LOG.info("정제 지표: %s", json.dumps(build_metrics(result), ensure_ascii=False))
     return result
+
+
+def filter_disclosures_before(frame: pd.DataFrame, *, cutoff_at: datetime) -> pd.DataFrame:
+    """PM 계약안의 시각 선택. 공개 스키마 승인이나 피처 완전성 검사를 대신하지 않는다.
+
+    cutoff_at은 실제 실행 시각이 아닌 설정의 signal_cutoff_time으로 만든
+    시간대 포함 컷오프다. 날짜만 비교하거나 미확정 실제 접수 시각을 채우지 않는다.
+    """
+    if not isinstance(frame, pd.DataFrame):
+        raise TypeError("공시 DataFrame이 필요합니다")
+    if not isinstance(cutoff_at, datetime) or pd.isna(cutoff_at) or cutoff_at.utcoffset() is None:
+        raise ValueError("시간대가 있는 datetime 컷오프가 필요합니다")
+    for name in ("available_at", "rcept_dt"):
+        if name not in frame:
+            raise ValueError("실제 접수 시각과 이용 가능 시각을 분리한 입력이 필요합니다")
+        if not isinstance(frame[name].dtype, pd.DatetimeTZDtype) or frame[name].dtype.unit != "ns":
+            raise ValueError("시각 열은 시간대가 있는 datetime64[ns]여야 합니다")
+    if frame.available_at.isna().any():
+        raise ValueError("이용 가능 시각 결측은 추정해 채우지 않습니다")
+    available = frame.available_at.dt.tz_convert(KST)
+    actual = frame.rcept_dt.dt.tz_convert(KST)
+    known_actual = frame.rcept_dt.notna()
+    if (available.loc[known_actual] < actual.loc[known_actual]).any():
+        raise ValueError("이용 가능 시각은 실제 접수 시각보다 빠를 수 없습니다")
+    cutoff = pd.Timestamp(cutoff_at).tz_convert(KST)
+    selected = frame.loc[available < cutoff].copy()
+    for name in ("available_at", "rcept_dt"):
+        selected[name] = selected[name].dt.tz_convert(KST)
+    selected.attrs.update(diagnostic_only=True, public_publish_enabled=False,
+                          selection_cutoff_at=cutoff.isoformat(),
+                          selection_rule="available_at < cutoff_at")
+    return selected
 
 
 def _interval_end(intervals, start):
@@ -728,6 +760,7 @@ def _write_build_report_files(result, folder):
                f"- [{'x' if not len(gaps) else ' '}] 완결되지 않은 기간 없음 (tables/gaps.csv)\n"
                "- [ ] 실제 접수 시각 확보: API는 날짜만 제공하므로 미충족 (DEC-09)\n\n"
                "내부 진단 결과이며 공개 저장은 R-18/DEC-09 미해결 상태에서 차단된다.\n"
+               "기본 extended는 실제 rcept_dt를 결측으로 두고 available_at을 별도로 제공한다.\n"
                "v03의 rcept_dt는 실제 접수 시각이 아니라 두 날짜 중 늦은 날 23:59:59 KST의 이용 가능 시점이다.\n"
                "과거 매핑 근거가 없는 종목코드는 ticker에 넣지 않고 원본 관측에만 보존한다.\n"
                f"\n행 수 축소 사유: {result.allow_shrink_reason or '없음'}\n")

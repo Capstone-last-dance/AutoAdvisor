@@ -86,7 +86,8 @@ def parser():
     status.add_argument("--run-id", required=True)
     build = subs.add_parser("build", help="내부 진단용 정제 리포트 생성")
     build.add_argument("--runs", default="all")
-    build.add_argument("--schema-mode", choices=("v03", "extended"), default="v03")
+    build.add_argument("--schema-mode", choices=("v03", "extended"), default="extended",
+                       help="기본 extended는 실제 접수 시각과 추정 이용 가능 시각을 분리; v03는 과거 진단 호환용")
     build.add_argument("--publish", action="store_true", help="공용 I/O·DEC-09 공개 계약 미준비 시 거부")
     build.add_argument("--allow-shrink", metavar="사유")
     coverage = subs.add_parser("coverage")

@@ -248,18 +248,19 @@ def test_ticker_leading_zero_and_null(tmp_path, client_factory):
 
 def test_available_at_uses_later_date(tmp_path, client_factory):
     result, _ = built(tmp_path, client_factory, [item(day="20250108", rcept_dt="20250109")])
-    assert result.df.rcept_dt.iloc[0].isoformat() == "2025-01-09T23:59:59+09:00"
+    assert result.df.available_at.iloc[0].isoformat() == "2025-01-09T23:59:59+09:00"
+    assert result.df.rcept_dt.isna().all()
     assert result.quality["rcept_no_date_differs"] == 1
 
 
 def test_v03_and_extended_columns(tmp_path, client_factory):
     result, archive = built(tmp_path, client_factory)
-    extended = build_disclosures([archive.root], schema_mode="extended", today=TODAY)
-    assert list(result.df.columns) == V03_COLUMNS
-    assert list(extended.df.columns) == EXTENDED_COLUMNS
-    assert str(extended.df.rcept_date.dtype) == "datetime64[ns]"
-    assert extended.df.rcept_dt.isna().all()
-    assert extended.df.available_at.iloc[0] == result.df.rcept_dt.iloc[0]
+    legacy = build_disclosures([archive.root], schema_mode="v03", today=TODAY)
+    assert list(result.df.columns) == EXTENDED_COLUMNS
+    assert list(legacy.df.columns) == V03_COLUMNS
+    assert str(result.df.rcept_date.dtype) == "datetime64[ns]"
+    assert result.df.rcept_dt.isna().all()
+    assert result.df.available_at.iloc[0] == legacy.df.rcept_dt.iloc[0]
     assert result.df.rcept_dt.dtype.unit == "ns"
 
 
@@ -509,7 +510,8 @@ def test_later_observed_mapping_never_backfills_past_ticker(tmp_path, client_fac
 ])
 def test_cutoff_diagnostics_never_reach_public_contract(tmp_path, client_factory, monkeypatch, cutoff, estimate_visible):
     monkeypatch.chdir(tmp_path)
-    result, archive = continuous_result(tmp_path, client_factory, [item(day="20100104")])
+    _, archive = continuous_result(tmp_path, client_factory, [item(day="20100104")])
+    result = build_disclosures([archive.root], schema_mode="v03", today=TODAY)
     signal = pd.Timestamp(cutoff)
     estimated = result.df.rcept_dt.iloc[0]
     assert bool(estimated <= signal) == estimate_visible

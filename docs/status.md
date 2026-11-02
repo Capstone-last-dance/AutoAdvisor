@@ -9,8 +9,8 @@
 | PM-01 | PM 장지원 | 10/28 | 진행 중 | docs/status.md; docs/decisions.md; docs/deviation_log.md; docs/preregistration.md | 명세에서 요구하는 공용 기록 4개 작성. 주간 회의 공지는 미완료 |
 | PM-02 | PM 장지원 | 10/30 | 진행 중 | README.md; .env.example; requirements-lock.txt; [PR #2](https://github.com/Capstone-last-dance/AutoAdvisor/pull/2); docs/decisions.md | D-01 설치 재현·README 기존 .env 보호 검증 및 PR 공유 완료. 변수명 OPENDART_API_KEY·NAVER_CLIENT_ID·NAVER_CLIENT_SECRET 유지. 키 공유/교체·팀원별 재현·네이버 인증 확인은 남음 |
 | PM-03 | PM 장지원 | 10/30 | 진행 중 | docs/프로젝트_구조_및_역할분담_v0.3.md 부록 3 Q-06·Q-08 | Q-08 문헌·DART 누락 반례·KRX 공식 CSV 2개·KIND 과거/상폐 표시 회사/해제 원문 3개 검증. 표본·실행 기록은 별도 보관. A 공동 확인·전체 기간 상태 데이터 검증 남음 |
-| PM-04 | PM 장지원 | 11/2 | 진행 중 | src/data/collect_disclosures.py; src/data/disclosures.py; tests/unit/test_disclosures.py; [PR #2](https://github.com/Capstone-last-dance/AutoAdvisor/pull/2); docs/decisions.md | B·I 2010-01-01~2026-10-28 수집·legacy 859,133건 전수 대조 완료. C 요청에 따라 임시 writer 제거, 공용 I/O 미준비/DEC-09 미합의 시 공개 저장 거부, 과거 근거 없는 ticker 결측과 원본 관측 보존, legacy 파일 공개 경로 밖 격리. 전체 146개 테스트 통과. 최종 시점/매핑 합의·D 연결·C 재리뷰는 남음 |
-| PM-05 | PM 장지원 | 11/6 | 진행 중 | src/data/naver_client.py; src/data/news.py; src/data/collect_news.py; tests/unit/test_news.py | 1회 원본 수집 CLI·키 비노출/무재시도·필수 관측 시각/종목 매핑 정규화 구현. 전체 회귀 146개 테스트 통과. 실제 네이버 인증과 빅카인즈 계정 준비 후 기사 표본 확보 필요. news.parquet·BigKinds 가져오기·최종 뉴스 수집 미완료 |
+| PM-04 | PM 장지원 | 11/2 | 진행 중 | src/data/disclosures.py; tests/unit/test_disclosures_contract.py; [PM 계약안](disclosures_contract.md); [PR #2](https://github.com/Capstone-last-dance/AutoAdvisor/pull/2) | 수집·legacy 859,133건 대조 완료, 공개 저장 차단·미검증 ticker 결측·legacy 격리 유지. PM 안으로 실제 시각 결측/별도 available_at/엄격한 컷오프 이전 비교를 선택해 진단 기본 extended·시각 선택 함수·팀 계약서 구현. 전체 167개 테스트 통과. 공개 9.3절 스키마 변경 승인·C/D 공동 확정·검증 매핑 연결은 남음 |
+| PM-05 | PM 장지원 | 11/6 | 진행 중 | src/data/naver_client.py; src/data/news.py; src/data/collect_news.py; tests/unit/test_news.py | 1회 원본 수집 CLI·키 비노출/무재시도·필수 관측 시각/종목 매핑 정규화 구현. 전체 회귀 167개 테스트 통과. 실제 네이버 인증과 빅카인즈 계정 준비 후 기사 표본 확보 필요. news.parquet·BigKinds 가져오기·최종 뉴스 수집 미완료 |
 | PM-06 | PM 장지원 | 11/8 | 대기 | | |
 | PM-07 | PM 장지원 | 11/9 | 대기 | | |
 | PM-08 | PM 장지원 | 11/16 | 대기 | | |
