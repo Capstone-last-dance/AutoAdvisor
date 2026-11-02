@@ -415,6 +415,32 @@ fi
 
 기존 `.env`가 있으면 그대로 유지한다. 새 `.env`의 키 값은 PM에게 받아 채운다 ([기밀 정보](#기밀-정보)).
 
+### 테스트
+
+테스트는 `tests/{영역}/` 아래에 두고 pytest로 실행한다.
+
+```bash
+python -m pytest              # 전체
+python -m pytest tests/common # 영역별
+```
+
+### 모듈 간 입출력
+
+9.3절의 파일은 `src/common/io.py`의 함수로만 읽고 쓴다 (R-18). 읽기와 쓰기 모두 9.3절 스키마로 검증하며, 어기면 `SchemaError`가 난다.
+
+```python
+from src.common.io import read_table, write_table, read_evidence, write_evidence
+
+signals = read_table("signals", date="2026-11-06")                  # signals/2026-11-06.parquet
+write_table("positions", df, run_id="20261116_B_m8_v1")             # positions/wf_20261116_B_m8_v1.parquet
+write_table("signals", df, date="2026-11-06", stub=True)            # _stub/signals/2026-11-06.parquet
+signals = read_table("signals", date="2026-11-06", stub=True)       # 스텁 읽기
+```
+
+- 종목코드는 6자리 문자열, 날짜(`date`) 열은 시각 없는 datetime64, 시각 열은 KST(+09:00) 시간대가 있는 datetime이어야 한다 (0.4절).
+- 정수·실수 열은 9.3절의 자료형(int64, int32, int8, float64)과 정확히 같아야 한다.
+- 백테스트 파일은 `run_id`(`{YYYYMMDD}_{역할ID}_{짧은설명}`)로 구분한다. features도 같다 (`features/wf_{run_id}.parquet`).
+
 ### 실행
 
 > **작성 예정** (D-03: 주간 실행기, D-05: 대시보드)
