@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import dataclasses
 import datetime as dt
+import importlib.util
 import math
 import statistics
 
@@ -21,14 +22,7 @@ from src.portfolio.risk_layer import (
     market_state_table,
     sectors_at,
 )
-
-
-def _bm_path(seed: int = 0) -> pd.Series:
-    """상승 → 급락 → 반등이 들어 있는 코스피 200 대용 경로 (regime_mc가 0과 1을 모두 지나도록)."""
-    rng = np.random.default_rng(seed)
-    drift = np.concatenate([np.full(350, 0.0015), np.full(100, -0.0045), np.full(50, 0.008), np.zeros(200)])
-    days = pd.bdate_range("2010-01-04", periods=len(drift))
-    return pd.Series(100.0 * np.exp(np.cumsum(drift + rng.normal(0.0, 0.01, len(drift)))), index=days)
+from tests.portfolio.fakes import bm_crash_rebound_path as _bm_path
 
 
 def _reference(bm: np.ndarray, i: int, p: RiskLayerParams) -> tuple[float, int, float]:
@@ -129,7 +123,7 @@ def test_steps_1_to_3_and_6(case, risk_params):
     assert w["000005"] == pytest.approx(0.08, abs=1e-15)
     assert w[CASH] == pytest.approx(0.62, abs=1e-15)
     assert list(pos.columns) == ["date", "ticker", "target_weight", "constructor", "exposure", "regime_mc"]
-    assert pos["date"].iloc[0] == case["date"].date()
+    assert pos["date"].dtype == "datetime64[ns]" and (pos["date"] == case["date"].normalize()).all()
     assert (pos["constructor"] == "buffer").all() and (pos["exposure"] == 1.0).all()
     assert pos["target_weight"].dtype == np.float64 and pos["regime_mc"].dtype == np.int8
 
@@ -226,3 +220,17 @@ def test_signals_of_other_dates_are_rejected(case, risk_params):
     case["signals"].loc[0, "date"] = case["date"] + pd.Timedelta(days=7)
     with pytest.raises(ValueError, match="R-03"):
         apply_risk_layer(**case, params=risk_params, constructor="rl")
+
+
+@pytest.mark.skipif(importlib.util.find_spec("src.common.io") is None, reason="io.py(D-02)가 병합되면 실행한다")
+def test_positions_round_trip_through_io(case, risk_params, tmp_path, monkeypatch):
+    """positions가 9.3절 스키마(io.validate)를 통과하고, date·run_id 파일로 쓰고 읽어도 그대로다 (R-18)."""
+    import src.common.io as io
+
+    monkeypatch.setattr(io, "ROOT", tmp_path)
+    pos = apply_risk_layer(**case, params=risk_params, constructor="buffer")
+    day = case["date"].strftime("%Y-%m-%d")
+    io.write_table("positions", pos, date=day)
+    io.write_table("positions", pos, run_id="20261116_B_io_check")
+    pd.testing.assert_frame_equal(io.read_table("positions", date=day), pos)
+    pd.testing.assert_frame_equal(io.read_table("positions", run_id="20261116_B_io_check"), pos)

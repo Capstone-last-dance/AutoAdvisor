@@ -12,13 +12,14 @@ from pathlib import Path
 from typing import Any
 
 FILL_PREFIX = "FILL_"
+PREREG_PATH = Path(__file__).resolve().parents[2] / "configs" / "prereg.yaml"
 
 
 class PreregValueMissing(RuntimeError):
     """부록 1의 값이 비어 있거나 `FILL_` 상태인데 실제 계산에 필요할 때 (R-08)."""
 
 
-def load_prereg(path: str | Path = "configs/prereg.yaml") -> dict[str, Any]:
+def load_prereg(path: str | Path = PREREG_PATH) -> dict[str, Any]:
     import yaml
 
     with open(path, encoding="utf-8") as f:
@@ -36,6 +37,18 @@ def _expect(value: Any, expected: Any, key: str) -> None:
     """설정에 적힌 동작이 이 코드가 구현한 동작과 같은지 확인한다."""
     if value != expected:
         raise ValueError(f"{key} = {value!r}: 이 코드는 {expected!r}만 구현한다")
+
+
+def vol_target_years(cfg: Mapping[str, Any]) -> tuple[int, int]:
+    """vol_target_annual을 계산하는 연도 (6.9절: 2011년 ~ 2015년, 2016년 이후 데이터 금지).
+
+    시작은 data.first_train_signal_year, 끝은 walk-forward 첫 테스트 연도의 전년이다.
+    """
+    first = int(cfg["data"]["first_train_signal_year"])
+    last = min(int(y) for y in cfg["splits"]["walk_forward_test_years"]) - 1
+    if last < first:
+        raise ValueError("splits.walk_forward_test_years가 data.first_train_signal_year보다 이르다")
+    return first, last
 
 
 @dataclass(frozen=True)

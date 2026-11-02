@@ -5,8 +5,9 @@
 
 - apply_risk_layer: 원시 목표 비중 w_raw → positions 행 (9.3절). 버퍼 규칙과 파이프라인이 호출한다
 - risk_layer_weights, check_invariants: 같은 계산의 배열 경로. RL 환경이 스텝마다 호출한다
-- market_state, market_state_table: Step 4~5 (E_t, regime_mc)
-- compute_regime_mc, compute_vol_target_annual: 작업 B-02에서 구현한다
+- market_state, market_state_table, sigma_series: Step 4~5 (E_t, regime_mc)
+- compute_regime_mc: 공개 함수. A가 피처 regime_mc를 만들 때 호출한다
+- compute_vol_target_annual: risk_layer.vol_target_annual(Q-12) 계산
 """
 from __future__ import annotations
 
@@ -18,7 +19,7 @@ from typing import Literal
 import numpy as np
 import pandas as pd
 
-from src.portfolio.params import RiskLayerParams
+from src.portfolio.params import RiskLayerParams, load_prereg
 
 CASH = "CASH"
 CONSTRUCTORS = ("buffer", "rl")
@@ -64,6 +65,17 @@ def _as_bm(bm_close: pd.Series) -> pd.Series:
     return bm
 
 
+def sigma_series(bm_close: pd.Series, params: RiskLayerParams) -> pd.Series:
+    """Step 4의 sigma_t = std(r_{t−19}, …, r_t; ddof=1) × √252, r_s = ln(BM(s) / BM(s−1)).
+
+    창을 채울 이력이 없는 날은 NaN이다.
+    """
+    bm = _as_bm(bm_close)
+    n_vol = params.vol_lookback_days
+    r = np.log(bm / bm.shift(1))
+    return r.rolling(n_vol, min_periods=n_vol).std(ddof=1) * np.sqrt(params.annualization_daily)
+
+
 def market_state_table(bm_close: pd.Series, params: RiskLayerParams, mode: Mode = "full") -> pd.DataFrame:
     """거래일마다 Step 4~5를 계산한다. 모든 창이 과거 방향이라 각 행은 그날 종가까지만 쓴다.
 
@@ -73,10 +85,7 @@ def market_state_table(bm_close: pd.Series, params: RiskLayerParams, mode: Mode 
     bm = _as_bm(bm_close)
     rp = params.momentum_crash_regime
 
-    # Step 4: sigma_t = std(r_{t−19}, …, r_t; ddof=1) × √252
-    n_vol = params.vol_lookback_days
-    r = np.log(bm / bm.shift(1))
-    sigma = r.rolling(n_vol, min_periods=n_vol).std(ddof=1) * np.sqrt(params.annualization_daily)
+    sigma = sigma_series(bm, params)  # Step 4
 
     # Step 5: DD_s = 1 − BM(s) / max(BM(s−251), …, BM(s)), bear_t = max(DD_{t−59}, …, DD_t) ≥ 0.20
     n_high = rp.drawdown_high_lookback_days
@@ -186,14 +195,17 @@ def positions_frame(
     exposure: float,
     regime_mc: int,
 ) -> pd.DataFrame:
-    """positions 행 (9.3절). 비중이 0보다 큰 종목과 "CASH" 행만 쓴다."""
+    """positions 행 (9.3절). 비중이 0보다 큰 종목과 "CASH" 행만 쓴다.
+
+    date 열은 io.py(D-02) 규칙대로 시각 없는 datetime64[ns]다.
+    """
     if constructor not in CONSTRUCTORS:
         raise ValueError(f"constructor = {constructor!r}: {CONSTRUCTORS} 중 하나여야 한다")
     tickers = sorted(t for t, w in targets.items() if w > 0.0)
     n = len(tickers) + 1
     return pd.DataFrame(
         {
-            "date": [pd.Timestamp(date).date()] * n,
+            "date": pd.DatetimeIndex([pd.Timestamp(date).normalize()] * n).as_unit("ns"),
             "ticker": tickers + [CASH],
             "target_weight": np.array([targets[t] for t in tickers] + [cash], dtype=np.float64),
             "constructor": [constructor] * n,
@@ -267,16 +279,54 @@ def apply_risk_layer(
     return positions_frame(t, targets, cash, constructor, state.exposure, state.regime_mc)
 
 
-def compute_regime_mc(date: str) -> int:
+def load_kospi200() -> pd.Series:
+    """index 표(9.3절)의 KOSPI200 종가 (날짜 → 종가). io.py(D-02)로만 읽는다 (R-18)."""
+    try:
+        from src.common.io import read_table
+    except ModuleNotFoundError as e:
+        if e.name not in ("src.common.io", "src.common"):
+            raise
+        raise RuntimeError("src/common/io.py(작업 D-02)가 아직 없다. bm_close를 직접 넘겨야 한다") from e
+    index = read_table("index")
+    kospi = index.loc[index["index_code"] == "KOSPI200"]
+    return pd.Series(kospi["close"].to_numpy(dtype="float64"), index=pd.to_datetime(kospi["date"])).sort_index()
+
+
+def compute_regime_mc(
+    date: DateLike, *, bm_close: pd.Series | None = None, params: RiskLayerParams | None = None
+) -> int:
     """신호일 t의 모멘텀 붕괴 국면 플래그 (6.9절 Step 5). A가 피처 regime_mc를 만들 때 호출한다.
 
-    작업 B-02에서 구현한다: io.read_table("index")로 코스피 200 종가를 읽어
-    market_state(..., mode="no_exposure").regime_mc를 돌려준다.
+    bm_close를 넘기지 않으면 load_kospi200()으로 읽고, params를 넘기지 않으면 configs/prereg.yaml에서
+    읽는다. Step 5에는 vol_target_annual이 필요 없다. t일보다 늦은 종가는 쓰지 않는다 (R-03).
+    창을 채울 이력이 없으면 InsufficientHistory를 낸다 ([결정 필요] D4).
     """
-    raise NotImplementedError("작업 B-02 (기한 11/8): io.py(D-02)와 index.parquet(A-02)가 준비된 뒤 구현한다")
+    if params is None:
+        params = RiskLayerParams.from_prereg(load_prereg())
+    if bm_close is None:
+        bm_close = load_kospi200()
+    return market_state(bm_close, date, params, mode="no_exposure").regime_mc
 
 
-def compute_vol_target_annual(bm_close: pd.Series) -> float:
-    """risk_layer.vol_target_annual (Q-12): 2011년 첫 거래일부터 2015년 마지막 거래일까지 매 거래일
-    계산한 sigma의 산술평균. 2016년 이후 데이터는 쓰지 않는다. 작업 B-02에서 구현한다."""
-    raise NotImplementedError("작업 B-02 (기한 11/8)")
+def compute_vol_target_annual(bm_close: pd.Series, params: RiskLayerParams, years: tuple[int, int]) -> float:
+    """risk_layer.vol_target_annual (Q-12): years[0]년 첫 거래일부터 years[1]년 마지막 거래일까지 매 거래일
+    계산한 sigma_t(Step 4와 같은 식)의 산술평균이다. years는 params.vol_target_years(cfg) = (2011, 2015).
+
+    years[1]년보다 늦은 종가는 계산 전에 잘라낸다 (6.9절: 2016년 이후 데이터 금지). 다만 그 해가 끝까지
+    들어왔는지 확인하려고 다음 거래일이 있는지는 본다. 첫해 첫 거래일의 sigma_t에는 직전 20개 수익률이
+    필요하므로 그 앞 종가(2010년 12월분)는 쓴다.
+    """
+    first, last = years
+    bm = _as_bm(bm_close)
+    end = pd.Timestamp(f"{last}-12-31")
+    if not (bm.index > end).any():
+        raise ValueError(f"{last}년 다음 거래일 종가가 없어 {last}년이 끝까지 들어왔는지 확인할 수 없다")
+    sigma = sigma_series(bm.loc[:end], params)
+    window = sigma.loc[pd.Timestamp(f"{first}-01-01") : end]
+    if window.empty:
+        raise ValueError(f"{first}~{last}년 코스피 200 종가가 없다")
+    if window.isna().any():
+        raise InsufficientHistory(
+            f"{window.index[0].date()}의 sigma_t를 계산할 종가 {params.vol_lookback_days + 1}개가 없다"
+        )
+    return float(window.mean())
