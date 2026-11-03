@@ -13,7 +13,7 @@
 |---|---|---|
 | `src/portfolio/params.py` | 부록 1 `portfolio`, `risk_layer` 읽기. `FILL_` 값은 None으로 읽고, 실제로 쓰는 순간 `PreregValueMissing` (R-08) | 구현 |
 | `src/portfolio/risk_layer.py` | M8 Step 1~6, 불변식, positions 행 생성, t일 유효 업종표 | 구현. 경계 사례 테스트와 2011~2025년 그림은 B-04 |
-| 〃 `compute_regime_mc(date)`, `compute_vol_target_annual` | 공개 함수, Q-12 값 계산 | 구현 (B-02). 부록 1에 넣을 값은 실제 코스피 200 데이터(A-02)로 계산한다 |
+| 〃 `compute_regime_mc(date)`, `compute_vol_target_annual` | 공개 함수, Q-12 값 계산 | 구현 (B-02). 값 0.157263을 부록 1에 기입했다 (4절) |
 | `src/portfolio/vol_target_report.py` | B-02 결과 리포트: `python -m src.portfolio.vol_target_report --run-id {YYYYMMDD}_B_{설명}` → `reports/{run_id}/`에 config.yaml 사본, git_commit.txt, metrics.json (R-10) | 구현 (B-02) |
 | `src/portfolio/buffer_rule.py` | 버퍼 규칙 단계 1~4 | 골격 (B-03) |
 | `src/portfolio/interfaces.py` | B가 C(M5)와 PM(M9)에 기대하는 호출 형태 | 초안. C·PM 확인 필요 (5절) |
@@ -128,6 +128,11 @@ R_net을 체결 직전 NAV로 재면, 행동 a_t가 일으킨 t+1일 체결 비�
 - 부동소수 오차로 Σw가 1을 1e−9 이내에서 넘으면 현금을 0으로 둔다. 그래서 '현금 ≥ 0'은 정확히, '합계 = 1 ± 1e−9'는 허용 오차 안에서 지킨다.
 - 창을 채울 코스피 200 이력이 없으면 `InsufficientHistory`를 낸다 (D4).
 - vol_target_annual의 기간: 시작 연도는 `data.first_train_signal_year`(2011), 끝 연도는 walk-forward 첫 테스트 연도의 전년(2015)으로 부록 1에서 만든다. 2011년 첫 거래일의 sigma_t도 6.9절 정의대로 직전 20개 수익률을 쓰므로 2010년 12월 종가 21개가 들어간다. 부록 2 B-02 완료 기준의 '2011~2015년 데이터만'은 6.9절 정의(우선순위가 높다, 0.1절)에 맞춰 '2016년 이후 데이터 미사용과 이 21개 밖의 2010년 데이터 미사용'으로 확인한다.
+- vol_target_annual 계산 결과 (2026-11-03, `reports/20261103_B_vol_target/`):
+  - 값: **0.157263** (0.1572629338). 2011~2015년 1,236거래일의 sigma_t 평균이다. 연도별 평균은 0.249, 0.169, 0.132, 0.110, 0.126
+  - 입력: A-02 `index.parquet`(11/3 받은 파일, A PR #1 병합 전). 2010-12-03 ~ 2015-12-30 종가 1,256개를 썼고, 그 sha256을 metrics.json에 남겼다
+  - 설정: `configs/prereg.yaml`이 비어 있어(PM-07) 부록 1과 같은 값을 담은 `tests/portfolio/prereg_subset.yaml`로 계산했다. 쓰는 키는 `vol_lookback_days`, `calendar.annualization`, `data.first_train_signal_year`, `splits.walk_forward_test_years`다
+  - A-02 지수가 바뀌면 지문이 달라지므로 새 run_id로 다시 계산한다
 
 ---
 
@@ -302,6 +307,8 @@ PPO를 실제로 학습하는 테스트 2개는 `slow`로 표시했다. `-m "not
 영향: compute_regime_mc(B-02), regime_mc 피처(A-05), RL 관측, M8 노출 조절
 ```
 
+A-02 데이터(11/3)로 확인했다. 코스피 200이 2010-01-04부터라 regime_mc 첫 계산일은 2011-03-31이다. universe 신호일 가운데 2011-01-07 ~ 2011-03-25의 12개가 계산되지 않는다.
+
 ### D5. 4.7절 폴드 분할·purge 공용 함수의 담당
 
 ```text
@@ -323,7 +330,7 @@ PPO를 실제로 학습하는 테스트 2개는 `slow`로 표시했다. `-m "not
 
 | 작업 | 기한 | 이 설계에서 이어지는 부분 |
 |---|---|---|
-| B-02 | 11/8 | 함수와 테스트는 구현함. 남은 것: 실제 코스피 200 데이터로 값 계산 → PM에게 전달(부록 1 Q-12), D4 |
+| B-02 | 11/8 | 구현과 값 계산을 마쳤다 (0.157263, 부록 1 기입). 남은 것: A 리뷰 승인, 부록 3 Q-12 결과 칸(PM PR #2와 같은 표라 PM이 기입), D4 결정 |
 | B-03 | 11/13 | `buffer_rule_weights` |
 | B-04 | 11/16 | 경계 사례 테스트(한 업종 20종목, 보유 5종목, regime_mc = 1, sigma_t = 3 × vol_target_annual), 2011~2025년 E_t·regime_mc 그림 |
 | B-05 | 11/16 | M5 엔진 어댑터, 같은 비중일 때 버퍼 규칙과 체결·비용 결과 일치 |
