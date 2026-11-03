@@ -35,7 +35,7 @@ def write_raw(path: Path, body: str):
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_suffix(".tmp")
     tmp.write_text(body, encoding="utf-8")
-    tmp.rename(path)
+    tmp.replace(path)   # os.rename은 Windows에서 path가 이미 있으면 실패한다(WinError 183). replace는 둘 다 덮어쓴다
 
 
 def calendar_days(out: Path, service: str, days, idx_name: str | None = None) -> list:

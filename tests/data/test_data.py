@@ -152,6 +152,21 @@ def test_listed_days_counts_from_first_price_when_listing_date_is_later():
     assert ld.iloc[0] == 1 and ld.iloc[59] == 60 and ld.iloc[-1] == 100       # 신규 취급(전부 1)되지 않는다
 
 
+def test_listed_days_splits_reused_tickers_into_separate_episodes():
+    """종목코드 재사용(C 리뷰 2026-11-03: 101970, 036220): tickers의 listing_date는 최신(새) 회사 기준이다.
+    옛 회사 구간은 새 회사 상장일을 물려받지 않고(음수가 돼 1로 잘리지 않고) 자기 구간 첫 시세일부터 센다.
+    새 회사 구간도 옛 회사의 오래된 첫 시세일을 물려받지 않고 1부터 다시 센다."""
+    from src.data.build_processed import listed_days
+    days = list(pd.bdate_range("2020-01-01", periods=400))
+    old_co = days[:50]                                     # 옛 회사: 처음 50거래일만 시세가 있다 (공백 250거래일)
+    new_co = days[300:]                                    # 새 회사: 간격을 두고 다시 상장
+    p = pd.DataFrame({"date": old_co + new_co, "ticker": "000001"})
+    t = pd.DataFrame({"ticker": ["000001"], "listing_date": [new_co[0]]})     # 상장일은 새 회사 기준
+    ld = listed_days(p, t, days).reset_index(drop=True)
+    assert ld.iloc[0] == 1 and ld.iloc[49] == 50             # 옛 회사 구간: 자기 첫날부터 정상적으로 늘어난다
+    assert ld.iloc[50] == 1 and ld.iloc[59] == 10            # 새 회사 첫날도 1부터 다시 센다 (3114일 같은 값이 아니다)
+
+
 def test_require_complete_reports_missing_days(tmp_path):
     from src.data.build_processed import require_complete
     days = list(pd.bdate_range("2020-01-06", periods=3))

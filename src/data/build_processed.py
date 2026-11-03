@@ -100,17 +100,47 @@ def build_prices(raw: Path, days: list, tickers: pd.DataFrame) -> pd.DataFrame:
     return p
 
 
+RELISTING_GAP_TRADING_DAYS = 60   # 종목코드의 거래 공백이 이 거래일수를 넘으면 재상장(다른 회사가 같은 코드를 받음)으로
+                                  # 보고 구간을 나눈다. 정상적인 거래정지보다 훨씬 길고, 공백 쪽 구간은 유니버스 60일
+                                  # 기준에 어차피 못 미치므로 경계값이 며칠 달라져도 영향이 없다
+                                  # (실례: 101970, 036220 — C 리뷰 2026-11-03, docs/appendix3_A_results.md 참고)
+
+
+def _trading_episodes(p: pd.DataFrame, pos: pd.Series, gap: int = RELISTING_GAP_TRADING_DAYS) -> tuple:
+    """종목코드별로 거래일 공백이 gap을 넘으면 구간을 나눈다. 반환: (구간 시작 거래일 위치, 구간 끝 거래일 위치),
+    각각 p와 같은 인덱스. 재상장으로 같은 코드를 재사용해도 옛 회사·새 회사 구간이 분리된다."""
+    d = p[["ticker", "date"]].sort_values(["ticker", "date"])
+    p_pos = d["date"].map(pos)
+    prev_pos = p_pos.groupby(d["ticker"]).shift(1)
+    new_episode = prev_pos.isna() | ((p_pos - prev_pos) > gap)
+    episode_id = new_episode.groupby(d["ticker"]).cumsum()
+    key = [d["ticker"], episode_id]
+    start = p_pos.groupby(key).transform("min").reindex(p.index)
+    end = p_pos.groupby(key).transform("max").reindex(p.index)
+    return start, end
+
+
 def listed_days(p: pd.DataFrame, tickers: pd.DataFrame, days: list) -> pd.Series:
     """실제 상장일부터 센 거래일 수(상장일 당일이 1). 상장일이 days의 첫날보다 앞이면 그 앞 구간은 주중 일수로 센다
     (휴장일을 몰라 약간 크게 나오지만 60일 기준 판정에는 상장일이 수집 시작 직전인 소수 종목만 영향이 있다).
-    시세가 상장일보다 먼저 있는 종목은 첫 시세일부터 센다."""
+
+    종목코드는 재사용될 수 있다(폐지 후 몇 년 뒤 다른 회사가 같은 코드로 재상장). tickers의 listing_date는 그 코드의
+    '가장 최근' 회사 기준이라서, 공백을 두고 거래 구간을 나눈 뒤(_trading_episodes) 공식 상장일이 설명하는 구간(그
+    구간 끝에서 gap 거래일 이내)에서만 상장일-첫 시세일 보정을 적용한다. 그보다 이전 구간(옛 회사)은 그 구간 자체의
+    첫 시세일부터 센다 — 새 회사의 상장일을 옛 회사 쪽에 적용하면 음수가 돼 1로 잘리고, 반대로 옛 회사의 첫 시세일을
+    새 회사 쪽에 적용하면 신규 상장을 오래된 종목으로 잘못 본다."""
     first = pd.Timestamp(days[0])
     pos = pd.Series(np.arange(len(days)), index=pd.DatetimeIndex(days))
     lst = tickers.set_index("ticker")["listing_date"]
     L = p["ticker"].map(lst)
-    start_pos = pd.Series(np.searchsorted(np.array(days, dtype="datetime64[ns]"), L.fillna(first).values.astype("datetime64[ns]")), index=p.index)
-    # 시세가 상장일보다 먼저 있는 종목(이전상장·재상장으로 상장일이 바뀐 경우)은 첫 시세일부터 센다. 안 그러면 오래된 종목이 신규 취급되어 유니버스에서 빠진다
-    start_pos = np.minimum(start_pos, p.groupby("ticker")["date"].transform("min").map(pos))
+    official_pos = pd.Series(
+        np.searchsorted(np.array(days, dtype="datetime64[ns]"), L.fillna(first).values.astype("datetime64[ns]")), index=p.index)
+
+    ep_start, ep_end = _trading_episodes(p, pos)
+    describes_this_episode = (official_pos - ep_end).abs() <= RELISTING_GAP_TRADING_DAYS
+    start_pos = np.where(describes_this_episode.values, np.minimum(official_pos.values, ep_start.values), ep_start.values)
+    start_pos = pd.Series(start_pos, index=p.index)
+
     pre = pd.Series(0, index=p.index)
     before = L.notna() & (L < first)
     pre[before] = np.busday_count(L[before].values.astype("datetime64[D]"), np.datetime64(first, "D"))

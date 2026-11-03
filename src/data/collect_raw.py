@@ -38,7 +38,7 @@ def _write(df: pd.DataFrame, path: Path):
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_suffix(".tmp")
     df.reset_index().to_parquet(tmp, index=False)
-    tmp.rename(path)
+    tmp.replace(path)
 
 
 def _fetch(dataset: str, d: pd.Timestamp) -> pd.DataFrame:
