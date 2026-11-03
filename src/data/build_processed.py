@@ -137,7 +137,10 @@ def listed_days(p: pd.DataFrame, tickers: pd.DataFrame, days: list) -> pd.Series
         np.searchsorted(np.array(days, dtype="datetime64[ns]"), L.fillna(first).values.astype("datetime64[ns]")), index=p.index)
 
     ep_start, ep_end = _trading_episodes(p, pos)
-    describes_this_episode = (official_pos - ep_end).abs() <= RELISTING_GAP_TRADING_DAYS
+    # 공식 상장일이 '이 구간' 안에 있거나(소급 재분류 등) 구간 시작 바로 앞(상장일이 약간 어긋난 정상적인 경우)이면
+    # 이 구간이 공식 상장일이 설명하는 구간이다. 구간 끝과 비교하면 안 된다 — 2010년 이전부터 계속 거래된 정상
+    # 종목도 상장일(예: 1995년, 수집 시작 전이라 위치 0)과 구간 끝(최근)이 멀어서 잘못 걸린다
+    describes_this_episode = (official_pos >= ep_start - RELISTING_GAP_TRADING_DAYS) & (official_pos <= ep_end + RELISTING_GAP_TRADING_DAYS)
     start_pos = np.where(describes_this_episode.values, np.minimum(official_pos.values, ep_start.values), ep_start.values)
     start_pos = pd.Series(start_pos, index=p.index)
 
