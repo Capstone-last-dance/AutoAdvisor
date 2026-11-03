@@ -25,6 +25,9 @@ def sample(name: str) -> pd.DataFrame:
     tickers = ["005930", "000660"]
     d = pd.to_datetime([DAY, DAY])
     kst = pd.to_datetime(["2026-11-06 09:10", "2026-11-06 14:00"]).tz_localize(KST)
+    # DEC-09: 시각을 모르는 행은 rcept_dt 결측, available_at = 그날 23:59:59
+    rcept_partial = pd.Series([kst[0], pd.NaT], dtype=kst.dtype)
+    available = pd.to_datetime(["2026-11-06 09:10:00", "2026-11-06 23:59:59"]).tz_localize(KST)
     frames = {
         "prices": dict(date=d, ticker=tickers, market=["KOSPI", "KOSDAQ"],
                        close=[1.0, 2.0], close_raw=[1.0, 2.0],
@@ -46,10 +49,13 @@ def sample(name: str) -> pd.DataFrame:
         "investor_flows": dict(date=d, ticker=tickers, retail_net=np.array([1, -1], dtype="int64"),
                                foreign_net=np.array([2, -2], dtype="int64"),
                                inst_net=np.array([3, -3], dtype="int64")),
-        "disclosures": dict(rcept_no=["1", "2"], rcept_dt=kst, ticker=["005930", None],
+        "disclosures": dict(rcept_no=["1", "2"], rcept_date=d, rcept_dt=rcept_partial,
+                            available_at=available, corp_code=["00126380", "99999999"],
+                            ticker=["005930", None],
                             corp_name=["가", "비상장"], report_nm=["주식 소각 결정", "기타"],
                             report_nm_norm=["주식소각결정", "기타"]),
-        "news": dict(news_id=["n1", "n2"], published_at=kst, ticker=tickers, title=["a", "b"],
+        "news": dict(news_id=["n1", "n2"], published_at=rcept_partial, available_at=available,
+                     ticker=tickers, title=["a", "b"],
                      url=["https://a", "https://b"], source=["bigkinds", "naver"], sentiment=[0.5, np.nan]),
         "labels": dict(date=pd.to_datetime([DAY] * 3), ticker=["005930", "005930", "000660"],
                        h=np.array([1, 20, 20], dtype="int8"), ret=[0.01, 0.02, -0.2],
@@ -64,7 +70,8 @@ def sample(name: str) -> pd.DataFrame:
                           target_weight=[0.1, 0.1, 0.8], constructor=["buffer"] * 3,
                           exposure=[0.9] * 3, regime_mc=np.array([0, 0, 0], dtype="int8")),
         "alerts": dict(date=d, ticker=tickers, trigger_type=["T1", "T6"], rcept_no=["1", "2"],
-                       report_nm=["관리종목지정", "유상증자결정"], rcept_dt=kst),
+                       report_nm=["관리종목지정", "유상증자결정"], rcept_dt=rcept_partial,
+                       available_at=available),
         "forward_log": dict(signal_date=pd.to_datetime([DAY]), commit_hash=["abc1234"],
                             signal_source=["baseline"], has_positions=np.array([0], dtype="int8"),
                             label_ready_date=pd.to_datetime(["2026-12-04"]),
@@ -249,6 +256,27 @@ class ValidateRejectsTest(unittest.TestCase):
         self.assertRejects("news", df)
         df = sample("positions"); df["constructor"] = ["buffer", "rl", "ppo"]
         self.assertRejects("positions", df)
+
+    def test_dec09_available_at(self):
+        for name, received in io.RECEIVED_AT.items():
+            with self.subTest(name=name):
+                self.assertRejects(name, sample(name).drop(columns="available_at"))   # 필수 열
+                df = sample(name); df.loc[1, "available_at"] = pd.NaT
+                self.assertRejects(name, df)                                        # 결측 불가
+                df = sample(name); df["available_at"] = df["available_at"].dt.tz_convert("UTC")
+                self.assertRejects(name, df)                                        # KST만
+                df = sample(name); df.loc[0, "available_at"] = df.loc[0, received] - pd.Timedelta(minutes=1)
+                self.assertRejects(name, df)                                        # 접수보다 빠름
+                df = sample(name); df[received] = pd.Series([pd.NaT, pd.NaT], dtype=df[received].dtype)
+                io.validate(name, df)                                               # 접수 시각 전부 결측 허용
+
+    def test_dec09_disclosure_columns(self):
+        for col in ("rcept_date", "corp_code"):
+            self.assertRejects("disclosures", sample("disclosures").drop(columns=col))
+        df = sample("disclosures"); df["rcept_date"] = pd.to_datetime(["2026-11-07", "2026-11-06"])
+        self.assertRejects("disclosures", df)                                       # 접수일보다 빠름
+        df = sample("disclosures"); df["flr_nm"] = ["가", "나"]
+        self.assertRejects("disclosures", df)                                       # 공개 스키마에 없음
 
     def test_nulls(self):
         df = sample("signals"); df["crash_prob"] = [0.1, np.nan]
