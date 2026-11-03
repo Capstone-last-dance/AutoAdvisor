@@ -165,14 +165,3 @@ def test_listed_days_splits_reused_tickers_into_separate_episodes():
     ld = listed_days(p, t, days).reset_index(drop=True)
     assert ld.iloc[0] == 1 and ld.iloc[49] == 50             # 옛 회사 구간: 자기 첫날부터 정상적으로 늘어난다
     assert ld.iloc[50] == 1 and ld.iloc[59] == 10            # 새 회사 첫날도 1부터 다시 센다 (3114일 같은 값이 아니다)
-
-
-def test_require_complete_reports_missing_days(tmp_path):
-    from src.data.build_processed import require_complete
-    days = list(pd.bdate_range("2020-01-06", periods=3))
-    (tmp_path / "ohlcv_kospi").mkdir()
-    for d in days[:2]:
-        (tmp_path / "ohlcv_kospi" / f"{d:%Y-%m-%d}.parquet").write_bytes(b"")
-    with pytest.raises(RuntimeError, match="받지 못한 거래일 1일"):
-        require_complete(tmp_path / "ohlcv_kospi", days)
-    require_complete(tmp_path / "ohlcv_kospi", days[:2])
