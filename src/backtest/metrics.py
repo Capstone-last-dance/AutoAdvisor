@@ -21,7 +21,10 @@ def _numeric(values: Sequence[float], name: str, *, nonnegative: bool) -> np.nda
 
 
 def cagr(nav: Sequence[float], *, trading_days: int, annualization: int = 252) -> float:
-    """(종료 NAV / 시작 NAV)^(252 / 거래일 수) - 1."""
+    """(종료 NAV / 시작 NAV)^(252 / 수익률 구간 수) - 1.
+
+    trading_days는 NAV 관측 수가 아니라 연속 관측 사이의 일간 수익률 개수다.
+    """
 
     values = _numeric(nav, "NAV", nonnegative=True)
     if values[0] <= 0 or trading_days < 1 or annualization < 1:
@@ -48,7 +51,10 @@ def annual_excess_return(
 def weekly_active_returns(
     portfolio_nav_at_fills: Sequence[float], benchmark_close_at_fills: Sequence[float]
 ) -> np.ndarray:
-    """연속한 체결일 종가 사이의 단순 수익률 차이 a_k."""
+    """연속한 체결일의 체결 직전 NAV와 BM 종가로 계산한 a_k.
+
+    체결 후 NAV를 넣으면 해당 주 첫 체결 비용이 빠진다.
+    """
 
     portfolio = _numeric(portfolio_nav_at_fills, "체결일 NAV", nonnegative=True)
     benchmark = _numeric(benchmark_close_at_fills, "체결일 BM", nonnegative=True)
@@ -224,7 +230,11 @@ def rebound_capture(
     benchmark_daily_returns: Sequence[float],
     regime_mc: Sequence[int],
 ) -> float | None:
-    """regime_mc=1 거래일만 이어 붙인 누적수익률의 비율."""
+    """전일 국면이 1이었던 일간 수익률만 이어 붙인 누적수익률의 비율.
+
+    호출자는 d-1→d 수익률에 d-1 종가 기준 regime_mc를 맞춰 전달한다.
+    이 함수는 입력 시계열을 추가로 이동하지 않는다.
+    """
 
     portfolio = _numeric(
         portfolio_daily_returns, "포트폴리오 일간 수익률", nonnegative=False
