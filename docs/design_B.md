@@ -15,14 +15,14 @@
 | `src/portfolio/risk_layer.py` | M8 Step 1~6, 불변식, positions 행 생성, t일 유효 업종표 | 구현. 경계 사례 테스트와 2011~2025년 그림은 B-04 |
 | 〃 `compute_regime_mc(date)`, `compute_vol_target_annual` | 공개 함수, Q-12 값 계산 | 구현 (B-02). 값 0.157263을 부록 1에 기입했다 (4절) |
 | `src/portfolio/vol_target_report.py` | B-02 결과 리포트: `python -m src.portfolio.vol_target_report --run-id {YYYYMMDD}_B_{설명}` → `reports/{run_id}/`에 config.yaml 사본, git_commit.txt, metrics.json (R-10) | 구현 (B-02) |
-| `src/portfolio/buffer_rule.py` | 버퍼 규칙 단계 1~4 | 골격 (B-03) |
+| `src/portfolio/buffer_rule.py` | 버퍼 규칙 단계 1~5와 엔진 위 실행 (`run_buffer_rule`) | 구현 (B-03). 실제 M5 연결은 B-05 |
 | `src/portfolio/interfaces.py` | B가 C(M5)와 PM(M9)에 기대하는 호출 형태 | 초안. C·PM 확인 필요 (5절) |
 | `src/portfolio/rl_data.py` | 9.3절 표 → 신호일별 스냅샷 | 구현 |
 | `src/portfolio/rl_env.py` | gymnasium 환경: 관측, 행동 해석, M8 호출, 보상 | 구현. 실제 M5 연결은 B-05 |
 | `src/portfolio/rl_train.py` | λ 선택, 본 학습, 검증 IR 체크포인트, 결정적 운용 | 구현. 폴드 데이터 구성과 R-10 기록은 B-06 |
 | `tests/portfolio/` | 단위 테스트와 테스트 전용 가짜 입력(`fakes.py`) | 구현 (7절) |
 
-모듈 의존 방향은 `params` ← `risk_layer` ← `rl_data` ← `rl_env` ← `rl_train`이다. `risk_layer.py`는 numpy와 pandas만 쓴다. A가 피처 `regime_mc`를 만들 때 import해도 torch나 gymnasium이 필요 없다.
+모듈 의존 방향은 `params` ← `risk_layer` ← `rl_data` ← `rl_env` ← `rl_train`이고, `buffer_rule`은 `rl_data`까지만 쓴다 (torch·gymnasium 불필요). `risk_layer.py`는 numpy와 pandas만 쓴다. A가 피처 `regime_mc`를 만들 때 import해도 torch나 gymnasium이 필요 없다.
 
 ---
 
@@ -30,11 +30,15 @@
 
 | 6.5절 | 코드 | 상태 |
 |---|---|---|
-| 단계 1 보유 집합 H | `buffer_rule_weights(holdings, ...)`. H는 M5 상태(직전 체결 후 실제 보유)에서 읽는다 | B-03 |
-| 단계 2 유지 조건 | 〃 rank ≤ `exit_rank_greater_than`, crash_flag = 0, U_t 소속, 쿨다운 아님 | B-03 |
-| 단계 3 추가 | 〃 rank ≤ `enter_rank_max`, rank 오름차순, `max_holdings`까지 | B-03 |
-| 단계 4 동일가중 | 〃 1 ÷ 종목 수. 종목이 없으면 빈 Series (현금 100%) | B-03 |
-| 단계 5 M8 | `apply_risk_layer(..., constructor="buffer")` | 구현 |
+| 단계 1 보유 집합 H | `buffer_rule_weights(holdings, ...)`. `run_buffer_rule`은 직전 `run_period`가 돌려준 실제 보유(`weights_obs` > 0)를 H로 쓴다. M9 청산이나 체결 실패로 목표와 달라도 실제 보유를 따른다 | 구현 |
+| 단계 2 유지 조건 | 〃 rank ≤ `exit_rank_greater_than`, crash_flag = 0, U_t 소속, 쿨다운 아님. signals에 없는 보유 종목은 rank가 없으므로 판다 | 구현 |
+| 단계 3 추가 | 〃 보유하지 않은 종목 중 rank ≤ `enter_rank_max`, crash_flag = 0, 쿨다운 아님을 rank 오름차순으로 `max_holdings`까지. 같은 rank는 종목코드 순 | 구현 |
+| 단계 4 동일가중 | 〃 1 ÷ 종목 수. 종목이 없으면 빈 Series (현금 100%) | 구현 |
+| 단계 5 M8 | `buffer_targets`: RL 환경과 같은 배열 경로(`risk_layer_weights`, `check_invariants`). `mode="off"`(G7)이면 M9 쿨다운도 끄고, full이 아니면 E_t = 1 | 구현 |
+| 엔진 위 실행 | `run_buffer_rule(snapshots, engine, ...)`: 첫 신호일 현금 100%에서 시작해 신호일마다 단계 1~5 → `engine.run_period`. 마지막 신호일은 비중만 기록하고 체결하지 않는다 (RL `episode="full"`과 같음) | 구현. 지금은 FakeEngine, C의 M5는 B-05 |
+
+- **입력**: RL과 같은 신호일 스냅샷(`rl_data.build_snapshots`)을 쓴다. 그래서 G5 비교에서 두 구성기의 신호, U_t, 쿨다운, 업종, E_t가 같다.
+- **단계 3과 U_t**: 6.5절 단계 3은 U_t 소속을 따로 묻지 않는다. 하지만 rank가 U_t 안의 순위이고(6.4절), 스냅샷은 signals 종목이 U_t와 같은지 확인한다. 그래서 후보가 모두 U_t 종목이고 결과가 같다.
 
 ---
 
@@ -211,6 +215,7 @@ PPO를 실제로 학습하는 테스트 2개는 `slow`로 표시했다. `-m "not
 
 | 파일 | 확인 내용 |
 |---|---|
+| `test_buffer_rule.py` | **B-03 완료 기준**: 단계 2 버퍼(rank 21~40 유지, 41부터 매도, 미보유 rank 21~40은 사지 않음), crash_flag·쿨다운·U_t 밖·signals에 없는 보유 종목 매도, 단계 3 후보 부족·전액 현금, 유지 종목이 보유 상한에 포함됨, 단계 5 M8(업종 한도·E_t)과 G7·G4 모드, H를 엔진의 실제 보유에서 읽음, 합성 시장 전 구간을 엔진 위에서 실행(불변식·보유 20개 이하), 버퍼가 회전율을 낮춤 |
 | `test_params.py` | 부록 1 값과 키 이름 (R-14), FILL_ 값을 쓰면 멈춤 (R-08), 구현하지 않은 설정값 거부, `configs/prereg.yaml` 커밋 뒤 테스트 입력과 같은지 (커밋 전에는 건너뜀) |
 | `test_risk_layer.py` | Step 4~5를 6.9절 식 그대로의 느린 구현과 비교, regime_mc = 1일 때 E_t 상한, t 이후 코스피 200 미사용 (R-03), Step 1~3·6 손계산, '미분류' 한 그룹, mode off, 무작위 입력 200건의 불변식, 위반 시 예외, positions를 io.py로 쓰고 읽기 (io.py가 있을 때) |
 | `test_rl_env.py` | SB3·gymnasium 환경 검사, 관측 배치, 보유·U_t 밖 슬롯, 마스킹, 상위 20개와 min_weight, 전액 현금, 보상 식, 52스텝과 구간 경계, 슬롯 초과, 9.3절 표 → 스냅샷 |
@@ -344,7 +349,7 @@ rebound_t = 1인데 bear_t를 계산할 수 없으면 결측이다 (Insufficient
 | 작업 | 기한 | 이 설계에서 이어지는 부분 |
 |---|---|---|
 | B-02 | 11/8 | 구현과 값 계산을 마쳤다 (0.157263, 부록 1 기입). 남은 것: A 리뷰 승인, 부록 3 Q-12 결과 칸(PM PR #2와 같은 표라 PM이 기입), D4 기록(B 결정, A 동의·PM 기록 대기) |
-| B-03 | 11/13 | `buffer_rule_weights` |
+| B-03 | 11/13 | 단계 1~5와 엔진 위 실행을 구현했다 (2절). 남은 것: C의 M5(PR #8) 위에서 실행 확인, 실제 신호(A-04)로 실행 |
 | B-04 | 11/16 | 경계 사례 테스트(한 업종 20종목, 보유 5종목, regime_mc = 1, sigma_t = 3 × vol_target_annual), 2011~2025년 E_t·regime_mc 그림 |
 | B-05 | 11/16 | M5 엔진 어댑터, 같은 비중일 때 버퍼 규칙과 체결·비용 결과 일치 |
 | B-06 | 11/23 | 폴드별 스냅샷 구성(D1, D5), R-10 기록(`reports/{run_id}/`), 베이스라인 신호 리허설 |

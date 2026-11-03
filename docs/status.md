@@ -34,9 +34,9 @@
 | A-09 | A 김윤하 | 11/30 | 대기 | | |
 | A-10 | A 김윤하 | 12/7 | 대기 | | |
 | A-11 | A 김윤하 | 기한 없음 | 대기 | | |
-| B-01 | B 조윤상 | 11/1 | 대기 | | |
-| B-02 | B 조윤상 | 11/8 | 대기 | | |
-| B-03 | B 조윤상 | 11/13 | 대기 | | |
+| B-01 | B 조윤상 | 11/1 | 완료 | docs/design_B.md; src/portfolio/; [PR #4](https://github.com/Capstone-last-dance/AutoAdvisor/pull/4) | M4·M8 설계와 PPO 골격. 합성 입력으로 학습 루프 테스트 통과, A 리뷰 후 병합 |
+| B-02 | B 조윤상 | 11/8 | 완료 | src/portfolio/risk_layer.py; src/portfolio/vol_target_report.py; reports/20261103_B_vol_target/; [PR #11](https://github.com/Capstone-last-dance/AutoAdvisor/pull/11) | vol_target_annual = 0.157263 계산·부록 1 기입, 2011~2015 데이터만 사용 테스트 통과. compute_regime_mc 공개, DEC-19 반영 |
+| B-03 | B 조윤상 | 11/13 | 진행 중 | src/portfolio/buffer_rule.py; tests/portfolio/test_buffer_rule.py | 단계 1~5 단위 테스트 통과, ExecutionEngine 형태의 가짜 엔진 위에서 실행. C의 M5(PR #8) 위 실행과 A-04 신호 연결 남음 |
 | B-04 | B 조윤상 | 11/16 | 대기 | | |
 | B-05 | B 조윤상 | 11/16 | 대기 | | |
 | B-06 | B 조윤상 | 11/23 | 대기 | | |
