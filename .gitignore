@@ -1,8 +1,11 @@
 .env
 .streamlit/secrets.toml
 data/raw/*
+data/processed/*
 !data/raw/.gitkeep
 .venv/
 venv/
 env/
 __pycache__/
+_stub/*
+!_stub/.gitkeep

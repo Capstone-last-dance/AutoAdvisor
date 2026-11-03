@@ -396,7 +396,9 @@ py -3.12 -m venv .venv
 .venv\Scripts\Activate.ps1
 python -m pip install --upgrade pip
 pip install -r requirements-lock.txt
-Copy-Item .env.example .env
+if (-not (Test-Path -LiteralPath .env)) {
+    Copy-Item -LiteralPath .env.example -Destination .env
+}
 ```
 
 macOS·Linux:
@@ -406,21 +408,58 @@ python3.12 -m venv .venv
 source .venv/bin/activate
 python -m pip install --upgrade pip
 pip install -r requirements-lock.txt
-cp .env.example .env
+if [ ! -e .env ]; then
+    cp .env.example .env
+fi
 ```
 
-`.env`의 키 값은 PM에게 받아 채운다 ([기밀 정보](#기밀-정보)).
+기존 `.env`가 있으면 그대로 유지한다. 새 `.env`의 키 값은 PM에게 받아 채운다 ([기밀 정보](#기밀-정보)).
+
+### 테스트
+
+테스트는 `tests/{영역}/` 아래에 두고 pytest로 실행한다.
+
+```bash
+python -m pytest              # 전체
+python -m pytest tests/common # 영역별
+```
+
+### 모듈 간 입출력
+
+9.3절의 파일은 `src/common/io.py`의 함수로만 읽고 쓴다 (R-18). 읽기와 쓰기 모두 9.3절 스키마로 검증하며, 어기면 `SchemaError`가 난다.
+
+```python
+from src.common.io import read_table, write_table, read_evidence, write_evidence
+
+signals = read_table("signals", date="2026-11-06")                  # signals/2026-11-06.parquet
+write_table("positions", df, run_id="20261116_B_m8_v1")             # positions/wf_20261116_B_m8_v1.parquet
+write_table("signals", df, date="2026-11-06", stub=True)            # _stub/signals/2026-11-06.parquet
+signals = read_table("signals", date="2026-11-06", stub=True)       # 스텁 읽기
+```
+
+- 종목코드는 6자리 문자열, 날짜(`date`) 열은 시각 없는 datetime64, 시각 열은 KST(+09:00) 시간대가 있는 datetime이어야 한다 (0.4절).
+- 정수·실수 열은 9.3절의 자료형(int64, int32, int8, float64)과 정확히 같아야 한다.
+- 백테스트 파일은 `run_id`(`{YYYYMMDD}_{역할ID}_{짧은설명}`)로 구분한다. features도 같다 (`features/wf_{run_id}.parquet`).
 
 ### 실행
 
-> **작성 예정** (D-03: 주간 실행기, D-05: 대시보드)
-
-아래는 명세서에 정해진 실행 명령이다. 아직 구현 전이므로 지금은 동작하지 않는다.
+#### 주간 실행
 
 ```bash
-# 주간 실행 (구현 예정, D-03)
 python -m src.pipeline.run_weekly --date YYYY-MM-DD
+```
 
+5.2절 1~7단계를 순서대로 실행하고, 로그를 `logs/{date}.log`에 남긴다. 한 단계라도 실패하면 이후 단계를 실행하지 않고 종료 코드 1로 끝난다.
+
+- 모듈과 연결되지 않은 단계는 9.3절 스키마의 빈 스텁을 `_stub/` 아래에 쓴다. 앞 단계가 스텁이면 뒤 단계의 출력도 `_stub/`에 쓴다.
+- 스텁이 하나라도 쓰인 실행은 forward test 커밋을 하지 않는다.
+- 모듈 연결: `src/pipeline/run_weekly.py`의 `STEPS`에서 해당 단계의 `entry`에 `"모듈경로:함수이름"`을 적는다. 함수는 `fn(ctx)` 형태로, 입력은 `ctx.read_table`, 출력은 `ctx.write_table`로 다룬다. 연결할 함수가 준비되면 D에게 알려 준다.
+
+#### 일간 경보와 대시보드
+
+> **작성 예정** (D-06: 일간 경보 실행기, D-05: 대시보드)
+
+```bash
 # 일간 경보 실행 (구현 예정, D-06)
 python -m src.pipeline.run_daily_alerts --date YYYY-MM-DD
 
