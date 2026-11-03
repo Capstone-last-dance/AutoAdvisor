@@ -80,6 +80,7 @@ def market_state_table(bm_close: pd.Series, params: RiskLayerParams, mode: Mode 
     """거래일마다 Step 4~5를 계산한다. 모든 창이 과거 방향이라 각 행은 그날 종가까지만 쓴다.
 
     열: sigma, bear, rebound, regime_mc, exposure. 창을 채울 이력이 없는 날은 NaN이다.
+    다만 rebound_t = 0이면 bear_t의 창이 차지 않아도 regime_mc_t = bear_t × 0 = 0으로 정해진다 (D4).
     """
     _check_mode(mode)
     bm = _as_bm(bm_close)
@@ -96,7 +97,7 @@ def market_state_table(bm_close: pd.Series, params: RiskLayerParams, mode: Mode 
     # rebound_t = BM(t) / BM(t−20) − 1 ≥ 0.10
     ret = bm / bm.shift(rp.rebound_lookback_days) - 1.0
     rebound = (ret >= rp.rebound_threshold).astype("float64").where(ret.notna())
-    regime = bear * rebound
+    regime = (bear * rebound).where(rebound != 0.0, 0.0)  # bear가 NaN이어도 rebound = 0이면 0 (D4)
 
     if mode == "full":
         # E_t = min(1.00, max(0.30, vol_target_annual / sigma_t)). sigma_t = 0이면 exposure_max
@@ -299,7 +300,8 @@ def compute_regime_mc(
 
     bm_close를 넘기지 않으면 load_kospi200()으로 읽고, params를 넘기지 않으면 configs/prereg.yaml에서
     읽는다. Step 5에는 vol_target_annual이 필요 없다. t일보다 늦은 종가는 쓰지 않는다 (R-03).
-    창을 채울 이력이 없으면 InsufficientHistory를 낸다 ([결정 필요] D4).
+    2011년 초처럼 bear_t의 창(종가 311개)이 차지 않아도 rebound_t = 0이면 0을 돌려준다. rebound_t = 1인데
+    bear_t를 계산할 수 없거나, rebound_t의 창(종가 21개)도 차지 않으면 InsufficientHistory를 낸다 (D4).
     """
     if params is None:
         params = RiskLayerParams.from_prereg(load_prereg())

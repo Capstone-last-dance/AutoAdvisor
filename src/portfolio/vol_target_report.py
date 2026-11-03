@@ -41,7 +41,7 @@ def vol_target_metrics(bm_close: pd.Series, cfg: Mapping[str, Any]) -> dict[str,
     bm = _as_bm(bm_close).loc[: pd.Timestamp(f"{last}-12-31")]
     sigma = sigma_series(bm, params).loc[pd.Timestamp(f"{first}-01-01") :]
     used = bm.iloc[-(len(sigma) + params.vol_lookback_days) :]  # 첫 sigma_t 창의 앞 종가 20개 포함
-    regime = market_state_table(bm_close, params, mode="no_exposure")["regime_mc"].dropna()
+    bear = market_state_table(bm_close, params, mode="no_exposure")["bear"].dropna()
     return {
         "vol_target_annual": value,
         "years": [first, last],
@@ -53,7 +53,8 @@ def vol_target_metrics(bm_close: pd.Series, cfg: Mapping[str, Any]) -> dict[str,
             "n_closes": len(used),
             "sha256_float64_closes": hashlib.sha256(used.to_numpy().tobytes()).hexdigest(),
         },
-        "regime_mc_first_date": regime.index[0].date().isoformat(),  # 이보다 이른 신호일은 [결정 필요] D4
+        # bear_t의 창이 처음 차는 날. 그 전에는 rebound_t = 0인 날만 regime_mc가 정해진다 (D4)
+        "bear_first_date": bear.index[0].date().isoformat(),
     }
 
 

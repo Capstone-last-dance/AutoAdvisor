@@ -81,8 +81,8 @@ def test_no_bm_after_t_is_used(risk_params):
 
 def test_short_history_and_fill_value_stop(cfg, risk_params):
     bm = _bm_path()
-    with pytest.raises(InsufficientHistory):
-        market_state(bm, bm.index[200], risk_params)
+    with pytest.raises(InsufficientHistory):  # sigma_t·rebound_t 창(종가 21개)이 차지 않는다
+        market_state(bm, bm.index[10], risk_params)
     unfilled = RiskLayerParams.from_prereg(cfg)  # vol_target_annual = FILL_
     with pytest.raises(PreregValueMissing):
         market_state(bm, bm.index[400], unfilled)

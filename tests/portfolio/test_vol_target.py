@@ -17,6 +17,7 @@ from src.portfolio.risk_layer import (
     InsufficientHistory,
     compute_regime_mc,
     compute_vol_target_annual,
+    market_state,
     market_state_table,
 )
 from tests.portfolio.fakes import bm_crash_rebound_path
@@ -104,12 +105,37 @@ def test_regime_mc_ignores_prices_after_t(cfg):
     assert compute_regime_mc(t, bm_close=changed, params=params) == compute_regime_mc(t, bm_close=bm, params=params)
 
 
-def test_regime_mc_early_2011_is_short_of_history(cfg):
-    """data.start_date(2010-01-04)부터의 이력으로는 2011년 초 창을 채우지 못한다 ([결정 필요] D4)."""
-    bm = _bm(start="2010-01-04")
-    first_2011 = bm.index[bm.index >= pd.Timestamp("2011-01-01")][0]
+def _path_from_2010(rebound: float) -> tuple[pd.Series, pd.Timestamp]:
+    """data.start_date(2010-01-04)부터 잔잔하다가 2011년 첫 거래일까지 20거래일 동안 rebound만큼 오르는 경로.
+
+    2011년 첫 거래일에는 bear_t의 창(종가 311개)이 차지 않는다 (D4).
+    """
+    days = pd.bdate_range("2010-01-04", "2011-06-30")
+    t = days[days >= pd.Timestamp("2011-01-01")][0]
+    i = days.get_loc(t)
+    r = np.random.default_rng(0).normal(0.0, 0.003, len(days))
+    r[i - 19 : i + 1] += math.log1p(rebound) / 20
+    return pd.Series(250.0 * np.exp(np.cumsum(r)), index=days), t
+
+
+def test_regime_mc_is_zero_without_bear_history_if_no_rebound(cfg, risk_params):
+    """D4: bear_t의 창이 차지 않아도 rebound_t = 0이면 regime_mc_t = bear_t × 0 = 0이다."""
+    params = RiskLayerParams.from_prereg(cfg)
+    bm, t = _path_from_2010(rebound=0.0)
+    row = market_state_table(bm, params, mode="no_exposure").loc[t]
+    assert np.isnan(row["bear"]) and row["rebound"] == 0.0
+    assert compute_regime_mc(t, bm_close=bm, params=params) == 0
+    state = market_state(bm, t, risk_params)  # M8 Step 4~5도 이 날 계산된다
+    assert state.regime_mc == 0 and risk_params.exposure_min <= state.exposure <= risk_params.exposure_max
+
+
+def test_regime_mc_is_missing_without_bear_history_if_rebound(cfg):
+    """rebound_t = 1인데 bear_t를 계산할 수 없으면 값을 정할 수 없다 (D4. 실제 2011년 초에는 이런 날이 없다)."""
+    params = RiskLayerParams.from_prereg(cfg)
+    bm, t = _path_from_2010(rebound=0.15)
+    assert market_state_table(bm, params, mode="no_exposure").loc[t, "rebound"] == 1.0
     with pytest.raises(InsufficientHistory):
-        compute_regime_mc(first_2011, bm_close=bm, params=RiskLayerParams.from_prereg(cfg))
+        compute_regime_mc(t, bm_close=bm, params=params)
 
 
 @pytest.mark.skipif(HAS_IO, reason="io.py가 있으면 test_regime_mc_reads_kospi200_through_io가 확인한다")
