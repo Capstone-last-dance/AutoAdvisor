@@ -29,7 +29,7 @@ EXTENDED_COLUMNS = ["rcept_no", "rcept_date", "rcept_dt", "available_at", "ticke
                     "corp_name", "flr_nm", "report_nm", "report_nm_norm"]
 # DEC-09 공개 스키마. 제출인(flr_nm)은 쓰는 곳이 없어 진단 결과에만 둔다.
 PUBLIC_COLUMNS = [c for c in EXTENDED_COLUMNS if c != "flr_nm"]
-TICKER_POLICY_LISTED = "listed_on_rcept_date"
+TICKER_POLICY_LISTING_ONLY = "listing_check_only_null"
 TICKER_POLICY_NO_SOURCE = "no_ticker_source_null"
 IMMUTABLE = ("rcept_dt", "report_nm", "corp_code", "flr_nm")
 MUTABLE = ("corp_name", "stock_code", "corp_cls", "rm")
@@ -493,8 +493,8 @@ def build_disclosures(run_dirs: Sequence[Path] | None = None, *, schema_mode="ex
                       tickers: pd.DataFrame | None = None) -> BuildResult:
     """원본을 정제한다.
 
-    종목코드는 tickers가 있을 때만, 공시 접수일에 그 종목이 상장 중이었으면 붙인다 (DEC-09 (2)).
-    목록 응답의 stock_code는 수집 당시 값이라 상장 기간으로 확인하지 않으면 과거에 소급하지 않는다.
+    tickers는 관측 코드의 상장 기간 진단에 사용한다. 공개 ticker는 접수일의
+    회사코드↔종목코드 연결 근거를 확보할 때까지 결측으로 유지한다.
     """
     if schema_mode not in ("v03", "extended"):
         raise ValueError("스키마 모드는 v03 또는 extended여야 합니다")
@@ -538,24 +538,22 @@ def build_disclosures(run_dirs: Sequence[Path] | None = None, *, schema_mode="ex
         if len({r["pblntf_ty"] for r in group}) > 1:
             quality["multi_type"] += 1
         rcept_date = datetime.strptime(latest["rcept_dt"], "%Y%m%d").date()
-        # 목록 응답의 stock_code는 수집 당시 값이다. 접수일에 상장 중이었음을
-        # tickers로 확인한 경우에만 붙이고, 원본 코드·fetched_at은 observations에 보존한다.
+        # 목록 응답의 stock_code는 수집 당시 값이다. 상장 기간은 진단에만 쓰고
+        # 원본 코드와 fetched_at은 observations에 보존한다.
         observed_code = latest["stock_code"] or None
-        ticker = None
         if observed_code is not None and not re.fullmatch(r"[0-9A-Z]{6}", observed_code):
             quality["invalid_stock_code"] += 1
-        elif observed_code is not None and periods is None:
-            quality["ticker_unverified_asof"] += 1
         elif observed_code is not None:
-            period = periods.get(observed_code)
-            day = pd.Timestamp(rcept_date)
-            if period is None:
-                quality["ticker_code_not_in_tickers"] += 1
-            elif period[0] <= day and (period[1] is None or day <= period[1]):
-                ticker = observed_code
-                quality["ticker_listed_on_rcept_date"] += 1
-            else:
-                quality["ticker_not_listed_on_rcept_date"] += 1
+            quality["ticker_unverified_asof"] += 1
+            if periods is not None:
+                period = periods.get(observed_code)
+                day = pd.Timestamp(rcept_date)
+                if period is None:
+                    quality["ticker_code_not_in_tickers"] += 1
+                elif period[0] <= day and (period[1] is None or day <= period[1]):
+                    quality["ticker_listed_on_rcept_date"] += 1
+                else:
+                    quality["ticker_not_listed_on_rcept_date"] += 1
         number_date = datetime.strptime(number[:8], "%Y%m%d").date()
         available = datetime.combine(max(rcept_date, number_date), DATE_ONLY_AVAILABLE_TIME, tzinfo=KST)
         quality["rcept_no_date_differs"] += rcept_date != number_date
@@ -565,7 +563,7 @@ def build_disclosures(run_dirs: Sequence[Path] | None = None, *, schema_mode="ex
         quality["similar_middle_dots"] += any(c in latest["report_nm"] for c in "・∙•･")
         rows.append({"rcept_no": number, "rcept_date": pd.Timestamp(rcept_date),
                      "rcept_dt": available if schema_mode == "v03" else pd.NaT,
-                     "available_at": available, "ticker": ticker, "corp_code": latest["corp_code"],
+                     "available_at": available, "ticker": None, "corp_code": latest["corp_code"],
                      "corp_name": latest["corp_name"], "flr_nm": latest["flr_nm"],
                      "report_nm": latest["report_nm"], "report_nm_norm": normalize_report_nm(latest["report_nm"])})
     all_columns = EXTENDED_COLUMNS
@@ -578,8 +576,8 @@ def build_disclosures(run_dirs: Sequence[Path] | None = None, *, schema_mode="ex
     for column in frame.columns:
         if column not in {"rcept_date", "rcept_dt", "available_at"}:
             frame[column] = frame[column].astype(object).where(frame[column].notna(), None)
-    ticker_policy = TICKER_POLICY_LISTED if periods is not None else TICKER_POLICY_NO_SOURCE
-    frame.attrs.update(diagnostic_only=schema_mode == "v03", actual_reception_times_available=False,
+    ticker_policy = TICKER_POLICY_LISTING_ONLY if periods is not None else TICKER_POLICY_NO_SOURCE
+    frame.attrs.update(diagnostic_only=True, actual_reception_times_available=False,
                        rcept_dt_semantics="estimated_availability" if schema_mode == "v03" else "actual_time_missing",
                        ticker_policy=ticker_policy)
     result = BuildResult(frame, pd.DataFrame(conflicts, columns=["rcept_no", "field", "values", "run_ids"]),
@@ -687,9 +685,9 @@ def _common_io():
 
 
 def publish_disclosures(result: BuildResult, *, allow_shrink_reason=None, dry_run=False):
-    """DEC-09 공개 스키마로 공용 I/O에 저장한다. dry_run이면 검증만 하고 쓰지 않는다.
+    """공개 조건을 검사한다. 현재 정제는 과거 매핑 근거가 없어 공개를 거부한다.
 
-    v03 추정 시각 결과와 상장 기간 근거 없이 만든 결과는 공개하지 않는다.
+    dry_run도 동일한 공개 조건을 검사한다.
     """
     _coverage_check(result)
     if not result.conflicts.empty:
@@ -716,13 +714,7 @@ def publish_disclosures(result: BuildResult, *, allow_shrink_reason=None, dry_ru
         io.validate("disclosures", public)
     except (ValueError, TypeError, KeyError) as exc:
         raise PublishRefused(f"P4: 공용 스키마 검증 실패 ({type(exc).__name__})") from None
-    # 종목코드가 '비상장이라 결측'인지 '근거가 없어 결측'인지 소비자가 구분할 수 없으므로
-    # 상장 기간(tickers)으로 확인하지 않은 결과는 공개하지 않는다.
-    if result.ticker_policy != TICKER_POLICY_LISTED:
-        raise PublishRefused("DEC-09: 상장 기간(tickers) 없이 만든 결과라 종목코드 결측의 뜻이 달라 공개하지 않습니다")
-    if dry_run:
-        return None
-    return io.write_table("disclosures", public)
+    raise PublishRefused("DEC-09: 공시 접수일의 회사코드↔종목코드 연결 근거가 없어 공개 저장을 거부합니다")
 
 
 def build_metrics(result):
@@ -741,8 +733,7 @@ def build_metrics(result):
 
 
 def _publish_flags(result):
-    return {"diagnostic_only": result.schema_mode == "v03",
-            "public_publish_enabled": result.schema_mode == "extended" and result.ticker_policy == TICKER_POLICY_LISTED,
+    return {"diagnostic_only": True, "public_publish_enabled": False,
             "actual_reception_times_available": False, "ticker_policy": result.ticker_policy}
 
 
@@ -815,10 +806,10 @@ def _write_build_report_files(result, folder):
                f"기간 연속성: {coverage}\n\n- [x] 보고서명 정규화 적용\n"
                f"- [{'x' if not len(gaps) else ' '}] 완결되지 않은 기간 없음 (tables/gaps.csv)\n"
                "- [ ] 실제 접수 시각 확보: API는 날짜만 제공하므로 미충족. DEC-09로 available_at을 쓴다\n"
-               f"- [{'x' if result.ticker_policy == TICKER_POLICY_LISTED else ' '}] 종목코드를 접수일 상장 기간으로 확인 (DEC-09 (2))\n\n"
+               "- [ ] 접수일 기준 회사코드↔종목코드 연결 근거 확보 (DEC-09 (2))\n\n"
                "extended는 실제 rcept_dt를 결측으로 두고 available_at(그날 23:59:59 KST)을 별도로 제공한다.\n"
                "v03의 rcept_dt는 실제 접수 시각이 아니라 두 날짜 중 늦은 날 23:59:59 KST의 이용 가능 시점이며 공개하지 않는다.\n"
-               "접수일에 상장 중이었음을 확인하지 못한 종목코드는 ticker에 넣지 않고 원본 관측에만 보존한다.\n"
+               "접수일에 상장 중인 코드도 당시 회사와의 연결 근거가 필요하다. 관측 코드는 원본 관측에 보존한다.\n"
                f"\n행 수 축소 사유: {result.allow_shrink_reason or '없음'}\n")
     atomic_write(folder / "summary.md", summary.encode("utf-8"), overwrite=True)
 

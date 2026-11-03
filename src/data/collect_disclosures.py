@@ -84,12 +84,12 @@ def parser():
     daily.add_argument("--daily-budget", type=int, default=18000)
     status = subs.add_parser("status")
     status.add_argument("--run-id", required=True)
-    build = subs.add_parser("build", help="정제 리포트 생성, --publish면 공용 I/O로 저장")
+    build = subs.add_parser("build", help="공시 진단 정제 리포트 생성")
     build.add_argument("--runs", default="all")
     build.add_argument("--schema-mode", choices=("v03", "extended"), default="extended",
                        help="기본 extended는 실제 접수 시각과 이용 가능 시각을 분리(DEC-09); v03는 과거 진단 호환용")
     build.add_argument("--publish", action="store_true",
-                       help="DEC-09 공개 스키마로 저장. 공용 I/O·tickers(상장 기간)가 없으면 거부")
+                       help="공개 조건 검사. 현재는 접수일의 회사코드↔종목코드 연결 근거가 없어 거부")
     build.add_argument("--allow-shrink", metavar="사유")
     coverage = subs.add_parser("coverage")
     coverage.add_argument("--quarters")
@@ -132,8 +132,7 @@ def main(argv=None):
             report = write_build_report(result)
             print(f"report={report} rows={len(result.df)} conflicts={len(result.conflicts)}")
             if args.publish:
-                path = publish_disclosures(result, allow_shrink_reason=args.allow_shrink)
-                print(f"published={path}")
+                publish_disclosures(result, allow_shrink_reason=args.allow_shrink)
             return 0
         if args.command == "daily":
             _configure_log(f"{args.date:%Y%m%d}_PM_disclosures_daily")

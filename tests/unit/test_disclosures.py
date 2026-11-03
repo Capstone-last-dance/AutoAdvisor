@@ -450,41 +450,37 @@ def test_publish_without_listing_source_refused(tmp_path, client_factory, monkey
     result, _ = continuous_result(tmp_path, client_factory)
     io = PreparedIO()
     monkeypatch.setattr(mod, "_common_io", lambda: io)
-    with pytest.raises(PublishRefused, match="tickers"):
+    with pytest.raises(PublishRefused, match="회사코드↔종목코드"):
         publish_disclosures(result, dry_run=dry_run)
     assert io.calls == ["read", "validate"]
 
 
-def test_publish_writes_dec09_public_columns(tmp_path, client_factory, monkeypatch):
+@pytest.mark.parametrize("dry_run", [False, True])
+def test_publish_refuses_listing_only_even_with_dec09_io(tmp_path, client_factory, monkeypatch, dry_run):
     monkeypatch.chdir(tmp_path)
     result = listed_result(tmp_path, client_factory)
     io = PreparedIO()
     monkeypatch.setattr(mod, "_common_io", lambda: io)
-    assert publish_disclosures(result, dry_run=True) is None
+    with pytest.raises(PublishRefused, match="회사코드↔종목코드"):
+        publish_disclosures(result, dry_run=dry_run)
     assert io.calls == ["read", "validate"]
-    publish_disclosures(result)
-    name, written = io.written
-    assert name == "disclosures" and io.calls[-1] == "write"
-    assert list(written.columns) == mod.PUBLIC_COLUMNS and "flr_nm" not in written
-    assert written.ticker.tolist() == ["005930"]
-    assert written.rcept_dt.isna().all()
-    assert written.available_at.iloc[0].isoformat() == "2025-01-01T23:59:59+09:00"
+    assert not Path("data/processed/disclosures.parquet").exists()
 
 
-@pytest.mark.parametrize("tickers,expected,counter", [
-    (listed(listing="2000-01-04"), "005930", "ticker_listed_on_rcept_date"),
-    (listed(listing="2000-01-04", delisting="2025-01-01"), "005930", "ticker_listed_on_rcept_date"),
-    (listed(listing="2025-06-01"), None, "ticker_not_listed_on_rcept_date"),
-    (listed(listing="2000-01-04", delisting="2024-12-31"), None, "ticker_not_listed_on_rcept_date"),
-    (listed(code="000660"), None, "ticker_code_not_in_tickers"),
+@pytest.mark.parametrize("tickers,counter", [
+    (listed(listing="2000-01-04"), "ticker_listed_on_rcept_date"),
+    (listed(listing="2000-01-04", delisting="2025-01-01"), "ticker_listed_on_rcept_date"),
+    (listed(listing="2025-06-01"), "ticker_not_listed_on_rcept_date"),
+    (listed(listing="2000-01-04", delisting="2024-12-31"), "ticker_not_listed_on_rcept_date"),
+    (listed(code="000660"), "ticker_code_not_in_tickers"),
 ])
-def test_ticker_only_when_listed_on_rcept_date(tmp_path, client_factory, tickers, expected, counter):
-    # 공시 접수일(2025-01-01)에 상장 중이었던 종목코드만 붙인다. 상장 전·상폐 후 공시에는 소급하지 않는다.
+def test_listing_period_is_diagnostic_only(tmp_path, client_factory, tickers, counter):
     _, archive = built(tmp_path, client_factory)
     result = build_disclosures([archive.root], today=TODAY, tickers=tickers)
-    assert result.df.ticker.tolist() == [expected]
+    assert result.df.ticker.tolist() == [None]
     assert result.quality[counter] == 1
-    assert result.ticker_policy == mod.TICKER_POLICY_LISTED
+    assert result.quality["ticker_unverified_asof"] == 1
+    assert result.ticker_policy == mod.TICKER_POLICY_LISTING_ONLY
     assert result.observations.stock_code.tolist() == ["005930"]
 
 
@@ -577,10 +573,13 @@ def test_later_observed_mapping_never_backfills_past_ticker(tmp_path, client_fac
         metadata = json.loads(path.read_text(encoding="utf-8"))
         metadata["fetched_at"] = "2026-10-28T22:00:00+09:00"
         path.write_text(json.dumps(metadata), encoding="utf-8")
-    result = build_disclosures([first.root, second.root], today=TODAY)
+    # 나중에 관측한 코드가 접수일에 다른 회사에 배정됐더라도 상장 기간 검사는 통과한다.
+    tickers = listed(code=later_code).assign(name="접수일 당시 다른 회사")
+    result = build_disclosures([first.root, second.root], today=TODAY, tickers=tickers)
     assert result.df.ticker.tolist() == [None]
     assert result.observations.stock_code.tolist() == [first_code, later_code]
     assert result.observations.fetched_at.nunique() == 2
+    assert result.quality["ticker_listed_on_rcept_date"] == 1
     assert result.quality["ticker_unverified_asof"] == 1
     assert result.quality.get("mutable_changed_stock_code", 0) == int(first_code != later_code)
 

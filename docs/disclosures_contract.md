@@ -1,8 +1,11 @@
 # 공시 시각·종목 매핑 계약
 
-상태: **2026-11-02 DEC-09로 PM 확정, D 동의, C 의견 대기**([decisions.md](decisions.md) DEC-09). C가 이견을 내면 다시 연다. [PR #2](https://github.com/Capstone-last-dance/AutoAdvisor/pull/2)에서 검토한다. 라벨 실제 종료일 기준 purge의 구현은 C 소유다.
+2026-11-03 현재 [PR #2](https://github.com/Capstone-last-dance/AutoAdvisor/pull/2) C 재검토에 따라 DEC-09 (2) 종목 매핑을 다시 검토 중이다. (3) purge는 11/3에 신호일 전체 제거로 확정했다. 라벨 purge 구현은 C 소유다. [결정 기록](decisions.md)
 
-## DEC-09 확정 내용 (11/2 후속)
+- PM 정제에서는 접수일에 유효한 회사코드↔종목코드 연결 근거를 확보할 때까지 `ticker`를 결측으로 둔다. `tickers`의 상장 기간과 수집 당시의 `stock_code`는 별도 진단에 쓰며 원본 관측을 보존한다.
+- `build --publish` 및 `publish_disclosures(..., dry_run=True)`는 공용 스키마 검증을 통과해도 회사↔종목 연결 근거가 없는 현재 결과를 거부한다. 종목별 피처·M9 연동은 시점 매핑 검증 후 재개한다.
+
+## 11/2 DEC-09 당시 결정
 
 - 공개 스키마(`PUBLIC_COLUMNS`): `rcept_no, rcept_date, rcept_dt(결측 허용), available_at(필수), ticker(결측 허용), corp_code, corp_name, report_nm, report_nm_norm`. `flr_nm`은 진단 결과(`EXTENDED_COLUMNS`)에만 둔다.
 - 종목코드: A의 `tickers`에서 `listing_date ≤ 접수일 ≤ delisting_date`(상장 중이면 상한 없음)인 경우에만 관측 코드를 붙인다. tickers 없이 만든 결과는 공개하지 않는다(결측이 '비상장'인지 '근거 없음'인지 구분할 수 없으므로).

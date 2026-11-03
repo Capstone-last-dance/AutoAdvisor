@@ -69,8 +69,7 @@ def test_complete_build_is_diagnostic_and_publish_refuses_missing_io(tmp_path, m
     assert cli.main(["collect", "--start", "2010-01-01", "--end", "2010-03-31", "--types", "B"]) == 0
     assert cli.main(["build"]) == 0
     metrics = json.loads(next(Path("reports").glob("*/metrics.json")).read_text(encoding="utf-8"))
-    # extended는 공개 가능한 형식이지만 상장 기간(tickers)이 없으면 공개 대상이 아니다.
-    assert not metrics["diagnostic_only"] and not metrics["public_publish_enabled"]
+    assert metrics["diagnostic_only"] and not metrics["public_publish_enabled"]
     assert metrics["ticker_policy"] == "no_ticker_source_null"
     assert cli.main(["build", "--publish"]) == 3
     assert "R-18" in capsys.readouterr().err

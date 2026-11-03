@@ -9,7 +9,7 @@
 | PM-01 | PM 장지원 | 10/28 | 진행 중 | docs/status.md; docs/decisions.md; docs/deviation_log.md; docs/preregistration.md | 명세에서 요구하는 공용 기록 4개 작성. 주간 회의 공지는 미완료 |
 | PM-02 | PM 장지원 | 10/30 | 진행 중 | README.md; .env.example; requirements-lock.txt; [PR #2](https://github.com/Capstone-last-dance/AutoAdvisor/pull/2); docs/decisions.md | D-01 설치 재현·README 기존 .env 보호 검증 및 PR 공유 완료. 변수명 OPENDART_API_KEY·NAVER_CLIENT_ID·NAVER_CLIENT_SECRET 유지. 키 공유/교체·팀원별 재현·네이버 인증 확인은 남음 |
 | PM-03 | PM 장지원 | 10/30 | 진행 중 | docs/프로젝트_구조_및_역할분담_v0.3.md 부록 3 Q-06·Q-08 | Q-08 문헌·DART 누락 반례·KRX 공식 CSV 2개·KIND 과거/상폐 표시 회사/해제 원문 3개 검증. 표본·실행 기록은 별도 보관. A 공동 확인·전체 기간 상태 데이터 검증 남음 |
-| PM-04 | PM 장지원 | 11/2 | 진행 중 | src/data/disclosures.py; tests/unit/test_disclosures_contract.py; [PM 계약안](disclosures_contract.md); [PR #2](https://github.com/Capstone-last-dance/AutoAdvisor/pull/2) | 수집·legacy 859,133건 대조 완료, 공개 저장 차단·미검증 ticker 결측·legacy 격리 유지. PM 안으로 실제 시각 결측/별도 available_at/엄격한 컷오프 이전 비교를 선택해 진단 기본 extended·시각 선택 함수·팀 계약서 구현. 전체 167개 테스트 통과. 공개 9.3절 스키마 변경 승인·C/D 공동 확정·검증 매핑 연결은 남음 |
+| PM-04 | PM 장지원 | 11/2 | 진행 중 | src/data/disclosures.py; [공시 계약](disclosures_contract.md); [PR #2](https://github.com/Capstone-last-dance/AutoAdvisor/pull/2) | 원본 수집·legacy 859,133건 대조 완료. DEC-09 시각 분리·15:30 경계·공용 I/O는 C 재검토에서 확인. 로컬에서 접수일 회사↔종목 연결 근거 없는 ticker를 결측으로 유지하고 공개를 차단했다. 실제 매핑 원천·D 스키마 연동·purge 합의·C 재리뷰 남음 |
 | PM-05 | PM 장지원 | 11/6 | 진행 중 | src/data/naver_client.py; src/data/news.py; src/data/collect_news.py; tests/unit/test_news.py | 1회 원본 수집 CLI·키 비노출/무재시도·필수 관측 시각/종목 매핑 정규화 구현. 전체 회귀 167개 테스트 통과. 실제 네이버 인증과 빅카인즈 계정 준비 후 기사 표본 확보 필요. news.parquet·BigKinds 가져오기·최종 뉴스 수집 미완료 |
 | PM-06 | PM 장지원 | 11/8 | 대기 | | |
 | PM-07 | PM 장지원 | 11/9 | 대기 | | |
@@ -24,7 +24,7 @@
 | PM-16 | PM 장지원 | 매주 | 대기 | | |
 | PM-17 | PM 장지원 | 11/8 | 진행 중 | docs/프로젝트_구조_및_역할분담_v0.3.md 부록 3 Q-07·Q-09·Q-10·Q-11, 4.9절; docs/decisions.md DEC-10 | 원문 4건·상세 API 2회에서 후속 정정값 소급 위험 확인, 최초 ZIP 2건 확보/수치 대조, 원저자 코드와 가중치 이용 조건 구분, MIT 기반 후보 검토. Q-10 검증 모델/환경 실측·Q-11 날짜표 보완 유지. T6 금액 계약·감성 모델 이용 조건/학습 시점·실제 추론과 D/A/C 접점은 미완료. FILL_ 유지 |
 | A-01 | A 김윤하 | 10/30 | 대기 | | |
-| A-02 | A 김윤하 | 11/2 | 대기 | | |
+| A-02 | A 김윤하 | 11/2 | 진행 중 | 11/3 A·C 인계 (`processed_20261103.zip`) | A 보고: 2010-01-04~2026-10-30 핵심 4표 공유. C 실측 보고: 주간 `status`의 관리종목·지수 편입 3열 전부 결측으로 공용 I/O 검증 실패. 일별 `is_halted`와 평가 가격 공백 규칙 확인 필요. `universe` 스텁, `sector`·`investor_flows` 미포함 |
 | A-03 | A 김윤하 | 11/2 | 대기 | | |
 | A-04 | A 김윤하 | 11/6 | 대기 | | |
 | A-05 | A 김윤하 | 11/16 | 대기 | | |
@@ -45,9 +45,9 @@
 | B-09 | B 조윤상 | 12/7 | 대기 | | |
 | B-10 | B 조윤상 | 12/14 | 대기 | | |
 | C-01 | C 손석범 | 11/1 | 대기 | | |
-| C-02 | C 손석범 | 11/6 | 대기 | | |
-| C-03 | C 손석범 | 11/6 | 대기 | | |
-| C-04 | C 손석범 | 11/16 | 대기 | | |
+| C-02 | C 손석범 | 11/6 | 진행 중 | [초안 PR #8](https://github.com/Capstone-last-dance/AutoAdvisor/pull/8) | 라벨·홀드아웃 가드 구현. PR 헤드에서 관련 합성 테스트 62개와 하위 테스트 51개 통과 재현. 거래량 0 근사의 한 신호일은 C의 진단 실행. A 일별 상태와 DEC-09 purge 합의 남음 |
+| C-03 | C 손석범 | 11/6 | 진행 중 | [초안 PR #8](https://github.com/Capstone-last-dance/AutoAdvisor/pull/8) | 공통 체결·비용·NAV 엔진과 평가지표 선행 구현. 현금 부족 처리 결정, 실제 상태·가격 공백 규칙 및 B-05·D 연동 검증 남음 |
+| C-04 | C 손석범 | 11/16 | 진행 중 | [초안 PR #8](https://github.com/Capstone-last-dance/AutoAdvisor/pull/8) | G0 검사 선행 구현. 개인 행동 프록시·forward test 사후 성과와 실제 평가 검증 남음 |
 | C-05 | C 손석범 | 11/23 | 대기 | | |
 | C-06 | C 손석범 | 12/4 | 대기 | | |
 | C-07 | C 손석범 | 11/30 | 대기 | | |
