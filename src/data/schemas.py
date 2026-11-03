@@ -8,10 +8,12 @@ SCHEMAS = {
                "volume": "int64", "value": "int64", "mcap": "int64", "listed_days": "int32"},
     "index": {"date": D, "index_code": "object", "close": "float64"},
     "tickers": {"ticker": "object", "name": "object", "market": "object", "listing_date": D, "delisting_date": D, "security_type": "object"},
-    "status": {"date": D, "ticker": "object", "is_admin": "boolean", "is_halted": "bool", "in_kospi200": "boolean", "in_kosdaq150": "boolean"},
+    "status": {"date": D, "ticker": "object", "is_admin": "boolean", "is_halted": "bool"},
     "universe": {"date": D, "ticker": "object", "mcap_rank": "int32", "in_universe": "bool"},
     "delisted": {"ticker": "object", "delist_date": D, "last_price": "float64"},
     "sector": {"ticker": "object", "sector": "object", "valid_from": D, "valid_to": D},
+    "signals": {"date": D, "ticker": "object", "rank_score": "float64", "rank": "int32", "crash_prob": "float64",
+                "crash_flag": "int8", "model_version": "object"},
     "investor_flows": {"date": D, "ticker": "object", "retail_net": "int64", "foreign_net": "int64", "inst_net": "int64"},
 }
 
@@ -35,6 +37,6 @@ def validate(name: str, df: pd.DataFrame) -> None:
     if "ticker" in df and not df["ticker"].dropna().str.fullmatch(r"[0-9A-Z]{6}").all():
         raise ValueError(f"{name}: 6자리 문자열이 아닌 ticker가 있다")
     key = {"prices": ["date", "ticker"], "status": ["date", "ticker"], "universe": ["date", "ticker"],
-           "investor_flows": ["date", "ticker"], "tickers": ["ticker"], "index": ["date"], "delisted": ["ticker"]}.get(name)
+           "investor_flows": ["date", "ticker"], "signals": ["date", "ticker"], "tickers": ["ticker"], "index": ["date", "index_code"], "delisted": ["ticker"]}.get(name)
     if key and df.duplicated(key).any():
         raise ValueError(f"{name}: 키 {key} 중복 {int(df.duplicated(key).sum())}건")

@@ -14,19 +14,28 @@ RAW_FEATURES = ["penny_flag", "ss_allowed"]
 MARKET_FEATURES = ["mkt_vol_20", "mkt_ret_20", "regime_mc", "ss_regime"]
 
 
+def mom_12_1(close):
+    return close.shift(21) / close.shift(252) - 1
+
+
+def vol_60(close):
+    logret = np.log(close / close.shift(1))
+    return logret.rolling(60, min_periods=60).std(ddof=1) * ANN
+
+
 def compute_stock_features(close, close_raw, value, mcap, retail, foreign, inst) -> dict:
     """각 인자: 인덱스 거래일, 열 ticker의 DataFrame. 반환: 피처 이름 -> 같은 모양의 DataFrame (순위 변환 전)."""
     ret = close.pct_change(fill_method=None)
     logret = np.log(close / close.shift(1))
     turn = value / mcap.where(mcap > 0)
     f = {
-        "mom_12_1": close.shift(21) / close.shift(252) - 1,
+        "mom_12_1": mom_12_1(close),
         "mom_12_7": close.shift(147) / close.shift(252) - 1,
         "rev_1m": close / close.shift(21) - 1,
         "rev_1w": close / close.shift(5) - 1,
         "high52_prox": close / close.rolling(252, min_periods=252).max(),
         "vol_20": logret.rolling(20, min_periods=20).std(ddof=1) * ANN,
-        "vol_60": logret.rolling(60, min_periods=60).std(ddof=1) * ANN,
+        "vol_60": vol_60(close),
         "max_ret_20": ret.rolling(20, min_periods=20).max(),
         "turnover_spike": turn.rolling(5, min_periods=5).mean() / turn.shift(5).rolling(60, min_periods=60).mean(),
         # 투자자별 순매수는 t−1일까지: 창 t−20~t−1, 분모는 MC(t−1) (4.2절)
@@ -53,13 +62,19 @@ def compute_market_features(bm: pd.Series, regime_mc: pd.Series, ss_regime: pd.S
 
 def ss_allowed(ss_regime: float, in_kospi200: object, in_kosdaq150: object) -> float:
     """4.9절: 0이면 1, 1이면 코스피 200 또는 코스닥 150 구성종목일 때만 1, 2이면 0. 구성종목 정보가 없으면(결측) 결측."""
+    if pd.isna(ss_regime):           # 날짜표에 없는 신호일을 구성종목 규칙으로 흘려보내지 않는다
+        return np.nan
     if ss_regime == 0:
         return 1.0
     if ss_regime == 2:
         return 0.0
-    if pd.isna(in_kospi200) and pd.isna(in_kosdaq150):
+    a = None if pd.isna(in_kospi200) else bool(in_kospi200)
+    b = None if pd.isna(in_kosdaq150) else bool(in_kosdaq150)
+    if a or b:                       # numpy/pandas 불리언도 다루도록 `is True`로 비교하지 않는다
+        return 1.0
+    if a is None or b is None:       # 한쪽 목록이 없으면 구성종목이 아니라고 단정할 수 없다
         return np.nan
-    return float(bool(in_kospi200 is True or in_kosdaq150 is True))
+    return 0.0
 
 
 def rank_and_fill(df: pd.DataFrame, rank_cols=RANK_FEATURES) -> pd.DataFrame:

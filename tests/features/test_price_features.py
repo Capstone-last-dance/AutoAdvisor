@@ -86,6 +86,8 @@ def test_market_features_and_ss_allowed():
     assert ss_allowed(0, False, False) == 1 and ss_allowed(2, True, True) == 0
     assert ss_allowed(1, True, False) == 1 and ss_allowed(1, False, False) == 0
     assert np.isnan(ss_allowed(1, pd.NA, pd.NA))
+    assert ss_allowed(1, np.True_, np.False_) == 1 and ss_allowed(1, np.False_, np.True_) == 1   # numpy 불리언
+    assert ss_allowed(1, pd.NA, True) == 1 and np.isnan(ss_allowed(1, pd.NA, False))               # 한쪽만 알 때
 
 
 def test_rank_and_fill():
@@ -93,3 +95,10 @@ def test_rank_and_fill():
     out = rank_and_fill(df, rank_cols=["vol_60"])
     assert out["vol_60"].tolist() == [pytest.approx(1 / 3), 1.0, 0.5, pytest.approx(2 / 3)]   # 순위는 비결측 3개 기준 pct
     assert out["vol_60_na"].tolist() == [0, 0, 1, 0]
+
+
+def test_ss_allowed_missing_regime_is_missing_not_constituent_logic():
+    import numpy as np
+    from src.features.price_features import ss_allowed
+    assert np.isnan(ss_allowed(np.nan, True, True))      # 날짜표에 없는 신호일을 1.0/0.0으로 단정하지 않는다
+    assert ss_allowed(0, False, False) == 1.0 and ss_allowed(2, True, True) == 0.0

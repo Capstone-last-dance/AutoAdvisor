@@ -26,8 +26,9 @@ def test_adjusted_close_split_50_to_1():
     assert adj.iloc[0] == pytest.approx(53_000, rel=1e-3)
 
 
-def test_adjusted_close_ignores_rounding_noise_and_cash_dividend():
-    # 종가 10000 -> 10050, 등락률 0.5 (기준가=전일종가). 반올림 잡음과 배당락(조정 없음)은 이벤트가 아니다
+def test_adjusted_close_ignores_rounding_noise():
+    # 종가 10000 -> 10050, 등락률 0.5 (기준가=전일종가). 반올림 잡음(ratio≈1)은 이벤트가 아니다.
+    # 실제 현금배당은 기준가를 바꾸므로 이벤트로 잡힌다 (2026-11-03 A-03 정정, Q-05 참고) - 이 테스트는 그 경우가 아니다
     p = _panel([("2020-01-02", "000001", 10_000, 0.0), ("2020-01-03", "000001", 10_050, 0.5), ("2020-01-06", "000001", 9_900, -1.49)])
     assert (adjusted_close(p) == p["close_raw"]).all()
 
@@ -116,3 +117,47 @@ def test_avg_trading_value_requires_full_window_and_counts_missing_as_zero():
     assert a["A"].iloc[18] != a["A"].iloc[18]                            # 19일째까지는 결측
     assert a["A"].iloc[19] == 2e9
     assert a["B"].iloc[24] == pytest.approx(2e9 * 5 / 20)                # 마지막 20일 중 거래 5일 = 평균 5억
+
+
+def test_adjusted_close_ignores_zero_close_and_minus_100_percent_rows():
+    # 이상 행 하나가 같은 종목의 과거 전체 수정종가를 0·무한대로 만들면 안 된다.
+    # A: 종가 0, 등락률 -30%라 기준가 0 (비율 0). B: 종가 양수, 등락률 -100%라 기준가 무한대.
+    p = _panel([("2020-01-02", "A", 1000, 0.0), ("2020-01-03", "A", 1010, 1.0), ("2020-01-06", "A", 0, -30.0), ("2020-01-07", "A", 1020, 0.5),
+                ("2020-01-02", "B", 500, 0.0), ("2020-01-03", "B", 505, 1.0), ("2020-01-06", "B", 510, -100.0), ("2020-01-07", "B", 515, 1.0)])
+    adj = adjusted_close(p)
+    assert np.isfinite(adj).all()
+    assert adj.tolist() == [1000.0, 1010.0, 0.0, 1020.0, 500.0, 505.0, 510.0, 515.0]    # 이상 행은 자기 값 그대로, 다른 행은 그 행 때문에 바뀌지 않는다
+
+
+def test_adjust_events_skips_invalid_rows():
+    from src.data.adjust import adjust_events
+    p = _panel([("2020-01-02", "A", 1000, 0.0), ("2020-01-03", "A", 0, -30.0), ("2020-01-06", "A", 1010, 1.0),
+                ("2020-01-02", "B", 500, 0.0), ("2020-01-03", "B", 510, -100.0)])
+    assert adjust_events(p).empty
+
+
+def test_universe_rejects_missing_status_instead_of_assuming_false():
+    day = pd.DataFrame({"ticker": ["000001"], "name": ["가"], "security_type": ["common"], "listed_days": [100],
+                        "is_admin": pd.array([pd.NA], dtype="boolean"), "is_halted": [False], "mcap": [10]})
+    with pytest.raises(ValueError, match="is_admin에 결측"):
+        universe_for_date(day, pd.Series(dtype="float64"))
+
+
+def test_listed_days_counts_from_first_price_when_listing_date_is_later():
+    from src.data.build_processed import listed_days
+    days = list(pd.bdate_range("2020-01-01", periods=100))
+    p = pd.DataFrame({"date": days, "ticker": "000001"})
+    t = pd.DataFrame({"ticker": ["000001"], "listing_date": [days[50]]})      # 상장일이 첫 시세보다 늦다 (이전상장 등)
+    ld = listed_days(p, t, days)
+    assert ld.iloc[0] == 1 and ld.iloc[59] == 60 and ld.iloc[-1] == 100       # 신규 취급(전부 1)되지 않는다
+
+
+def test_require_complete_reports_missing_days(tmp_path):
+    from src.data.build_processed import require_complete
+    days = list(pd.bdate_range("2020-01-06", periods=3))
+    (tmp_path / "ohlcv_kospi").mkdir()
+    for d in days[:2]:
+        (tmp_path / "ohlcv_kospi" / f"{d:%Y-%m-%d}.parquet").write_bytes(b"")
+    with pytest.raises(RuntimeError, match="받지 못한 거래일 1일"):
+        require_complete(tmp_path / "ohlcv_kospi", days)
+    require_complete(tmp_path / "ohlcv_kospi", days[:2])

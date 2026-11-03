@@ -34,6 +34,14 @@ def _read_many(folder: Path, days, cols=None) -> pd.DataFrame:
     return pd.concat(parts, ignore_index=True) if parts else pd.DataFrame()
 
 
+def require_complete(folder: Path, days) -> None:
+    """수집이 끝난 날에는 파일이 있다(응답이 비어도 빈 파일로 남긴다). 파일이 없는 날은 받지 못한 것이므로 조용히 건너뛰지 않는다.
+    없는 날을 건너뛰면 수정종가가 가짜 분할 이벤트를 만들고 순매수가 0으로 채워진다."""
+    missing = [d for d in days if not (folder / f"{d:%Y-%m-%d}.parquet").exists()]
+    if missing:
+        raise RuntimeError(f"{folder.name}: 받지 못한 거래일 {len(missing)}일 (예: {missing[0]:%Y-%m-%d}). 수집을 이어받은 뒤 다시 실행한다")
+
+
 def build_index(raw: Path) -> pd.DataFrame:
     x = pd.read_parquet(raw / "index_1028.parquet")
     return pd.DataFrame({"date": pd.to_datetime(x["날짜"]), "index_code": "KOSPI200", "close": x["종가"].astype("float64")})
@@ -71,6 +79,7 @@ def build_tickers(raw: Path, price_tickers: set) -> pd.DataFrame:
 def build_prices(raw: Path, days: list, tickers: pd.DataFrame) -> pd.DataFrame:
     parts = []
     for mk, ds in (("KOSPI", "ohlcv_kospi"), ("KOSDAQ", "ohlcv_kosdaq")):
+        require_complete(raw / ds, days)
         x = _read_many(raw / ds, days)
         x["market"] = mk
         parts.append(x)
@@ -92,15 +101,19 @@ def build_prices(raw: Path, days: list, tickers: pd.DataFrame) -> pd.DataFrame:
 
 
 def listed_days(p: pd.DataFrame, tickers: pd.DataFrame, days: list) -> pd.Series:
-    """실제 상장일부터 센 거래일 수(상장일 당일이 1). 상장일이 수집 시작 전이면 주중 일수로 앞 구간을 센다
-    (휴장일을 몰라 약간 크게 나오지만 60일 기준 판정에는 상장일이 2009-09 이후인 소수 종목만 영향이 있다)."""
+    """실제 상장일부터 센 거래일 수(상장일 당일이 1). 상장일이 days의 첫날보다 앞이면 그 앞 구간은 주중 일수로 센다
+    (휴장일을 몰라 약간 크게 나오지만 60일 기준 판정에는 상장일이 수집 시작 직전인 소수 종목만 영향이 있다).
+    시세가 상장일보다 먼저 있는 종목은 첫 시세일부터 센다."""
+    first = pd.Timestamp(days[0])
     pos = pd.Series(np.arange(len(days)), index=pd.DatetimeIndex(days))
     lst = tickers.set_index("ticker")["listing_date"]
     L = p["ticker"].map(lst)
-    start_pos = pd.Series(np.searchsorted(np.array(days, dtype="datetime64[ns]"), L.fillna(FIRST_DAY).values.astype("datetime64[ns]")), index=p.index)
+    start_pos = pd.Series(np.searchsorted(np.array(days, dtype="datetime64[ns]"), L.fillna(first).values.astype("datetime64[ns]")), index=p.index)
+    # 시세가 상장일보다 먼저 있는 종목(이전상장·재상장으로 상장일이 바뀐 경우)은 첫 시세일부터 센다. 안 그러면 오래된 종목이 신규 취급되어 유니버스에서 빠진다
+    start_pos = np.minimum(start_pos, p.groupby("ticker")["date"].transform("min").map(pos))
     pre = pd.Series(0, index=p.index)
-    before = L.notna() & (L < FIRST_DAY)
-    pre[before] = np.busday_count(L[before].values.astype("datetime64[D]"), np.datetime64(FIRST_DAY, "D"))
+    before = L.notna() & (L < first)
+    pre[before] = np.busday_count(L[before].values.astype("datetime64[D]"), np.datetime64(first, "D"))
     out = p["date"].map(pos) - start_pos + 1 + pre
     out[L.isna()] = 10_000                       # 상장일을 모르면 충분히 오래된 것으로 본다 (리포트에서 건수를 센다)
     return out.clip(lower=1).astype("int32")
@@ -109,6 +122,7 @@ def listed_days(p: pd.DataFrame, tickers: pd.DataFrame, days: list) -> pd.Series
 def build_flows(raw: Path, days: list, prices: pd.DataFrame, foreign_includes_other: bool) -> pd.DataFrame:
     cols = {}
     for ds in ("flow_retail", "flow_foreign", "flow_otherforeign", "flow_inst", "flow_othercorp"):
+        require_complete(raw / ds, days)
         x = _read_many(raw / ds, days, cols=["티커", "순매수거래대금"])
         cols[ds] = x.set_index(["date", "티커"])["순매수거래대금"]
     base = pd.MultiIndex.from_frame(prices[["date", "ticker"]], names=["date", "티커"])
@@ -173,18 +187,17 @@ def build_universe(prices: pd.DataFrame, tickers: pd.DataFrame, status: pd.DataF
     vp = prices.pivot(index="date", columns="ticker", values="value")
     avg = avg_trading_value(vp)
     info = tickers.set_index("ticker")[["name", "security_type"]]
-    st = status.set_index(["date", "ticker"])
+    use = {t for t in sig if t.year >= first_year}
+    # 신호일 행과 상태를 한 번에 합친다 (종목마다 조회하면 신호일 수 × 종목 수만큼 느려진다)
+    ps = prices[prices["date"].isin(use)][["date", "ticker", "mcap", "listed_days"]]
+    ps = ps.merge(status[["date", "ticker", "is_halted", "is_admin"]], on=["date", "ticker"], how="left")
+    ps["is_halted"] = ps["is_halted"].fillna(False).astype(bool)
+    if ps["is_admin"].isna().any() and not provisional:
+        raise RuntimeError("is_admin 결측: 관리종목 이력 원천이 확정되지 않았다(Q-06). 4.4절 3단계를 실행할 수 없다 (R-08)")
+    ps["is_admin"] = ps["is_admin"].fillna(False).astype(bool)
+    ps = ps.join(info, on="ticker")
     out = []
-    for t in sig:
-        if t.year < first_year:
-            continue
-        day = prices[prices["date"] == t][["ticker", "mcap", "listed_days"]].copy()
-        day = day.join(info, on="ticker")
-        day["is_halted"] = day.set_index("ticker").index.map(lambda k: bool(st["is_halted"].get((t, k), False)))
-        adm = pd.array([st["is_admin"].get((t, k), pd.NA) for k in day["ticker"]], dtype="boolean")
-        if adm.isna().any() and not provisional:
-            raise RuntimeError("is_admin 결측: 관리종목 이력 원천이 확정되지 않았다(Q-06). 4.4절 3단계를 실행할 수 없다 (R-08)")
-        day["is_admin"] = adm.fillna(False).astype(bool)
+    for t, day in ps.groupby("date", sort=True):
         u = universe_for_date(day, avg.loc[t])
         u.insert(0, "date", t)
         out.append(u)
@@ -208,8 +221,7 @@ def main():
     # 시세 종목 집합은 prices를 만든 뒤 알 수 있으므로, tickers는 두 번 만든다 (1차: 상장일 매핑용, 2차: unknown 반영)
     t0 = build_tickers(raw, set())
     prices = build_prices(raw, days, t0)
-    tickers = build_tickers(raw, set(prices["ticker"]))
-    prices["listed_days"] = listed_days(prices, tickers, days)
+    tickers = build_tickers(raw, set(prices["ticker"]))   # prices.listed_days는 t0로 이미 계산됨(시세에만 있는 종목은 t0에서도 상장일 결측이라 결과가 같다)
 
     flows = build_flows(raw, days, prices, foreign_includes_other=not a.foreign_excludes_other)
     sector = build_sector(raw, sig)

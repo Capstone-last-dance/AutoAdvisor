@@ -15,12 +15,20 @@ except ImportError:
 IO_AVAILABLE = _io is not None
 
 
-def write(name: str, df: pd.DataFrame, force_stub: bool = False) -> Path:
+def write(name: str, df: pd.DataFrame, force_stub: bool = False, date: str | None = None) -> Path:
     if IO_AVAILABLE and not force_stub:
         _io.validate(name, df)
-        return _io.write_table(name, df)
+        return _io.write_table(name, df, date=date, stub=False)
     local_validate(name, df)
-    path = ROOT / "_stub" / "data" / "processed" / f"{name}.parquet"
+    # 9.3절 경로 규칙: date가 있으면 {폴더}/{date}.parquet, 없으면 data/processed/{name}.parquet. stub이면 _stub/ 아래
+    path = ROOT / "_stub" / (f"{name}/{date}.parquet" if date else f"data/processed/{name}.parquet")
     path.parent.mkdir(parents=True, exist_ok=True)
     df.to_parquet(path, index=False)
     return path
+
+
+def read(name: str, force_stub: bool = False) -> pd.DataFrame:
+    """앞 단계가 쓴 표를 읽는다. write와 같은 경로 규칙(R-18)."""
+    if IO_AVAILABLE and not force_stub:
+        return _io.read_table(name)
+    return pd.read_parquet(ROOT / "_stub" / "data" / "processed" / f"{name}.parquet")
