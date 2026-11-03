@@ -141,6 +141,20 @@ def test_runs_on_engine_over_all_signal_dates(snaps, market, buffer, risk_params
         assert not set(snap.tickers[snap.crash_flag | snap.cooldown]) & set(day)  # crash_flag·쿨다운 종목은 담지 않는다
 
 
+def test_runs_on_c_execution_engine(snaps, market, buffer, risk_params, cfg):
+    """같은 실행을 C의 실제 M5 엔진(PR #8)에서 한다. 엔진이 아직 병합되지 않았으면 건너뛴다."""
+    engine = pytest.importorskip("src.backtest.engine")
+    accounting = pytest.importorskip("src.backtest.accounting")
+    c = cfg["costs"]
+    rates = accounting.CostRates(c["sell_tax"], c["commission_per_side"], c["slippage_per_side"])  # 기본 실행은 배율 1
+    real = run_buffer_rule(snaps, engine.ExecutionEngine(market.closes, market.bm_close, rates), buffer, risk_params)
+    fake = run_buffer_rule(snaps, FakeEngine(market.closes, market.bm_close, c), buffer, risk_params)
+    pd.testing.assert_frame_equal(real.positions, fake.positions)  # 같은 신호, 같은 M8, 같은 보유 → 같은 목표 비중
+    # 목표 합이 1인 체결에서만 다르다. FakeEngine은 현금을 음수로 두고, M5는 매수를 같은 비율로 줄인다
+    assert np.allclose(real.excess_returns, fake.excess_returns, atol=1e-3)
+    assert np.allclose(real.turnover, fake.turnover, atol=1e-2)
+
+
 def test_buffer_lowers_turnover(snaps, market, buffer, risk_params, cfg):
     """버퍼(rank 40까지 유지)가 없으면, 즉 rank 20을 넘는 즉시 팔면 회전율이 높아진다."""
     engine = FakeEngine(market.closes, market.bm_close, cfg["costs"])
