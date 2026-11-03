@@ -2,13 +2,16 @@
 from __future__ import annotations
 
 import importlib.util
+import json
 import math
 import statistics
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
 import pytest
 
+from src.portfolio import vol_target_report
 from src.portfolio.params import RiskLayerParams, vol_target_years
 from src.portfolio.risk_layer import (
     InsufficientHistory,
@@ -127,3 +130,31 @@ def test_regime_mc_reads_kospi200_through_io(cfg, tmp_path, monkeypatch):
     table = market_state_table(bm, params, mode="no_exposure")["regime_mc"].dropna()
     days = table.index[::25]
     assert [compute_regime_mc(d, params=params) for d in days] == [int(table[d]) for d in days]
+
+
+def test_report_metrics_and_data_fingerprint(cfg, risk_params, years):
+    bm = _bm()
+    m = vol_target_report.vol_target_metrics(bm, cfg)
+    assert m["vol_target_annual"] == compute_vol_target_annual(bm, risk_params, years)
+    used = m["kospi200_used"]
+    assert used["n_closes"] == m["n_sigma_days"] + risk_params.vol_lookback_days
+    assert used["first_date"] < "2011-01-01" and used["last_date"] <= "2015-12-31"
+    changed = bm.copy()
+    changed[changed.index > pd.Timestamp("2015-12-31")] *= 2.0  # 2016년 이후는 지문에도 들어가지 않는다
+    assert vol_target_report.vol_target_metrics(changed, cfg)["kospi200_used"] == used
+
+
+def test_report_writes_run_folder_once(tmp_path, monkeypatch):
+    monkeypatch.setattr(vol_target_report, "ROOT", tmp_path)
+    monkeypatch.setattr(vol_target_report, "load_kospi200", _bm)
+    monkeypatch.setattr(vol_target_report, "_git_commit", lambda: "abc\n")
+    config = str(Path(__file__).parent / "prereg_subset.yaml")
+    out = vol_target_report.main(["--run-id", "20261103_B_test", "--config", config])
+    assert out == tmp_path / "reports" / "20261103_B_test"
+    assert sorted(p.name for p in out.iterdir()) == ["config.yaml", "git_commit.txt", "metrics.json"]
+    metrics = json.loads((out / "metrics.json").read_text(encoding="utf-8"))
+    assert (metrics["run_id"], metrics["task"]) == ("20261103_B_test", "B-02")
+    with pytest.raises(SystemExit, match="R-11"):  # 같은 run_id는 덮어쓰지 않는다
+        vol_target_report.main(["--run-id", "20261103_B_test", "--config", config])
+    with pytest.raises(SystemExit, match="run_id"):
+        vol_target_report.main(["--run-id", "20261103_A_test", "--config", config])

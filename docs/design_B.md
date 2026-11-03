@@ -14,6 +14,7 @@
 | `src/portfolio/params.py` | 부록 1 `portfolio`, `risk_layer` 읽기. `FILL_` 값은 None으로 읽고, 실제로 쓰는 순간 `PreregValueMissing` (R-08) | 구현 |
 | `src/portfolio/risk_layer.py` | M8 Step 1~6, 불변식, positions 행 생성, t일 유효 업종표 | 구현. 경계 사례 테스트와 2011~2025년 그림은 B-04 |
 | 〃 `compute_regime_mc(date)`, `compute_vol_target_annual` | 공개 함수, Q-12 값 계산 | 구현 (B-02). 부록 1에 넣을 값은 실제 코스피 200 데이터(A-02)로 계산한다 |
+| `src/portfolio/vol_target_report.py` | B-02 결과 리포트: `python -m src.portfolio.vol_target_report --run-id {YYYYMMDD}_B_{설명}` → `reports/{run_id}/`에 config.yaml 사본, git_commit.txt, metrics.json (R-10) | 구현 (B-02) |
 | `src/portfolio/buffer_rule.py` | 버퍼 규칙 단계 1~4 | 골격 (B-03) |
 | `src/portfolio/interfaces.py` | B가 C(M5)와 PM(M9)에 기대하는 호출 형태 | 초안. C·PM 확인 필요 (5절) |
 | `src/portfolio/rl_data.py` | 9.3절 표 → 신호일별 스냅샷 | 구현 |
@@ -209,7 +210,7 @@ PPO를 실제로 학습하는 테스트 2개는 `slow`로 표시했다. `-m "not
 | `test_risk_layer.py` | Step 4~5를 6.9절 식 그대로의 느린 구현과 비교, regime_mc = 1일 때 E_t 상한, t 이후 코스피 200 미사용 (R-03), Step 1~3·6 손계산, '미분류' 한 그룹, mode off, 무작위 입력 200건의 불변식, 위반 시 예외, positions를 io.py로 쓰고 읽기 (io.py가 있을 때) |
 | `test_rl_env.py` | SB3·gymnasium 환경 검사, 관측 배치, 보유·U_t 밖 슬롯, 마스킹, 상위 20개와 min_weight, 전액 현금, 보상 식, 52스텝과 구간 경계, 슬롯 초과, 9.3절 표 → 스냅샷 |
 | `test_rl_train.py` | **B-01 완료 기준** (`slow`): 합성 입력으로 λ 탐색 → 시드별 학습 → 체크포인트 저장·로드 → 결정적 운용이 끝까지 돈다. 저장한 체크포인트로 검증 IR 재현, 같은 시드면 같은 학습 결과 (`slow`). 연도 경계 모델 교체 |
-| `test_vol_target.py` | **B-02 완료 기준**: 2016년 이후 종가를 바꿔도 vol_target_annual이 같다. 6.9절 식 그대로의 느린 구현과 비교, 2010년 종가는 첫 sigma_t 창의 21개만 사용, 기간이 모자라면 예외. compute_regime_mc가 M8 표와 같고 vol_target_annual 없이 계산됨, t 이후 종가 미사용, 2011년 초 이력 부족(D4), io.py로 index를 읽어 계산 (io.py가 없으면 오류 안내) |
+| `test_vol_target.py` | **B-02 완료 기준**: 2016년 이후 종가를 바꿔도 vol_target_annual이 같다. 6.9절 식 그대로의 느린 구현과 비교, 2010년 종가는 첫 sigma_t 창의 21개만 사용, 기간이 모자라면 예외. compute_regime_mc가 M8 표와 같고 vol_target_annual 없이 계산됨, t 이후 종가 미사용, 2011년 초 이력 부족(D4), io.py로 index를 읽어 계산 (io.py가 없으면 오류 안내). 리포트의 데이터 지문이 2016년 이후 종가와 무관, 리포트 폴더 구성, 같은 run_id 덮어쓰기 거부 (R-11) |
 
 `tests/portfolio/fakes.py`의 가짜 엔진과 합성 시장은 테스트 전용이다. 4.3절 상·하한가, 거래정지, 상장폐지, M9 청산은 구현하지 않았고, 실험과 보고서에 쓰지 않는다.
 
