@@ -1,6 +1,7 @@
 .env
 .streamlit/secrets.toml
 data/raw/*
+data/processed/*
 !data/raw/.gitkeep
 .venv/
 venv/
