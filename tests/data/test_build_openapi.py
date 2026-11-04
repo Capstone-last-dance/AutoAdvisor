@@ -146,3 +146,36 @@ def test_ret_pct_missing_is_allowed(tmp_path):
 def test_require_complete_files_message(tmp_path):
     with pytest.raises(RuntimeError, match="받지 못한 날 1일"):
         require_complete_files(tmp_path, "stk_bydd_trd", [date(2025, 1, 6)])
+
+
+def test_delisted_reused_supplement_for_known_tickers():
+    """DEC-28: 재사용 종목코드 2건(101970, 036220)의 옛 회사 폐지 보완 데이터.
+    마지막 거래일 다음 거래일이 delist_date, 그날 원종가가 last_price다 (delisted.parquet와 같은 정의)."""
+    from src.data.build_openapi import REUSED_TICKER_OLD_LAST_DAY, build_delisted_reused
+    days = [pd.Timestamp(d) for d in
+            ["2015-03-13", "2015-03-16", "2015-03-17",            # 101970 마지막 거래일(03-16) 다음이 03-17
+             "2016-05-03", "2016-05-04", "2016-05-06"]]            # 036220 마지막 거래일(05-04) 다음이 05-06 (05-05 어린이날)
+    p = pd.DataFrame([
+        {"ticker": "101970", "date": pd.Timestamp("2015-03-16"), "close_raw": 830.0},
+        {"ticker": "036220", "date": pd.Timestamp("2016-05-04"), "close_raw": 3500.0},
+    ])
+    out = build_delisted_reused(p, days)
+    assert set(out["ticker"]) == set(REUSED_TICKER_OLD_LAST_DAY)
+    row = out.set_index("ticker")
+    assert row.loc["101970", "last_price"] == 830.0 and row.loc["101970", "delist_date"] == pd.Timestamp("2015-03-17")
+    assert row.loc["036220", "last_price"] == 3500.0 and row.loc["036220", "delist_date"] == pd.Timestamp("2016-05-06")
+
+
+def test_delisted_reused_raises_if_price_missing_in_covered_range():
+    from src.data.build_openapi import build_delisted_reused
+    days = [pd.Timestamp("2015-03-16"), pd.Timestamp("2015-03-17")]   # 기준일이 구간 안인데 시세가 없다
+    with pytest.raises(RuntimeError, match="101970"):
+        build_delisted_reused(pd.DataFrame(columns=["ticker", "date", "close_raw"]), days)
+
+
+def test_delisted_reused_skips_ticker_outside_build_range():
+    """부분 기간 재구축 등 기준일이 이번 빌드 구간 밖이면 조용히 건너뛴다(예외 아님)."""
+    from src.data.build_openapi import build_delisted_reused
+    days = [pd.Timestamp(d) for d in pd.bdate_range("2020-01-01", "2020-01-10")]
+    out = build_delisted_reused(pd.DataFrame(columns=["ticker", "date", "close_raw"]), days)
+    assert out.empty

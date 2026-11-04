@@ -148,6 +148,33 @@ def build_delisted(tickers: pd.DataFrame, p: pd.DataFrame) -> pd.DataFrame:
                          "last_price": t["ticker"].map(last).astype("float64").values})
 
 
+# DEC-28: 재사용 종목코드 2건의 "옛 회사" 상장폐지 보완 데이터. 마지막 거래일·원종가는 수집한 prices 원본에서
+# 직접 확인했고(tickers/delisted는 '가장 최근' 회사 기준이라 옛 회사 쪽은 담지 못한다), 날짜·사유는 뉴스로 교차 확인했다.
+# 101970(우양에이치씨): 2015-03-17 최종부도 상장폐지, 정리매매 2015-03-06~16
+#   https://edaily.co.kr/News/Read?mediaCodeNo=257&newsId=03827766609300040 (2015-03-04)
+# 036220(인포피아): 2016-05-06 상장폐지, 정리매매 2016-04-26~05-04
+#   https://edaily.co.kr/News/Read?mediaCodeNo=257&newsId=03181606612618744
+REUSED_TICKER_OLD_LAST_DAY = {"101970": "2015-03-16", "036220": "2016-05-04"}
+
+
+def build_delisted_reused(p: pd.DataFrame, days: list) -> pd.DataFrame:
+    """delisted.parquet(종목당 한 행) 스키마는 그대로 두고(상장 구간 형식 변경은 v2, D와 결정), 공용 스키마
+    밖 별도 파일로 둔다. delist_date는 옛 회사 마지막 거래일의 다음 거래일(delisted.parquet와 같은 정의),
+    last_price는 그날 원종가다. 기준일이 이번 빌드 구간(days) 밖이면(부분 기간 재구축 등) 그 종목은 건너뛴다 —
+    구간 안인데 시세가 없으면 그게 진짜 이상이므로 예외를 낸다."""
+    pos = {d: i for i, d in enumerate(days)}
+    out = []
+    for ticker, last_day in REUSED_TICKER_OLD_LAST_DAY.items():
+        last_day = pd.Timestamp(last_day)
+        if last_day not in pos:
+            continue
+        row = p[(p["ticker"] == ticker) & (p["date"] == last_day)]
+        if row.empty:
+            raise RuntimeError(f"{ticker}: 보완 데이터 기준일 {last_day:%Y-%m-%d}이 거래일인데 시세가 없다")
+        out.append((ticker, days[pos[last_day] + 1], float(row["close_raw"].iloc[0])))
+    return pd.DataFrame(out, columns=["ticker", "delist_date", "last_price"])
+
+
 def build_all(raw: Path, start: date, end: date, first_signal_year: int = 2011) -> dict:
     weekdays_all = weekdays(start, end)
     require_complete_files(raw, CALENDAR_SERVICE, weekdays_all)
@@ -169,7 +196,9 @@ def build_all(raw: Path, start: date, end: date, first_signal_year: int = 2011) 
     return {"prices": prices, "index": idx[idx["index_code"] == "KOSPI200"].reset_index(drop=True),
             "index_kosdaq": idx[idx["index_code"] == "KOSDAQ150"].reset_index(drop=True),   # 공용 스키마 밖 (DEC-27)
             "tickers": tickers.drop(columns="security_type_source"), "status": status,
-            "universe": universe, "delisted": build_delisted(tickers, p), "_events": adjust_events(p), "_days": days}
+            "universe": universe, "delisted": build_delisted(tickers, p),
+            "delisted_reused": build_delisted_reused(p, days),   # 공용 스키마 밖 (DEC-28)
+            "_events": adjust_events(p), "_days": days}
 
 
 def main(argv=None):
@@ -193,6 +222,9 @@ def main(argv=None):
     kosdaq_path = Path(paths["index"]).parent / "index_kosdaq.parquet"   # 공용 스키마 밖 (DEC-27), 검증 없이 직접 쓴다
     out["index_kosdaq"].to_parquet(kosdaq_path, index=False)
     paths["index_kosdaq"] = str(kosdaq_path)
+    reused_path = Path(paths["delisted"]).parent / "delisted_reused.parquet"   # 공용 스키마 밖 (DEC-28)
+    out["delisted_reused"].to_parquet(reused_path, index=False)
+    paths["delisted_reused"] = str(reused_path)
     print(json.dumps({"io_available": io_shim.IO_AVAILABLE, "rows": {k: len(out[k]) for k in paths}, "paths": paths,
                       "trading_days": len(out["_days"]), "not_built": ["investor_flows", "sector"],
                       "unknown_security_type": int((out["tickers"]["security_type"] == "unknown").sum()),
