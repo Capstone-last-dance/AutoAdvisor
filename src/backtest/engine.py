@@ -86,11 +86,19 @@ class ExecutionEngine:
             if not names.issubset(self.col_index):
                 raise ValueError("이벤트·쿨다운에 알 수 없는 종목코드가 있습니다")
         self.delistings = dict(delistings or {})
+        self.relisting_index: dict[str, int] = {}
         for ticker, (day, price) in self.delistings.items():
             if ticker not in self.col_index or day not in self.day_index:
                 raise ValueError("상장폐지 종목과 날짜는 입력 시계열에 있어야 합니다")
             if price is not None and (not isfinite(price) or price < 0):
                 raise ValueError("정리매매 최종 가격은 0 이상이어야 합니다")
+            # v1 종목코드 재사용: 폐지 뒤 가격 공백 다음에 나타나는 첫 가격은
+            # 새 회사의 상장 구간이다. 구회사 폐지 제한을 그 날부터 해제한다.
+            after = self.prices[self.day_index[day] + 1:, self.col_index[ticker]]
+            if ticker in {"101970", "036220"} and len(after) and np.isnan(after[0]):
+                resumed = np.flatnonzero(np.isfinite(after))
+                if len(resumed):
+                    self.relisting_index[ticker] = self.day_index[day] + 1 + int(resumed[0])
         self.rates = rates
         self.limit_move_abs_return = limit_move_abs_return
         self.record_ledger = record_ledger
@@ -106,6 +114,12 @@ class ExecutionEngine:
         for ticker in holdings:
             column = self.col_index[ticker]
             price = float(self.prices[day_index, column])
+            if self.halted[day_index, column]:
+                # DEC-25: 정지일 원종가가 변해도 마지막 거래일 수정종가로 평가.
+                previous = day_index - 1
+                while previous >= 0 and self.halted[previous, column]:
+                    previous -= 1
+                price = float(self.prices[previous, column]) if previous >= 0 else float("nan")
             if not isfinite(price) or price <= 0:
                 raise ValueError(f"{self.days[day_index]} {ticker} 평가 가격이 없습니다")
             if not self.halted_known[day_index, column]:
@@ -198,6 +212,7 @@ class ExecutionEngine:
             delisted_today = {
                 ticker for ticker in set(holdings) | set(day_targets)
                 if ticker in self.delistings and self.day_index[self.delistings[ticker][0]] <= i
+                and i < self.relisting_index.get(ticker, len(self.days))
             }
             for ticker in pending & px.keys():
                 day_targets[ticker] = 0.0
@@ -207,7 +222,11 @@ class ExecutionEngine:
             forbidden = self.cooldowns.get(day, frozenset()) | frozenset(pending) | frozenset(delisted_today)
             self._buy_rate = self.rates.stress_multiplier * (self.rates.commission_per_side + self.rates.slippage_per_side)
             self._sell_rate = self.rates.stress_multiplier * (self.rates.sell_tax + self.rates.commission_per_side + self.rates.slippage_per_side)
-            previous = {ticker: float(self.prices[i - 1, self.col_index[ticker]]) for ticker in px}
+            previous = {
+                ticker: (px[ticker] if self.relisting_index.get(ticker) == i
+                         else self._prices(i - 1, {ticker: 0.0})[ticker])
+                for ticker in px
+            }
             requested = {ticker: day_targets.get(ticker, 0.0) - holdings.get(ticker, 0.0) * px[ticker] / nav_before
                          for ticker in set(holdings) | set(day_targets)}
             self._blocked_sells = {ticker for ticker, difference in requested.items() if difference < 0 and blocked_reason(

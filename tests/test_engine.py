@@ -220,3 +220,28 @@ def test_limit_boundary_uses_same_rule_for_cash_and_execution():
     assert engine.ledger[0]["rejected"]["000001"] == "near_upper_limit"
     assert engine.ledger[0]["scale"] == pytest.approx(1)
     assert result.state.holdings["000002"] * 100 == pytest.approx(0.5)
+
+
+def test_reused_ticker_can_be_bought_after_new_listing():
+    days = pd.bdate_range("2020-01-01", periods=15)
+    d = [x.strftime("%Y-%m-%d") for x in days]
+    closes = pd.DataFrame({"101970": [100.0] * 4 + [50.0] + [float("nan")] * 5 + [80.0] * 5}, index=days)
+    engine = ExecutionEngine(closes, pd.Series(100.0, index=days), CostRates(0, 0, 0),
+                             delistings={"101970": (d[4], 50.0)}, record_ledger=True)
+    old = engine.run_period(engine.initial_state(), {"101970": 0.3}, d[0], d[3])
+    fresh = engine.run_period(old.state, {}, d[3], d[9])
+    assert fresh.state.holdings == {}
+    new = engine.run_period(fresh.state, {"101970": 0.3}, d[9], d[12])
+    assert new.state.holdings["101970"] == pytest.approx(0.3 * fresh.nav_end / 80.0)
+    assert "101970" not in next(row for row in engine.ledger if row["date"] == d[10])["rejected"]
+
+
+def test_halted_valuation_uses_last_traded_close_even_if_source_close_changes():
+    days = pd.bdate_range("2020-01-01", periods=5)
+    closes = pd.DataFrame({"005930": [100.0, 100.0, 110.0, 120.0, 120.0]}, index=days)
+    halted = pd.DataFrame({"005930": [False, False, True, False, False]}, index=days)
+    engine = ExecutionEngine(closes, pd.Series(100.0, index=days), CostRates(0, 0, 0),
+                             halted=halted, record_ledger=True)
+    d = [x.strftime("%Y-%m-%d") for x in days]
+    engine.run_period(engine.initial_state(), {"005930": 0.5}, d[0], d[3])
+    assert next(row for row in engine.ledger if row["date"] == d[2])["nav_after"] == pytest.approx(1.0)
