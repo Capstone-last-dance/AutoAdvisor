@@ -44,9 +44,9 @@
 | B-08 | B 조윤상 | 12/7 | 대기 | | |
 | B-09 | B 조윤상 | 12/7 | 대기 | | |
 | B-10 | B 조윤상 | 12/14 | 대기 | | |
-| C-01 | C 손석범 | 11/1 | 대기 | | |
-| C-02 | C 손석범 | 11/6 | 진행 중 | [초안 PR #8](https://github.com/Capstone-last-dance/AutoAdvisor/pull/8) | 라벨·홀드아웃 가드 구현. PR 헤드에서 관련 합성 테스트 62개와 하위 테스트 51개 통과 재현. 거래량 0 근사의 한 신호일은 C의 진단 실행. A 일별 상태와 DEC-09 purge 합의 남음 |
-| C-03 | C 손석범 | 11/6 | 진행 중 | [초안 PR #8](https://github.com/Capstone-last-dance/AutoAdvisor/pull/8) | 공통 체결·비용·NAV 엔진과 평가지표 선행 구현. 현금 부족 처리 결정, 실제 상태·가격 공백 규칙 및 B-05·D 연동 검증 남음 |
+| C-01 | C 손석범 | 11/1 | 완료 | [PR #3](https://github.com/Capstone-last-dance/AutoAdvisor/pull/3); [설계](design_C.md) | 4.6·6.6절 라벨·평가·체결 설계 작성 및 병합. 후속 PM 결정은 PR #8에 반영 |
+| C-02 | C 손석범 | 11/6 | 진행 중 | [초안 PR #8](https://github.com/Capstone-last-dance/AutoAdvisor/pull/8) | 라벨·홀드아웃 가드 구현. C·공용 I/O 관련 테스트 76개와 하위 테스트 49개 통과. A의 일별 status 및 DEC-09 신호일 purge를 반영했고 DEC-28 재사용 코드 구간을 회귀 검증. A의 구회사 폐지 보완 데이터와 실제 라벨 전수 검증이 남음 |
+| C-03 | C 손석범 | 11/6 | 진행 중 | [초안 PR #8](https://github.com/Capstone-last-dance/AutoAdvisor/pull/8) | 공통 체결·비용·NAV 엔진과 평가지표 선행 구현. DEC-18·25~28 체결 규칙과 재상장 처리를 반영. B-03과 합친 표적 테스트 32개 통과. A 보완 데이터의 실제 실행, B-05·D 연결 검증과 B 재리뷰가 남음 |
 | C-04 | C 손석범 | 11/16 | 진행 중 | [초안 PR #8](https://github.com/Capstone-last-dance/AutoAdvisor/pull/8) | G0 검사 선행 구현. 개인 행동 프록시·forward test 사후 성과와 실제 평가 검증 남음 |
 | C-05 | C 손석범 | 11/23 | 대기 | | |
 | C-06 | C 손석범 | 12/4 | 대기 | | |
