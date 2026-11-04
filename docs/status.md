@@ -34,19 +34,19 @@
 | A-09 | A 김윤하 | 11/30 | 대기 | | |
 | A-10 | A 김윤하 | 12/7 | 대기 | | |
 | A-11 | A 김윤하 | 기한 없음 | 대기 | | |
-| B-01 | B 조윤상 | 11/1 | 대기 | | |
-| B-02 | B 조윤상 | 11/8 | 대기 | | |
-| B-03 | B 조윤상 | 11/13 | 대기 | | |
-| B-04 | B 조윤상 | 11/16 | 대기 | | |
-| B-05 | B 조윤상 | 11/16 | 대기 | | |
+| B-01 | B 조윤상 | 11/1 | 완료 | docs/design_B.md; src/portfolio/; [PR #4](https://github.com/Capstone-last-dance/AutoAdvisor/pull/4) | M4·M8 설계와 PPO 골격. 합성 입력으로 학습 루프 테스트 통과, A 리뷰 후 병합 |
+| B-02 | B 조윤상 | 11/8 | 완료 | src/portfolio/risk_layer.py; src/portfolio/vol_target_report.py; reports/20261103_B_vol_target/; [PR #11](https://github.com/Capstone-last-dance/AutoAdvisor/pull/11) | vol_target_annual = 0.157263 계산·부록 1 기입, 2011~2015 데이터만 사용 테스트 통과. compute_regime_mc 공개, DEC-19 반영 |
+| B-03 | B 조윤상 | 11/13 | 진행 중 | src/portfolio/buffer_rule.py; tests/portfolio/test_buffer_rule.py | 단계 1~5 단위 테스트 통과. PR #8 병합 뒤 main에서 C의 M5 위 합성 시장 실행 테스트 통과(건너뛰지 않음). A 코드 리뷰 승인 남음. 실제 신호(A-04) 실행은 B-05에서 확인 |
+| B-04 | B 조윤상 | 11/16 | 완료 | src/portfolio/risk_layer.py; src/portfolio/market_state_report.py; tests/portfolio/test_risk_layer.py; tests/portfolio/test_market_state_report.py; reports/20261104_B_m8_states/; [PR #13](https://github.com/Capstone-last-dance/AutoAdvisor/pull/13) | 불변식·경계 사례 테스트 통과, 2011~2025년 E_t·regime_mc 그림(prereg.yaml 초안 기준). A 승인. 11/9 공식 사전등록에서 쓰는 키가 바뀌면 새 run_id로 다시 만듦 |
+| B-05 | B 조윤상 | 11/16 | 대기 | docs/design_B.md 5.1절 | 어댑터 규칙에 DEC-25·26 반영. PR #8(c82fa1b)에서 DEC-25 재개일 처리·정지일 평가와 DEC-28 재사용 코드(옛 회사 청산, 새 회사 매수)를 합성 시장으로 확인. 실제 데이터 확인은 A 보완 데이터와 PR #8 병합 뒤 |
 | B-06 | B 조윤상 | 11/23 | 대기 | | |
 | B-07 | B 조윤상 | 11/30 | 대기 | | |
 | B-08 | B 조윤상 | 12/7 | 대기 | | |
 | B-09 | B 조윤상 | 12/7 | 대기 | | |
 | B-10 | B 조윤상 | 12/14 | 대기 | | |
-| C-01 | C 손석범 | 11/1 | 대기 | | |
-| C-02 | C 손석범 | 11/6 | 진행 중 | [초안 PR #8](https://github.com/Capstone-last-dance/AutoAdvisor/pull/8) | 라벨·홀드아웃 가드 구현. PR 헤드에서 관련 합성 테스트 62개와 하위 테스트 51개 통과 재현. 거래량 0 근사의 한 신호일은 C의 진단 실행. A 일별 상태와 DEC-09 purge 합의 남음 |
-| C-03 | C 손석범 | 11/6 | 진행 중 | [초안 PR #8](https://github.com/Capstone-last-dance/AutoAdvisor/pull/8) | 공통 체결·비용·NAV 엔진과 평가지표 선행 구현. 현금 부족 처리 결정, 실제 상태·가격 공백 규칙 및 B-05·D 연동 검증 남음 |
+| C-01 | C 손석범 | 11/1 | 완료 | [PR #3](https://github.com/Capstone-last-dance/AutoAdvisor/pull/3); [설계](design_C.md) | 4.6·6.6절 라벨·평가·체결 설계 작성 및 병합. 후속 PM 결정은 PR #8에 반영 |
+| C-02 | C 손석범 | 11/6 | 진행 중 | [초안 PR #8](https://github.com/Capstone-last-dance/AutoAdvisor/pull/8) | 라벨·홀드아웃 가드 구현. C·공용 I/O 관련 테스트 76개와 하위 테스트 49개 통과. A의 일별 status 및 DEC-09 신호일 purge를 반영했고 DEC-28 재사용 코드 구간을 회귀 검증. A의 구회사 폐지 보완 데이터와 실제 라벨 전수 검증이 남음 |
+| C-03 | C 손석범 | 11/6 | 진행 중 | [초안 PR #8](https://github.com/Capstone-last-dance/AutoAdvisor/pull/8) | 공통 체결·비용·NAV 엔진과 평가지표 선행 구현. DEC-18·25~28 체결 규칙과 재상장 처리를 반영. B-03과 합친 표적 테스트 32개 통과. A 보완 데이터의 실제 실행, B-05·D 연결 검증과 B 재리뷰가 남음 |
 | C-04 | C 손석범 | 11/16 | 진행 중 | [초안 PR #8](https://github.com/Capstone-last-dance/AutoAdvisor/pull/8) | G0 검사 선행 구현. 개인 행동 프록시·forward test 사후 성과와 실제 평가 검증 남음 |
 | C-05 | C 손석범 | 11/23 | 대기 | | |
 | C-06 | C 손석범 | 12/4 | 대기 | | |

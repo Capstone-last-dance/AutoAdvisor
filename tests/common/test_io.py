@@ -246,6 +246,16 @@ class ValidateRejectsTest(unittest.TestCase):
         df = sample("positions"); df["constructor"] = ["buffer", "rl", "ppo"]
         self.assertRejects("positions", df)
 
+    def test_dec24_status(self):
+        df = sample("status"); df["is_admin"] = [False, True]
+        io.validate("status", df)                                                   # 결측 없으면 bool도 허용
+        df = sample("status"); df["is_admin"] = pd.array([None, None], dtype="boolean")
+        io.validate("status", df)                                                   # v2 전까지 전부 결측 허용
+        df = sample("status"); df["in_kospi200"] = [True, False]
+        self.assertRejects("status", df)                                            # 구성종목 열은 뺐다
+        df = sample("status"); df["is_halted"] = pd.array([False, None], dtype="boolean")
+        self.assertRejects("status", df)                                            # is_halted는 결측 불가
+
     def test_nulls(self):
         df = sample("signals"); df["crash_prob"] = [0.1, np.nan]
         self.assertRejects("signals", df)

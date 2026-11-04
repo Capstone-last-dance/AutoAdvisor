@@ -1,11 +1,59 @@
+# Local credentials (keep the shared template)
 .env
+.env.*
+!.env.example
 .streamlit/secrets.toml
-data/raw/*
-data/processed/*
-!data/raw/.gitkeep
+
+# Python environments and generated caches
 .venv/
 venv/
 env/
 __pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Personal agent instructions and settings
+AGENTS.md
+AGENTS.local.md
+AGENTS.override.md
+CLAUDE.md
+CLAUDE.local.md
+.agents/
+.claude/
+.codex/
+
+# Personal PM planning, handoff and implementation notes
+/docs/HANDOFF.md
+/docs/PLAN.md
+/docs/WORKFLOW.md
+/docs/WORK_LOG.md
+/docs/PM*_implementation.md
+/docs/design_PM*.md
+
+# Generated collection data and runtime logs (keep repository placeholders)
+/data/raw/*
+!/data/raw/.gitkeep
+/data/interim/*
+!/data/interim/.gitkeep
+/data/processed/*
+!/data/processed/.gitkeep
+/logs/*
+!/logs/.gitkeep
 _stub/*
 !_stub/.gitkeep
+
+# Personal PM investigations, collection runs, reviews and execution records
+# Keep team experiment reports and reports/final eligible for Git.
+/reports/*_PM03_sources/
+/reports/*_PM17_sources/
+/reports/*_PM_D01_review/
+/reports/*_PM_disclosures_*/
+/reports/*_PM_news_sample/
+/reports/*_PM_news_naver_*/
+/reports/*_PM_git_*/
+test.ipynb
+.ipynb_checkpoints/
