@@ -13,7 +13,7 @@
 
 ## 실제 산출물 연결 상태
 
-1. A의 `prices`, `index`, `universe`, `status`, `delisted` 파일과 KRX 거래일 목록. 전달받은 `processed_20261103_v2`는 실제 가격을 포함하지만 `status`가 877개 신호일만 담고 있어 DEC-24의 일별 상태 계약에 맞지 않는다. 새 회사에 재사용된 `101970`·`036220`의 상장일 수가 이전 회사부터 이어지고 구회사 폐지가 `delisted`에 없다. [A PR #1 C 리뷰](https://github.com/Capstone-last-dance/AutoAdvisor/pull/1)에서 재생성과 시점별 분리를 요청했다. 현재 자료를 C의 최종 라벨·NAV 입력으로 사용하지 않는다.
+1. A의 `A02_processed` 최종 전달본에서 `prices`와 일별 `status`가 각각 9,331,430행이고 `(date, ticker)`가 전 행 일치함을 확인했다. `is_halted`는 거래량 0 판정과 전 행 일치하고, `101970`·`036220`의 새 회사 첫날 `listed_days`는 1로 수정됐다. 다만 구회사 폐지 이력은 `delisted`에 없으므로 [이슈 #5](https://github.com/Capstone-last-dance/AutoAdvisor/issues/5)의 처리 결정 전에는 해당 구간을 포함한 C 최종 NAV 판정을 하지 않는다.
 2. `configs/prereg.yaml`의 공식 확정값. 현재 개발 초안의 날짜·기간·비용을 실험 결과 확정값으로 간주하지 않는다.
 3. 현금 부족 시 매도 우선·매수 동일 배율 축소는 DEC-18로 확정됐다. 엔진의 `execute_orders`는 수량 기준 순수 함수이며 현금 초과를 오류로 처리한다.
 4. 거래 재개 지연 라벨의 실제 종료일을 반영한 신호일 전체 purge는 DEC-09 (3) 변경으로 확정됐다. A·B·C는 공용 함수가 돌려준 같은 신호일 집합을 사용해야 한다.
@@ -23,9 +23,9 @@
 
 ## A·D 공용 스키마 확인
 
-- v2 `index`는 KOSPI200·KOSDAQ150을 각각 4,141일 포함한다. 현재 main의 `src/common/io.py`는 `index_code="KOSPI200"`만 허용해 `io.validate("index", ...)`가 실패한다. C의 초과수익·벤치마크는 KOSPI200 행만 쓴다.
-- v2 `status`는 이전 6열·주간 자료이며 `is_admin`과 두 지수 편입 열이 전부 결측이다. 현재 공용 검증에서 실패한다. DEC-24의 새 계약은 모든 거래일의 4열(`date,ticker,is_admin,is_halted`)이며, D의 nullable `is_admin` 스키마 반영과 A의 일별 재생성 결과를 함께 검증해야 한다.
-- `tickers`, `universe`, `delisted`는 현행 공용 검증을 통과했다. `universe`의 관리종목 제외 단계는 DEC-24에 따라 v1 스텁이며 성과 판정에 사용할 때 그 한계를 기록한다.
+- 최종 전달본의 `index.parquet`(KOSPI200)과 `index_kosdaq.parquet`(KOSDAQ150)은 각각 4,141거래일이다. C의 초과수익·벤치마크는 KOSPI200만 쓴다. A PR #1의 공용 I/O 수정본에서는 두 코드가 허용되지만 현재 main의 I/O는 KOSPI200만 허용한다.
+- 최종 `status`는 DEC-24의 4열(`date,ticker,is_admin,is_halted`)·일별 자료이며 `is_admin`은 전 행 결측이다. A PR #1의 nullable 스키마 변경이 병합되어야 공용 I/O 검증·저장이 가능하다. `is_halted`의 가격 행 정합성과 거래량 0 판정은 C가 전수 확인했다.
+- `index`(KOSPI200), `tickers`, `universe`, `delisted`, `sector`는 현행 공용 검증을 통과했다. `sector`는 3,697종목 중 1,043종목이 '미분류'다. `universe`의 관리종목 제외 단계는 DEC-24에 따라 v1 스텁이며 성과 판정에 사용할 때 그 한계를 기록한다.
 
 ## B PR #8 리뷰 반영
 
