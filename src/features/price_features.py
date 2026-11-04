@@ -9,7 +9,7 @@ import pandas as pd
 ANN = np.sqrt(252)
 
 RANK_FEATURES = ["mom_12_1", "mom_12_7", "rev_1m", "rev_1w", "high52_prox", "vol_20", "vol_60", "max_ret_20",
-                 "turnover_spike", "retail_net_20", "foreign_net_20", "inst_net_20", "log_mcap"]
+                 "turnover_spike", "log_mcap"]
 RAW_FEATURES = ["penny_flag", "ss_allowed"]
 MARKET_FEATURES = ["mkt_vol_20", "mkt_ret_20", "regime_mc", "ss_regime"]
 
@@ -23,8 +23,11 @@ def vol_60(close):
     return logret.rolling(60, min_periods=60).std(ddof=1) * ANN
 
 
-def compute_stock_features(close, close_raw, value, mcap, retail, foreign, inst) -> dict:
-    """각 인자: 인덱스 거래일, 열 ticker의 DataFrame. 반환: 피처 이름 -> 같은 모양의 DataFrame (순위 변환 전)."""
+def compute_stock_features(close, close_raw, value, mcap) -> dict:
+    """각 인자: 인덱스 거래일, 열 ticker의 DataFrame. 반환: 피처 이름 -> 같은 모양의 DataFrame (순위 변환 전).
+
+    투자자별 순매수 피처(retail_net_20, foreign_net_20, inst_net_20)는 DEC-22로 뺐다 — 원천(investor_flows)이
+    없어서 6.2절 피처 표에서 제외가 확정됐다."""
     ret = close.pct_change(fill_method=None)
     logret = np.log(close / close.shift(1))
     turn = value / mcap.where(mcap > 0)
@@ -38,10 +41,6 @@ def compute_stock_features(close, close_raw, value, mcap, retail, foreign, inst)
         "vol_60": vol_60(close),
         "max_ret_20": ret.rolling(20, min_periods=20).max(),
         "turnover_spike": turn.rolling(5, min_periods=5).mean() / turn.shift(5).rolling(60, min_periods=60).mean(),
-        # 투자자별 순매수는 t−1일까지: 창 t−20~t−1, 분모는 MC(t−1) (4.2절)
-        "retail_net_20": retail.shift(1).rolling(20, min_periods=20).sum() / mcap.shift(1),
-        "foreign_net_20": foreign.shift(1).rolling(20, min_periods=20).sum() / mcap.shift(1),
-        "inst_net_20": inst.shift(1).rolling(20, min_periods=20).sum() / mcap.shift(1),
         "log_mcap": np.log(mcap.where(mcap > 0)),
         "penny_flag": (close_raw < 1000).astype("float64").where(close_raw.notna()),
     }

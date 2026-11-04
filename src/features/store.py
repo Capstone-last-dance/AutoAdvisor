@@ -20,7 +20,7 @@ def stub_regime_mc(index: pd.DatetimeIndex) -> pd.Series:
     return pd.Series(0, index=index, dtype="int8")
 
 
-def compute_feature_matrix(close, close_raw, value, mcap, retail, foreign, inst, bm: pd.Series,
+def compute_feature_matrix(close, close_raw, value, mcap, bm: pd.Series,
                            regime_mc: pd.Series, ss_regime: pd.Series, universe: dict,
                            in_kospi200: pd.DataFrame | None = None, in_kosdaq150: pd.DataFrame | None = None,
                            stub_membership: bool = False) -> pd.DataFrame:
@@ -30,7 +30,7 @@ def compute_feature_matrix(close, close_raw, value, mcap, retail, foreign, inst,
     ss_regime=1 구간에서도 예외 없이 돌아간다. 구성종목 원천 자체가 없을 때(2026-11-04 기준 Open API 수집 목록에
     없음, PM 결정 필요)의 파이프라인 점검용 스텁이다 — 실제 ss_allowed 값이 아니다. 이 값으로 만든 피처는
     _stub/에만 쓴다 (stub_regime_mc와 같은 용도)."""
-    stock = compute_stock_features(close, close_raw, value, mcap, retail, foreign, inst)
+    stock = compute_stock_features(close, close_raw, value, mcap)
     market = compute_market_features(bm, regime_mc, ss_regime)
     fill = False if stub_membership else pd.NA
     out = []

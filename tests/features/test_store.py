@@ -8,13 +8,13 @@ from tests.features.test_price_features import _synth
 
 
 def _inputs(n_days=520, n_tk=12):
-    close, raw, value, mcap, r, f, i = _synth(n_days, n_tk)
+    close, raw, value, mcap = _synth(n_days, n_tk)
     bm = close.mean(axis=1)
     idx = close.index
     ss = pd.Series(0, index=idx)
     sig = [idx[k] for k in (300, 340, 400, 460)]
     uni = {t: list(close.columns[:8]) for t in sig}
-    return (close, raw, value, mcap, r, f, i), bm, ss, uni
+    return (close, raw, value, mcap), bm, ss, uni
 
 
 def _run(args, bm, ss, uni, **kw):

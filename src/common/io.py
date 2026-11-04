@@ -193,7 +193,7 @@ SCHEMAS: dict[str, dict[str, Col]] = {
 # 6.2절 피처. 순위 변환 피처만 {피처}_na 열을 가진다.
 RANK_FEATURES = (
     "mom_12_1", "mom_12_7", "rev_1m", "rev_1w", "high52_prox", "vol_20", "vol_60",
-    "max_ret_20", "turnover_spike", "retail_net_20", "foreign_net_20", "inst_net_20",
+    "max_ret_20", "turnover_spike",
     "log_mcap", "news_cnt_spike", "news_sent_5",
 )
 RAW_FEATURES = (
