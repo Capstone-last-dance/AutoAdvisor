@@ -2,11 +2,12 @@
 
 사용: python3 -m src.data.build_openapi --snapshot 2026-11-02 --start 2025-09-01 --end 2026-10-30 [--first-signal-year 2011]
 
-만드는 것: prices, index(코스피200), tickers, status(일별, is_halted 포함), universe(스텁), delisted.
+만드는 것: prices, index(코스피200), index_kosdaq(코스닥150, 공용 스키마 밖), tickers, status(일별, is_halted 포함), universe(스텁), delisted.
 만들지 못하는 것 (Open API에 원천이 없다, 보고서의 [결정 필요]): investor_flows(투자자별 순매수), sector(업종; 코스피 종목의 SECT_TP_NM이 비어 있다),
 status.is_admin(관리종목, Q-06). 이 값은 결측으로 두고 그 값이 필요한 universe는 스텁으로만 쓴다 (R-08).
 in_kospi200·in_kosdaq150(구성종목)은 쓰는 곳이 없어 status 스키마에서 뺐다 (PM 2026-11-03).
-코스닥150 지수도 쓰는 곳이 없어 index에서 뺐다. io.py는 그대로 두고 A 쪽만 KOSPI200으로 되돌렸다 (PM 2026-11-04).
+공용 index.parquet에는 KOSPI200만 넣는다. 코스닥150은 공용 스키마 밖의 index_kosdaq.parquet로 따로 둔다.
+소비처가 생기면 PM이 기록한 뒤 D가 공용 스키마에 추가한다 (DEC-27).
 
 가정 (명세에 정의가 없어 여기서 정했다):
 - 거래일 = 지수 서비스 응답에서 `코스피 200` 종가가 있는 날 (Q-14).
@@ -33,7 +34,7 @@ from src.data.security_type import classify_frame
 PRICE_SERVICES = (("stk_bydd_trd", "KOSPI"), ("ksq_bydd_trd", "KOSDAQ"))
 BASE_SERVICES = ("stk_isu_base_info", "ksq_isu_base_info")
 CALENDAR_SERVICE, INDEX_NAME = "kospi_dd_trd", "코스피 200"
-INDEX_SERIES = ((CALENDAR_SERVICE, INDEX_NAME, "KOSPI200"),)   # 코스닥150은 쓰는 곳이 없어 뺐다 (PM 2026-11-04)
+INDEX_SERIES = ((CALENDAR_SERVICE, INDEX_NAME, "KOSPI200"), ("kosdaq_dd_trd", "코스닥 150", "KOSDAQ150"))
 TICKER_RE = r"[0-9A-Z]{6}"
 MARKET_MAP = {"KOSDAQ GLOBAL": "KOSDAQ"}
 NUMERIC = {"TDD_CLSPRC": "close_raw", "FLUC_RT": "ret_pct", "ACC_TRDVOL": "volume", "ACC_TRDVAL": "value", "MKTCAP": "mcap"}
@@ -156,6 +157,7 @@ def build_all(raw: Path, start: date, end: date, first_signal_year: int = 2011) 
         require_complete_files(raw, service, days)
     for service in BASE_SERVICES:
         require_complete_files(raw, service, sig)
+    require_complete_files(raw, "kosdaq_dd_trd", days)
 
     p = read_prices(raw, days)
     base = read_base_latest(raw, sig)
@@ -163,7 +165,10 @@ def build_all(raw: Path, start: date, end: date, first_signal_year: int = 2011) 
     prices = build_prices(p, tickers, days)
     status = build_status(prices)
     universe = build_universe(prices, tickers, status, sig, first_signal_year, provisional=True)
-    return {"prices": prices, "index": build_index(raw, days), "tickers": tickers.drop(columns="security_type_source"), "status": status,
+    idx = build_index(raw, days)
+    return {"prices": prices, "index": idx[idx["index_code"] == "KOSPI200"].reset_index(drop=True),
+            "index_kosdaq": idx[idx["index_code"] == "KOSDAQ150"].reset_index(drop=True),   # 공용 스키마 밖 (DEC-27)
+            "tickers": tickers.drop(columns="security_type_source"), "status": status,
             "universe": universe, "delisted": build_delisted(tickers, p), "_events": adjust_events(p), "_days": days}
 
 
@@ -185,6 +190,9 @@ def main(argv=None):
     for name in ("prices", "index", "tickers", "status", "delisted"):
         paths[name] = str(io_shim.write(name, out[name]))
     paths["universe"] = str(io_shim.write("universe", out["universe"], force_stub=True))   # is_admin 결측(Q-06)이라 스텁
+    kosdaq_path = Path(paths["index"]).parent / "index_kosdaq.parquet"   # 공용 스키마 밖 (DEC-27), 검증 없이 직접 쓴다
+    out["index_kosdaq"].to_parquet(kosdaq_path, index=False)
+    paths["index_kosdaq"] = str(kosdaq_path)
     print(json.dumps({"io_available": io_shim.IO_AVAILABLE, "rows": {k: len(out[k]) for k in paths}, "paths": paths,
                       "trading_days": len(out["_days"]), "not_built": ["investor_flows", "sector"],
                       "unknown_security_type": int((out["tickers"]["security_type"] == "unknown").sum()),

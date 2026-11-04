@@ -65,11 +65,12 @@ def test_all_tables_pass_the_9_3_schema(built):
 
 
 def test_trading_days_exclude_holiday_and_index_is_kospi200_only(built):
-    """코스닥150은 쓰는 곳이 없어 index에서 뺐다 (PM 2026-11-04). io.py도 KOSPI200만 허용한다."""
+    """공용 index.parquet는 KOSPI200만, 코스닥150은 공용 스키마 밖 index_kosdaq로 따로 둔다 (DEC-27)."""
     assert HOLIDAY not in [d.date() for d in built["_days"]] and len(built["_days"]) == 9
-    idx = built["index"].set_index("index_code")["close"]
     assert set(built["index"]["index_code"]) == {"KOSPI200"}
-    assert idx.loc["KOSPI200"].eq(300.5).all()
+    assert built["index"].set_index("index_code")["close"].loc["KOSPI200"].eq(300.5).all()
+    assert set(built["index_kosdaq"]["index_code"]) == {"KOSDAQ150"}
+    assert built["index_kosdaq"].set_index("index_code")["close"].loc["KOSDAQ150"].eq(800.25).all()
 
 
 def test_split_is_adjusted_and_raw_close_is_kept(built):
