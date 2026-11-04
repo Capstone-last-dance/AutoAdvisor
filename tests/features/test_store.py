@@ -58,20 +58,23 @@ def test_no_lookahead_feature_matrix():
         pd.testing.assert_frame_equal(a, part.reset_index(drop=True))
 
 
-def test_raw_feature_missing_raises():
+def test_other_raw_feature_missing_still_raises():
+    """penny_flag(close_raw 기반) 같은 다른 원값 피처는 결측이면 여전히 예외를 낸다."""
     args, bm, ss, uni = _inputs()
-    ss = pd.Series(1, index=bm.index)                                    # regime 1인데 구성종목 정보가 없으면 ss_allowed 결측
+    close_raw = args[1].copy()
+    t0 = sorted(uni)[0]
+    close_raw.loc[t0, args[0].columns[0]] = float("nan")
     with pytest.raises(ValueError, match="결정 필요"):
-        _run(args, bm, ss, uni)
+        _run((args[0], close_raw, *args[2:]), bm, ss, uni)
 
 
-def test_stub_membership_avoids_raising_and_defaults_to_not_allowed():
-    """구성종목 원천이 없어도(stub_membership=True) ss_regime=1 구간에서 예외 없이 돌아간다.
-    결측 대신 '구성종목 아님'으로 두므로 ss_allowed=0 — 실제 값이 아니라 파이프라인 점검용 스텁이다."""
+def test_ss_allowed_missing_is_stored_not_raised():
+    """구성종목 원천이 없어 ss_regime=1 구간에서 ss_allowed가 결측이어도(PM 결정, 2026-11-04) 예외를 내지 않고
+    결측 그대로 저장한다. v1 모델 입력에서 빼는 건 gate.py NON_FEATURES가 한다."""
     args, bm, ss, uni = _inputs()
     ss = pd.Series(1, index=bm.index)
-    f = _run(args, bm, ss, uni, stub_membership=True)
-    assert (f["ss_allowed"] == 0).all()
+    f = _run(args, bm, ss, uni)
+    assert f["ss_allowed"].isna().all()
 
 
 def test_ss_allowed_with_constituents():

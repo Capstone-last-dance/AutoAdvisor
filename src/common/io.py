@@ -79,7 +79,7 @@ SCHEMAS: dict[str, dict[str, Col]] = {
     },
     "index": {
         "date": _c("date"),
-        "index_code": _c("str", allowed={"KOSPI200", "KOSDAQ150"}),
+        "index_code": _c("str", allowed={"KOSPI200"}),   # PM 결정(2026-11-04): 코스닥150은 io.py 안 바꾸고 A 배포 파일에서 뺀다
         "close": _c("float64"),
     },
     "tickers": {

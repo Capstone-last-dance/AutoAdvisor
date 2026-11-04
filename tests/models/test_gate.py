@@ -7,8 +7,15 @@ import pandas as pd
 import pytest
 from sklearn.metrics import roc_auc_score
 
-from src.models.gate import crash_labels, fit_fold, flag_top, save_fold, walk_forward_gate
+from src.models.gate import crash_labels, feature_columns, fit_fold, flag_top, save_fold, walk_forward_gate
 from src.models.splits import Fold
+
+
+def test_ss_allowed_excluded_from_v1_model_input():
+    """구성종목 원천 없음(이슈 #5), PM 결정(2026-11-04): ss_allowed는 v1 모델 입력에서 뺀다. ss_regime은 남긴다."""
+    df = pd.DataFrame({"date": [0], "ticker": ["a"], "mom_12_1": [0.5], "ss_allowed": [np.nan], "ss_regime": [1]})
+    cols = feature_columns(df)
+    assert "ss_allowed" not in cols and "ss_regime" in cols and "mom_12_1" in cols
 
 GRID = {"num_leaves": [7, 15], "learning_rate": [0.1], "min_child_samples": [20]}   # 테스트용 축소 그리드
 FIXED = {"n_estimators_max": 80, "early_stopping_rounds": 10}

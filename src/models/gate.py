@@ -31,7 +31,8 @@ FIXED = {"feature_fraction": 0.8, "bagging_fraction": 0.8, "bagging_freq": 1, "n
 FLAG_FRACTION = 0.10
 BASELINE_FEATURE = "vol_60"
 LAST_TRAINABLE_DATE = pd.Timestamp("2025-12-31")   # 4.7절. 이보다 늦은 신호일은 학습·튜닝에 쓰지 않는다 (C의 guards.py가 정식 차단)
-NON_FEATURES = {"date", "ticker", "y_crash", "y_rank", "h"}
+NON_FEATURES = {"date", "ticker", "y_crash", "y_rank", "h",
+                "ss_allowed"}  # 구성종목 원천 없음(이슈 #5), PM 결정(2026-11-04): v1 모델 입력에서 제외. ss_regime은 둔다
 
 
 @dataclass

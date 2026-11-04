@@ -2,10 +2,11 @@
 
 사용: python3 -m src.data.build_openapi --snapshot 2026-11-02 --start 2025-09-01 --end 2026-10-30 [--first-signal-year 2011]
 
-만드는 것: prices, index(코스피200·코스닥150), tickers, status(일별, is_halted 포함), universe(스텁), delisted.
+만드는 것: prices, index(코스피200), tickers, status(일별, is_halted 포함), universe(스텁), delisted.
 만들지 못하는 것 (Open API에 원천이 없다, 보고서의 [결정 필요]): investor_flows(투자자별 순매수), sector(업종; 코스피 종목의 SECT_TP_NM이 비어 있다),
 status.is_admin(관리종목, Q-06). 이 값은 결측으로 두고 그 값이 필요한 universe는 스텁으로만 쓴다 (R-08).
 in_kospi200·in_kosdaq150(구성종목)은 쓰는 곳이 없어 status 스키마에서 뺐다 (PM 2026-11-03).
+코스닥150 지수도 쓰는 곳이 없어 index에서 뺐다. io.py는 그대로 두고 A 쪽만 KOSPI200으로 되돌렸다 (PM 2026-11-04).
 
 가정 (명세에 정의가 없어 여기서 정했다):
 - 거래일 = 지수 서비스 응답에서 `코스피 200` 종가가 있는 날 (Q-14).
@@ -32,7 +33,7 @@ from src.data.security_type import classify_frame
 PRICE_SERVICES = (("stk_bydd_trd", "KOSPI"), ("ksq_bydd_trd", "KOSDAQ"))
 BASE_SERVICES = ("stk_isu_base_info", "ksq_isu_base_info")
 CALENDAR_SERVICE, INDEX_NAME = "kospi_dd_trd", "코스피 200"
-INDEX_SERIES = ((CALENDAR_SERVICE, INDEX_NAME, "KOSPI200"), ("kosdaq_dd_trd", "코스닥 150", "KOSDAQ150"))
+INDEX_SERIES = ((CALENDAR_SERVICE, INDEX_NAME, "KOSPI200"),)   # 코스닥150은 쓰는 곳이 없어 뺐다 (PM 2026-11-04)
 TICKER_RE = r"[0-9A-Z]{6}"
 MARKET_MAP = {"KOSDAQ GLOBAL": "KOSDAQ"}
 NUMERIC = {"TDD_CLSPRC": "close_raw", "FLUC_RT": "ret_pct", "ACC_TRDVOL": "volume", "ACC_TRDVAL": "value", "MKTCAP": "mcap"}
@@ -155,7 +156,6 @@ def build_all(raw: Path, start: date, end: date, first_signal_year: int = 2011) 
         require_complete_files(raw, service, days)
     for service in BASE_SERVICES:
         require_complete_files(raw, service, sig)
-    require_complete_files(raw, "kosdaq_dd_trd", days)
 
     p = read_prices(raw, days)
     base = read_base_latest(raw, sig)

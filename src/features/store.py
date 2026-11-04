@@ -3,9 +3,9 @@
 - 순위 변환·결측 처리는 U_t 안에서 한다 (price_features.rank_and_fill).
 - ss_regime(4.9절 날짜)은 부록 3 Q-11 검증 전이라 이 모듈에 값을 넣지 않고 입력으로 받는다 (R-08).
 - regime_mc는 B의 compute_regime_mc 결과를 입력으로 받는다 (R-17). 없으면 stub_regime_mc를 쓰고, 스텁이 쓰였음을 호출자가 알아야 한다.
-- 원값 피처(penny_flag, ss_allowed, 시장 공통)에 결측이 생기면 임의로 채우지 않고 예외를 낸다 (6.2절: [결정 필요]).
-  `compute_feature_matrix(..., stub_membership=True)`는 이 중 ss_allowed의 구성종목 결측만 스텁으로 우회한다
-  (stub_regime_mc와 같은 용도, _stub/ 전용). 기본값(False)은 예외를 그대로 낸다.
+- 원값 피처(penny_flag, 시장 공통)에 결측이 생기면 임의로 채우지 않고 예외를 낸다 (6.2절: [결정 필요]).
+- ss_allowed는 예외다: 구성종목 원천이 없다(이슈 #5). PM 결정(2026-11-04)에 따라 결측을 그대로 저장하고,
+  v1 모델(gate·ranker) 입력에서만 뺀다(`src/models/gate.py`의 `NON_FEATURES`). ss_regime은 그대로 둔다.
 """
 import pandas as pd
 
@@ -22,17 +22,13 @@ def stub_regime_mc(index: pd.DatetimeIndex) -> pd.Series:
 
 def compute_feature_matrix(close, close_raw, value, mcap, bm: pd.Series,
                            regime_mc: pd.Series, ss_regime: pd.Series, universe: dict,
-                           in_kospi200: pd.DataFrame | None = None, in_kosdaq150: pd.DataFrame | None = None,
-                           stub_membership: bool = False) -> pd.DataFrame:
+                           in_kospi200: pd.DataFrame | None = None, in_kosdaq150: pd.DataFrame | None = None) -> pd.DataFrame:
     """universe: {신호일 t: U_t 종목 리스트}. in_kospi200/in_kosdaq150: 신호일 × ticker nullable boolean (없으면 결측).
 
-    stub_membership=True이면 구성종목 정보가 없는 (t, ticker)를 결측 대신 '구성종목 아님'(False)으로 둬서
-    ss_regime=1 구간에서도 예외 없이 돌아간다. 구성종목 원천 자체가 없을 때(2026-11-04 기준 Open API 수집 목록에
-    없음, PM 결정 필요)의 파이프라인 점검용 스텁이다 — 실제 ss_allowed 값이 아니다. 이 값으로 만든 피처는
-    _stub/에만 쓴다 (stub_regime_mc와 같은 용도)."""
+    구성종목 정보가 없는 (t, ticker)는 ss_allowed가 결측이다(원천 자체가 없음, 이슈 #5). PM 결정(2026-11-04)에
+    따라 이 결측은 예외를 내지 않고 그대로 저장한다 — v1 모델 입력에서 빼는 건 호출자(gate.py NON_FEATURES)의 몫이다."""
     stock = compute_stock_features(close, close_raw, value, mcap)
     market = compute_market_features(bm, regime_mc, ss_regime)
-    fill = False if stub_membership else pd.NA
     out = []
     for t in sorted(universe):
         tk = list(universe[t])
@@ -41,8 +37,8 @@ def compute_feature_matrix(close, close_raw, value, mcap, bm: pd.Series,
         df = pd.DataFrame({name: stock[name].loc[t].reindex(tk) for name in RANK_FEATURES + STOCK_RAW})
         df = rank_and_fill(df)
         regime = market.loc[t, "ss_regime"]
-        k2 = in_kospi200.loc[t].reindex(tk) if in_kospi200 is not None and t in in_kospi200.index else pd.Series(fill, index=tk)
-        q1 = in_kosdaq150.loc[t].reindex(tk) if in_kosdaq150 is not None and t in in_kosdaq150.index else pd.Series(fill, index=tk)
+        k2 = in_kospi200.loc[t].reindex(tk) if in_kospi200 is not None and t in in_kospi200.index else pd.Series(pd.NA, index=tk)
+        q1 = in_kosdaq150.loc[t].reindex(tk) if in_kosdaq150 is not None and t in in_kosdaq150.index else pd.Series(pd.NA, index=tk)
         df["ss_allowed"] = [ss_allowed(regime, a, b) for a, b in zip(k2, q1)]
         for m in MARKET_FEATURES:
             df[m] = market.loc[t, m]
@@ -50,7 +46,7 @@ def compute_feature_matrix(close, close_raw, value, mcap, bm: pd.Series,
         df.insert(0, "date", t)
         out.append(df.reset_index(drop=True))
     res = pd.concat(out, ignore_index=True) if out else pd.DataFrame()
-    bad = {c: int(res[c].isna().sum()) for c in STOCK_RAW + ["ss_allowed"] + MARKET_FEATURES if len(res) and res[c].isna().any()}
+    bad = {c: int(res[c].isna().sum()) for c in STOCK_RAW + MARKET_FEATURES if len(res) and res[c].isna().any()}
     if bad:
         raise ValueError(f"[결정 필요] 원값 피처에 결측이 있다 (6.2절): {bad}")
     return res
