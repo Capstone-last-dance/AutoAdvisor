@@ -1,4 +1,0 @@
-0a668e61e037dfae202727c7d779c2f9e311d63d
-uncommitted: docs/design_B.md
-uncommitted: docs/status.md
-uncommitted: tests/portfolio/test_risk_layer.py
