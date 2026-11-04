@@ -177,6 +177,18 @@ def build_labels(
         row.ticker: (row.delist_date, row.last_price)
         for row in delisted_frame.itertuples()
     }
+    # DEC-28의 두 재사용 종목코드는 폐지 뒤 가격 공백 다음에 신회사가
+    # 상장한다. 구회사 폐지 기록을 신회사 라벨에 적용하지 않는다.
+    relisted_at = {}
+    for ticker in ("101970", "036220"):
+        exit_info = exits.get(ticker)
+        if exit_info is not None and exit_info[0] is not None:
+            later = price_frame.loc[
+                (price_frame["ticker"] == ticker)
+                & (price_frame["date"] >= exit_info[0]), "date"
+            ]
+            if not later.empty:
+                relisted_at[ticker] = later.min()
     members = {
         day: tuple(frame.loc[frame["in_universe"], "ticker"])
         for day, frame in universe_frame.groupby("date", sort=False)
@@ -199,6 +211,8 @@ def build_labels(
         entry_day = days[entry_position]
         for ticker in tickers:
             exit_info = exits.get(ticker)
+            if ticker in relisted_at and entry_day >= relisted_at[ticker]:
+                exit_info = None
             if exit_info and exit_info[0] is not None and exit_info[0] <= entry_day:
                 missing["delisted_before_entry"] += len(rules.horizons_days)
                 continue

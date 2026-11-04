@@ -168,3 +168,29 @@ def test_missing_nonhalted_end_price_is_not_silently_dropped():
     )
     with pytest.raises(ValueError, match="종료 수정종가"):
         build(data, prices=prices)
+
+
+@pytest.mark.parametrize("ticker", ["101970", "036220"])
+def test_reused_ticker_old_delisting_does_not_remove_new_company_labels(ticker):
+    days = [stamp.date() for stamp in pd.bdate_range("2025-01-02", periods=18)]
+    active = list(range(5)) + list(range(10, 18))
+    prices = pd.DataFrame([
+        {"date": days[i], "ticker": ticker, "close": 50.0 if i == 4 else 80.0 if i >= 10 else 100.0}
+        for i in active
+    ])
+    index = pd.DataFrame({"date": days, "index_code": "KOSPI200", "close": 100.0})
+    universe = pd.DataFrame({"date": [days[0], days[10]], "ticker": ticker, "in_universe": True})
+    status = prices[["date", "ticker"]].copy()
+    status["is_halted"] = False
+    delisted = pd.DataFrame([{"ticker": ticker, "delist_date": days[5], "last_price": 50.0}])
+    result = build_labels(
+        prices=prices, index=index, universe=universe, status=status, delisted=delisted,
+        trading_days=days, signal_dates=[days[0], days[10]],
+        rules=LabelRules((1, 5), 5, -0.15), policy=POLICY,
+        allow_holdout=False, run_date=days[-1],
+    )
+    old = result.labels[(result.labels.date == pd.Timestamp(days[0])) & (result.labels.h == 5)]
+    new = result.labels[result.labels.date == pd.Timestamp(days[10])]
+    assert old.iloc[0].ret == pytest.approx(-0.5)
+    assert set(new.h) == {1, 5}
+    assert new.ret.tolist() == pytest.approx([0.0, 0.0])
