@@ -35,17 +35,14 @@ def sample(name: str) -> pd.DataFrame:
                         listing_date=pd.to_datetime(["2000-01-04", "2001-01-04"]),
                         delisting_date=pd.to_datetime([None, "2020-01-02"]),
                         security_type=["common", "common"]),
-        "status": dict(date=d, ticker=tickers, is_admin=[False, False], is_halted=[False, True],
-                       in_kospi200=[True, False], in_kosdaq150=[False, False]),
+        "status": dict(date=d, ticker=tickers, is_admin=pd.array([False, None], dtype="boolean"),
+                       is_halted=[False, True]),
         "universe": dict(date=d, ticker=tickers, mcap_rank=np.array([1, 2], dtype="int32"),
                          in_universe=[True, True]),
         "delisted": dict(ticker=tickers, delist_date=d, last_price=[100.0, np.nan]),
         "sector": dict(ticker=tickers, sector=["전기전자", "미분류"],
                        valid_from=pd.to_datetime(["2010-01-04", "2010-01-04"]),
                        valid_to=pd.to_datetime([None, None])),
-        "investor_flows": dict(date=d, ticker=tickers, retail_net=np.array([1, -1], dtype="int64"),
-                               foreign_net=np.array([2, -2], dtype="int64"),
-                               inst_net=np.array([3, -3], dtype="int64")),
         "disclosures": dict(rcept_no=["1", "2"], rcept_dt=kst, ticker=["005930", None],
                             corp_name=["가", "비상장"], report_nm=["주식 소각 결정", "기타"],
                             report_nm_norm=["주식소각결정", "기타"]),
@@ -249,6 +246,21 @@ class ValidateRejectsTest(unittest.TestCase):
         self.assertRejects("news", df)
         df = sample("positions"); df["constructor"] = ["buffer", "rl", "ppo"]
         self.assertRejects("positions", df)
+
+    def test_dec24_status(self):
+        df = sample("status"); df["is_admin"] = [False, True]
+        io.validate("status", df)                                                   # 결측 없으면 bool도 허용
+        df = sample("status"); df["is_admin"] = pd.array([None, None], dtype="boolean")
+        io.validate("status", df)                                                   # v2 전까지 전부 결측 허용
+        df = sample("status"); df["in_kospi200"] = [True, False]
+        self.assertRejects("status", df)                                            # 구성종목 열은 뺐다
+        df = sample("status"); df["is_halted"] = pd.array([False, None], dtype="boolean")
+        self.assertRejects("status", df)                                            # is_halted는 결측 불가
+
+    def test_dec22_no_investor_flows(self):
+        self.assertNotIn("investor_flows", io.SCHEMAS)
+        df = sample("features"); df["retail_net_20"] = [0.1, 0.2]
+        self.assertRejects("features", df)
 
     def test_nulls(self):
         df = sample("signals"); df["crash_prob"] = [0.1, np.nan]
