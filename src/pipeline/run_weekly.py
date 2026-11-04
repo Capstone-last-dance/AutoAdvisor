@@ -30,8 +30,7 @@ import pandas as pd
 from src.common import io
 
 PROCESSED_TABLES = (
-    "prices", "index", "tickers", "status", "universe", "delisted", "sector", "investor_flows",
-    "disclosures", "news",
+    "prices", "index", "tickers", "status", "universe", "delisted", "sector", "disclosures", "news",
 )
 
 
@@ -91,7 +90,7 @@ def empty_frame(name: str) -> pd.DataFrame:
         "date": "datetime64[ns]", "datetime_kst": pd.DatetimeTZDtype("ns", "Asia/Seoul"),
         "str": "str", "ticker": "str", "ticker_or_cash": "str",
         "float64": "float64", "int64": "int64", "int32": "int32", "int8": "int8",
-        "nullable_int8": "Int8", "bool": "bool",
+        "nullable_int8": "Int8", "bool": "bool", "nullable_bool": "boolean",
     }
     return pd.DataFrame({col: pd.Series(dtype=dtypes[rule.kind]) for col, rule in io.SCHEMAS[name].items()})
 
