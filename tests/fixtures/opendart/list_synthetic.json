@@ -1,0 +1,9 @@
+{
+  "status": "000", "message": "정상", "page_no": 1, "page_count": 100,
+  "total_count": 3, "total_page": 1,
+  "list": [
+    {"corp_code": "00000001", "corp_name": "가나다전자", "stock_code": "005930", "corp_cls": "Y", "report_nm": "[기재정정]유상ㆍ증자결정", "rcept_no": "20250108000516", "flr_nm": "가나다전자", "rcept_dt": "20250109", "rm": "정"},
+    {"corp_code": "00000002", "corp_name": "라마바", "stock_code": "", "corp_cls": "E", "report_nm": "자기주식 취득 결정", "rcept_no": "20250110000101", "flr_nm": "라마바", "rcept_dt": "20250110", "rm": ""},
+    {"corp_code": "00000003", "corp_name": "사아자", "stock_code": "00AB12", "corp_cls": "K", "report_nm": "[첨부정정]현금·현물배당결정", "rcept_no": "20250111000102", "flr_nm": "사아자", "rcept_dt": "20250111", "rm": "공"}
+  ]
+}
