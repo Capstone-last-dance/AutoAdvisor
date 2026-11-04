@@ -9,7 +9,6 @@
 | DEC-01 | 브랜치 이름 규칙과 PR 절차 | README 협업 방법, 9.2절 | 11/2 주간 회의 |
 | DEC-02 | API 키 공유 방법 | R-16, PM-02 | 10/30 |
 | DEC-03 | 중간보고(11/9 주) 시연 범위. 10장 일정에 중간보고가 없다 | 10.1절 | 11/2 |
-| DEC-04 | forward test 신호 전용 실행 모드. 스텁이 쓰인 실행은 커밋하지 않으므로(6.12절) M6 기한인 12/4 전까지 forward test 커밋이 막힌다. 신호 기록에 필요한 필수 단계를 정한다 | 6.8절, 6.12절 | 11/6 전 |
 | DEC-05 | 과제 명세 필수 항목 대응: FastAPI 5개, Streamlit HTTP 통신, Docker Compose, MVO 비교, 보상 3종, ANOVA 3종, 명세의 12개 지표, SHAP Force, 에이전틱 RAG | 3장, 6장 | 11/9 전 (보상 3종은 사전등록 대상) |
 | DEC-06 | 범위 예산: 뉴스 피처 유지 여부(Q-08 결과로), RL 폴드·시드·스텝 수(B-01에서 스텝 시간을 잰 뒤) | 6.2절, 6.5절, 부록 1 | 11/9 전 |
 | DEC-07 | 판정 규칙: G2 지표(시장 하락이 MDD를 정해 게이트 효과가 드러나지 않는 문제), 프로젝트 성공 조건, G6 양수 결과를 누수로 보는 규칙 | 7장, 11장, 부록 1 `kpi` | 11/9 전 |
@@ -44,6 +43,8 @@
 | DEC-27 | 2026-11-04 | PM 장지원 (팀 카톡 공유) | 공용 `index.parquet`에는 KOSPI200만 넣는다. KOSDAQ150은 공용 스키마 밖의 `index_kosdaq.parquet`로 따로 보관한다. 소비처가 생기면 PM이 기록한 뒤 임소현(D)이 공용 스키마에 추가한다 | 9.3절 지수. 김윤하(A)가 [PR #1](https://github.com/Capstone-last-dance/AutoAdvisor/pull/1)과 배포 파일을 [PR #14](https://github.com/Capstone-last-dance/AutoAdvisor/pull/14)가 반영된 main 스키마에 맞춘다 |
 | DEC-28 | 2026-11-04 | PM 장지원 (팀 카톡 공유) | v1은 재사용 종목코드 `101970`, `036220` 두 건만 보완 데이터로 처리한다. 김윤하(A)가 옛 회사의 폐지일과 정리매매 가격을 근거와 함께 보완한다. 조윤상(B)·손석범(C)은 옛 회사 보유분이 폐지 시점에 청산되고 새 회사는 신규 종목으로 거래되는지 엔진에서 검증한다. 상장 구간을 구분하는 형식 변경은 v2에서 임소현(D)과 결정한다 | A 폐지 데이터, B·C 엔진. [이슈 #5](https://github.com/Capstone-last-dance/AutoAdvisor/issues/5#issuecomment-6604334659) |
 | DEC-29 | 2026-11-04 | PM 장지원 (팀 카톡 공유) | v1 모델 입력에서 `ss_allowed`를 제외하고 `ss_regime`을 유지한다. `ss_regime`이 확인된 전면 허용·전면 금지 기간에는 `ss_allowed`가 그 값에서 결정된다. 부분 허용 기간에는 과거 구성종목 자료가 없어 확인 불가한 값은 `features` 파일의 `ss_allowed` 열에 결측으로 저장한다. DEC-24 (2)의 `status` 구성종목 열 제거는 유지하며, `ss_allowed` 계산에는 별도 과거 구성종목 이력이 필요하다고 삭제 근거를 정정한다 | 4.9절·6.2절·부록 1 `features.model_input_exclusions`. 김윤하(A)가 결측 저장과 모델 입력 제외를 반영한다. 공용 `io.py`는 이미 해당 열과 숫자형 결측을 허용한다. [이슈 #5](https://github.com/Capstone-last-dance/AutoAdvisor/issues/5#issuecomment-6623303218) |
+| DEC-04 | 2026-11-04 | PM 장지원 확정 (D 임소현 질의·제안. (2)의 병합 방식은 D 확인 대기) | forward test 신호 전용 기록. (1) 11/6·11/13은 6.8절 일정대로 신호만 기록하므로 `run_weekly` 전체 대신 `python -m src.pipeline.forward_test --date YYYY-MM-DD`로 기록 단계만 실행해 커밋할 수 있다. 조건: 입력 `signals/{t}.parquet`은 A의 실제 B1 베이스라인 출력이고 `_stub/`에서 읽지 않는다. 신호일 23:59 KST 전에 커밋하고 원격에 push한다. `forward_log.csv`에 `signal_source=baseline`, `has_positions=0`을 적는다. 신호를 만든 A 코드의 커밋 해시를 기록 커밋 메시지에 적는다. 스텁이 쓰인 실행의 커밋 금지(6.12절)는 그대로이며, positions를 기록하는 11/20부터는 `run_weekly` 경로로 기록한다. (2) 기록 커밋의 해시를 보존하려고 main에 직접 push하지 않는다. 기록 커밋은 전용 브랜치(예: `forward/20261106`)에 push하고 태그 `ft-{YYYYMMDD}`를 붙인다. PR은 merge commit으로만 병합하고 squash·rebase 병합은 쓰지 않는다. 9.4절의 리뷰 후 병합 규칙은 유지한다 | 6.8·6.12절, D-04 `src/pipeline/forward_test.py`와 `forward_log.csv`. 임소현(D) 구현·운영, 김윤하(A) 11/6·11/13 B1 signals 제공 |
+| DEC-30 | 2026-11-04 | PM 장지원 (D 임소현 지적) | forward test 라벨 확정일은 4.6절 정의(t+1 종가 진입, 그 뒤 20거래일 종가)와 6.8절의 't+21거래일'을 따른다. 10.1절의 '11/6→12/4, 11/13→12/11, 11/20→12/18'은 신호일 t부터 20거래일을 센 오기이므로 12/7, 12/14, 12/21로 고친다. 발표 주(12/14~18)까지 확정되는 기록은 11/6·11/13의 2건이다. 날짜는 11/9~12/21에 휴장일이 없다고 보고 셌으며 A의 거래일 달력(Q-14)으로 확인한다 | 10.1절, 6.8절 사후 기록, D-04 `label_ready_date`, D-09 forward test 페이지 |
 
 ## PM-04 구현 메모 (DEC-09 합의 대기)
 
