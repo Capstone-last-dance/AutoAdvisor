@@ -9,3 +9,5 @@ env/
 __pycache__/
 _stub/*
 !_stub/.gitkeep
+test.ipynb
+.ipynb_checkpoints/

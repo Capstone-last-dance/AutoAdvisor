@@ -1,0 +1,179 @@
+{
+  "run_id": "20261103_B_m8_states",
+  "task": "B-04",
+  "years": [
+    2011,
+    2025
+  ],
+  "vol_target_annual": 0.157263,
+  "n_days": 3688,
+  "first_date": "2011-01-03",
+  "last_date": "2025-12-30",
+  "exposure": {
+    "mean": 0.8941177085795035,
+    "min": 0.3,
+    "max": 1.0,
+    "days_at_exposure_min": 19,
+    "days_at_exposure_max": 2086,
+    "days_capped_by_regime": 40
+  },
+  "regime_mc": {
+    "n_days": 55,
+    "episodes": [
+      {
+        "start": "2011-10-24",
+        "end": "2011-10-25",
+        "n_days": 2
+      },
+      {
+        "start": "2011-10-27",
+        "end": "2011-10-27",
+        "n_days": 1
+      },
+      {
+        "start": "2011-11-01",
+        "end": "2011-11-02",
+        "n_days": 2
+      },
+      {
+        "start": "2012-02-08",
+        "end": "2012-02-08",
+        "n_days": 1
+      },
+      {
+        "start": "2019-01-30",
+        "end": "2019-02-01",
+        "n_days": 3
+      },
+      {
+        "start": "2020-04-16",
+        "end": "2020-04-22",
+        "n_days": 5
+      },
+      {
+        "start": "2020-04-28",
+        "end": "2020-04-28",
+        "n_days": 1
+      },
+      {
+        "start": "2020-05-04",
+        "end": "2020-05-04",
+        "n_days": 1
+      },
+      {
+        "start": "2020-06-02",
+        "end": "2020-06-12",
+        "n_days": 9
+      },
+      {
+        "start": "2022-11-10",
+        "end": "2022-11-14",
+        "n_days": 3
+      },
+      {
+        "start": "2022-11-16",
+        "end": "2022-11-16",
+        "n_days": 1
+      },
+      {
+        "start": "2023-02-01",
+        "end": "2023-02-03",
+        "n_days": 3
+      },
+      {
+        "start": "2025-05-08",
+        "end": "2025-05-12",
+        "n_days": 3
+      },
+      {
+        "start": "2025-06-05",
+        "end": "2025-07-03",
+        "n_days": 20
+      }
+    ]
+  },
+  "bear_missing_days": 59,
+  "by_year": {
+    "2011": {
+      "n_days": 248,
+      "exposure_mean": 0.7046671073166911,
+      "regime_mc_days": 5
+    },
+    "2012": {
+      "n_days": 248,
+      "exposure_mean": 0.8895028479327289,
+      "regime_mc_days": 1
+    },
+    "2013": {
+      "n_days": 247,
+      "exposure_mean": 0.9790616342251961,
+      "regime_mc_days": 0
+    },
+    "2014": {
+      "n_days": 245,
+      "exposure_mean": 1.0,
+      "regime_mc_days": 0
+    },
+    "2015": {
+      "n_days": 248,
+      "exposure_mean": 0.9781992318459026,
+      "regime_mc_days": 0
+    },
+    "2016": {
+      "n_days": 246,
+      "exposure_mean": 0.9749309543175635,
+      "regime_mc_days": 0
+    },
+    "2017": {
+      "n_days": 243,
+      "exposure_mean": 1.0,
+      "regime_mc_days": 0
+    },
+    "2018": {
+      "n_days": 244,
+      "exposure_mean": 0.9445472160051265,
+      "regime_mc_days": 0
+    },
+    "2019": {
+      "n_days": 246,
+      "exposure_mean": 0.9923977595706747,
+      "regime_mc_days": 3
+    },
+    "2020": {
+      "n_days": 248,
+      "exposure_mean": 0.7325279488338596,
+      "regime_mc_days": 16
+    },
+    "2021": {
+      "n_days": 248,
+      "exposure_mean": 0.887022441185459,
+      "regime_mc_days": 0
+    },
+    "2022": {
+      "n_days": 246,
+      "exposure_mean": 0.8362259309829491,
+      "regime_mc_days": 4
+    },
+    "2023": {
+      "n_days": 245,
+      "exposure_mean": 0.9224265511587855,
+      "regime_mc_days": 3
+    },
+    "2024": {
+      "n_days": 244,
+      "exposure_mean": 0.8220907267577746,
+      "regime_mc_days": 0
+    },
+    "2025": {
+      "n_days": 242,
+      "exposure_mean": 0.7493934907305458,
+      "regime_mc_days": 23
+    }
+  },
+  "kospi200_input": {
+    "first_date": "2010-01-04",
+    "last_date": "2025-12-30",
+    "n_closes": 3939,
+    "sha256_float64_closes": "1607e468b255489f12dc02aa3338406c4bbdf0e03efc0d4eaef19a6e7e320024"
+  }
+}

@@ -37,8 +37,8 @@
 | B-01 | B 조윤상 | 11/1 | 완료 | docs/design_B.md; src/portfolio/; [PR #4](https://github.com/Capstone-last-dance/AutoAdvisor/pull/4) | M4·M8 설계와 PPO 골격. 합성 입력으로 학습 루프 테스트 통과, A 리뷰 후 병합 |
 | B-02 | B 조윤상 | 11/8 | 완료 | src/portfolio/risk_layer.py; src/portfolio/vol_target_report.py; reports/20261103_B_vol_target/; [PR #11](https://github.com/Capstone-last-dance/AutoAdvisor/pull/11) | vol_target_annual = 0.157263 계산·부록 1 기입, 2011~2015 데이터만 사용 테스트 통과. compute_regime_mc 공개, DEC-19 반영 |
 | B-03 | B 조윤상 | 11/13 | 진행 중 | src/portfolio/buffer_rule.py; tests/portfolio/test_buffer_rule.py | 단계 1~5 단위 테스트 통과. 가짜 엔진과 C의 M5(PR #8 헤드를 합친 상태) 위에서 합성 시장 실행 확인. PR #8 병합 후 재확인과 A-04 신호 연결 남음 |
-| B-04 | B 조윤상 | 11/16 | 대기 | | |
-| B-05 | B 조윤상 | 11/16 | 대기 | | |
+| B-04 | B 조윤상 | 11/16 | 진행 중 | src/portfolio/risk_layer.py; src/portfolio/market_state_report.py; tests/portfolio/test_risk_layer.py; tests/portfolio/test_market_state_report.py | 불변식·경계 사례 테스트 통과, 2011~2025년 E_t·regime_mc 그림 리포트 구현. A index.parquet의 KOSDAQ150 분리 확인(io 통과, B-02 값 재현). prereg.yaml 커밋(11/9) 뒤 실제 그림을 reports/에 남김 |
+| B-05 | B 조윤상 | 11/16 | 대기 | docs/design_B.md 5.1절 | 어댑터 규칙에 DEC-25·26 반영. PR #8에서 DEC-25 재개일 처리 확인(합성 시장). DEC-28 재사용 코드는 엔진이 폐지일 뒤 새 회사 매수를 막아 C 수정 요청 |
 | B-06 | B 조윤상 | 11/23 | 대기 | | |
 | B-07 | B 조윤상 | 11/30 | 대기 | | |
 | B-08 | B 조윤상 | 12/7 | 대기 | | |

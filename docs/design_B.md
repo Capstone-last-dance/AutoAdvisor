@@ -12,9 +12,10 @@
 | 파일 | 내용 | 상태 |
 |---|---|---|
 | `src/portfolio/params.py` | 부록 1 `portfolio`, `risk_layer` 읽기. `FILL_` 값은 None으로 읽고, 실제로 쓰는 순간 `PreregValueMissing` (R-08) | 구현 |
-| `src/portfolio/risk_layer.py` | M8 Step 1~6, 불변식, positions 행 생성, t일 유효 업종표 | 구현. 경계 사례 테스트와 2011~2025년 그림은 B-04 |
+| `src/portfolio/risk_layer.py` | M8 Step 1~6, 불변식, positions 행 생성, t일 유효 업종표 | 구현. 경계 사례 테스트 추가 (B-04) |
 | 〃 `compute_regime_mc(date)`, `compute_vol_target_annual` | 공개 함수, Q-12 값 계산 | 구현 (B-02). 값 0.157263을 부록 1에 기입했다 (4절) |
 | `src/portfolio/vol_target_report.py` | B-02 결과 리포트: `python -m src.portfolio.vol_target_report --run-id {YYYYMMDD}_B_{설명}` → `reports/{run_id}/`에 config.yaml 사본, git_commit.txt, metrics.json (R-10) | 구현 (B-02) |
+| `src/portfolio/market_state_report.py` | B-04 결과 리포트: `python -m src.portfolio.market_state_report --run-id {YYYYMMDD}_B_{설명}` → 위 세 파일과 `figures/e_t_regime_mc.svg`(2011~2025년 일별 E_t·regime_mc 그림), 그 원자료 `figures/e_t_regime_mc.csv` | 구현 (B-04). 실제 실행은 4절 |
 | `src/portfolio/buffer_rule.py` | 버퍼 규칙 단계 1~5와 엔진 위 실행 (`run_buffer_rule`) | 구현 (B-03). 실제 M5 연결은 B-05 |
 | `src/portfolio/interfaces.py` | B가 C(M5)와 PM(M9)에 기대하는 호출 형태 | 초안. C·PM 확인 필요 (5절) |
 | `src/portfolio/rl_data.py` | 9.3절 표 → 신호일별 스냅샷 | 구현 |
@@ -137,6 +138,16 @@ R_net을 체결 직전 NAV로 재면, 행동 a_t가 일으킨 t+1일 체결 비�
   - 입력: A-02 `index.parquet`(11/3 받은 파일, A PR #1 병합 전). 2010-12-03 ~ 2015-12-30 종가 1,256개를 썼고, 그 sha256을 metrics.json에 남겼다
   - 설정: `configs/prereg.yaml`이 비어 있어(PM-07) 부록 1과 같은 값을 담은 `tests/portfolio/prereg_subset.yaml`로 계산했다. 쓰는 키는 `vol_lookback_days`, `calendar.annualization`, `data.first_train_signal_year`, `splits.walk_forward_test_years`다
   - A-02 지수가 바뀌면 지문이 달라지므로 새 run_id로 다시 계산한다
+- 완료 기준 (3) 그림 (B-04): `market_state_report`가 2011년 첫 거래일 ~ 2025년 마지막 거래일의 매 거래일 E_t와 regime_mc를 계산한다.
+  - 그림은 SVG로 직접 쓴다. requirements(D 소유)에 그림 라이브러리가 없다.
+  - 기간: 시작은 `data.first_train_signal_year`, 끝은 walk-forward 마지막 테스트 연도다. 2025년보다 늦은 종가는 계산 전에 잘라낸다.
+  - 멈추는 경우: 하루라도 E_t·regime_mc가 결측이면 `InsufficientHistory`, vol_target_annual이 `FILL_`이면 `PreregValueMissing`.
+  - 실제 실행 조건: `configs/prereg.yaml`이 커밋돼야 한다 (PM-07, 11/9).
+    - A의 `index.parquet`는 11/3 21:29 파일부터 KOSPI200만 남아 io 검사를 통과한다. KOSDAQ150은 `index_kosdaq.parquet`로 따로 뺐다. 이 파일로 B-02 값과 입력 지문이 그대로 재현됐다.
+  - 미리보기 (스크래치, 공식 결과 아님): `load_kospi200()`(io 경로)과 부록 1 값 0.157263으로 계산했다. 11/3 16:37 파일에서 KOSPI200만 걸렀을 때와 수치가 같다.
+    - 3,688거래일 모두 결측 없음. bear 창이 차지 않는 2011년 초 59일은 rebound = 0이라 regime_mc = 0 (D4)
+    - regime_mc = 1은 55일, 14개 구간 (2011년 10~11월, 2020년 4~6월, 2025년 5~7월 등)
+    - E_t 평균 0.894. 하한 0.30에 걸린 날 19일, 국면 상한 0.70에 걸린 날 40일
 
 ---
 
@@ -167,6 +178,29 @@ C-01(`docs/design_C.md`, PR #3 병합)은 5.1절 형태를 `src.backtest.engine.
 2. 호출 한 번에 1 ms 이하를 목표로 한다 (6절).
 3. positions에 없는 종목의 목표 비중은 0으로 해석한다.
 4. IR 함수는 주간 초과수익 배열을 받아 실수 하나를 돌려준다 (`IRFunction`).
+
+B-05 어댑터가 A의 9.3절 파일을 엔진 입력으로 바꾸는 규칙 (11/4 PM 결정 반영):
+
+| 엔진 입력 | 만드는 법 | 근거 |
+|---|---|---|
+| `halted` | 일별 `status.is_halted`. v1은 `volume == 0`이다 | DEC-24, DEC-26 |
+| `closes` | `prices.close`. 정지일은 마지막 거래일 수정종가로 채운다 | DEC-25. PR #8 docstring이 호출자 몫으로 둔다 |
+| `delistings` | `delisted.delist_date`를 마지막 가격일(전 거래일)로 옮긴다 | PR #8 docstring |
+
+- 11/4 A 데이터 기준:
+  - 거래량 0인 288,431행 가운데 수정종가가 마지막 거래일과 다른 행은 19,294행이다 (보통주 1,621).
+  - 직전 신호일 U_t에 든 종목은 그중 0행이다. 그래서 위 채우기는 지금 데이터에서 결과를 바꾸지 않는다. 그래도 DEC-25 문구대로 채운다.
+- DEC-25 재개일 처리는 PR #8(0ba98eb)에서 합성 시장으로 모두 확인했다:
+  - 재개 첫날에는 목표를 넘는 만큼만 판다.
+  - 매수는 다시 시도하지 않는다.
+  - 재개일이 하한가 근접이면 다음 신호일에 다시 판단한다.
+  - 재개 전에 새 신호가 나오면 새 목표를 따른다.
+  - 회전율은 원래 체결일 목표로 한 번만 센다 (정지가 없을 때와 같은 값). 매도 비용은 재개일 원장에 남는다.
+- DEC-28 재사용 코드(101970, 036220):
+  - PR #8(0ba98eb)은 옛 회사 보유분을 폐지일 정리매매 가격으로 청산한다.
+  - 하지만 폐지일 뒤에는 같은 코드를 계속 폐지 종목으로 본다 (engine.py 198–201행의 `<= i`). 그래서 새 회사 매수가 `cooldown_or_delisted`로 막힌다.
+  - C 수정 뒤 다시 확인한다.
+  - B 코드(`rl_env.py`, `buffer_rule.py`)는 보유를 엔진 상태에서만 읽어, 종목코드별로 남는 기록이 없다.
 
 ### 5.2 M9 쿨다운 (PM 장지원)
 
@@ -217,7 +251,8 @@ PPO를 실제로 학습하는 테스트 2개는 `slow`로 표시했다. `-m "not
 |---|---|
 | `test_buffer_rule.py` | **B-03 완료 기준**: 단계 2 버퍼(rank 21~40 유지, 41부터 매도, 미보유 rank 21~40은 사지 않음), crash_flag·쿨다운·U_t 밖·signals에 없는 보유 종목 매도, 단계 3 후보 부족·전액 현금, 유지 종목이 보유 상한에 포함됨, 단계 5 M8(업종 한도·E_t)과 G7·G4 모드, H를 엔진의 실제 보유에서 읽음, 합성 시장 전 구간을 엔진 위에서 실행(불변식·보유 20개 이하), 같은 실행을 C의 M5 엔진에서 해 목표 비중이 같음(엔진이 없으면 건너뜀), 버퍼가 회전율을 낮춤 |
 | `test_params.py` | 부록 1 값과 키 이름 (R-14), FILL_ 값을 쓰면 멈춤 (R-08), 구현하지 않은 설정값 거부, `configs/prereg.yaml` 커밋 뒤 테스트 입력과 같은지 (커밋 전에는 건너뜀) |
-| `test_risk_layer.py` | Step 4~5를 6.9절 식 그대로의 느린 구현과 비교, regime_mc = 1일 때 E_t 상한, t 이후 코스피 200 미사용 (R-03), Step 1~3·6 손계산, '미분류' 한 그룹, mode off, 무작위 입력 200건의 불변식, 위반 시 예외, positions를 io.py로 쓰고 읽기 (io.py가 있을 때) |
+| `test_market_state_report.py` | **B-04 완료 기준 (3)**: 그림 기간의 매 거래일이 결측 없이 계산되고 M8 표와 같다. 기간 뒤 종가를 바꿔도 결과와 데이터 지문이 같다. 이력 부족·해가 끝나지 않음·FILL_이면 멈춘다. metrics와 일별 표가 일치하고, SVG가 올바른 XML이며 같은 입력이면 같다. 리포트 폴더 구성과 덮어쓰기 거부 (R-11) |
+| `test_risk_layer.py` | **B-04 완료 기준 (1)·(2)**. (2) 경계 사례는 손으로 계산할 수 있는 결정적 코스피 200 경로로 확인한다: 한 업종 20종목(업종 있음·'미분류', 한 종목 쏠림), 보유 5종목(한도 0.10, 업종 합이 정확히 0.30), regime_mc = 1(상한 0.70이 걸릴 때와 안 걸릴 때), sigma_t = 3배(E_t = 1/3)와 4배(하한 0.30), 네 경계가 겹칠 때. 그 밖에 Step 4~5를 6.9절 식 그대로의 느린 구현과 비교, regime_mc = 1일 때 E_t 상한, t 이후 코스피 200 미사용 (R-03), Step 1~3·6 손계산, '미분류' 한 그룹, mode off, 무작위 입력 200건의 불변식, 위반 시 예외, positions를 io.py로 쓰고 읽기 (io.py가 있을 때) |
 | `test_rl_env.py` | SB3·gymnasium 환경 검사, 관측 배치, 보유·U_t 밖 슬롯, 마스킹, 상위 20개와 min_weight, 전액 현금, 보상 식, 52스텝과 구간 경계, 슬롯 초과, 9.3절 표 → 스냅샷 |
 | `test_rl_train.py` | **B-01 완료 기준** (`slow`): 합성 입력으로 λ 탐색 → 시드별 학습 → 체크포인트 저장·로드 → 결정적 운용이 끝까지 돈다. 저장한 체크포인트로 검증 IR 재현, 같은 시드면 같은 학습 결과 (`slow`). 연도 경계 모델 교체 |
 | `test_vol_target.py` | **B-02 완료 기준**: 2016년 이후 종가를 바꿔도 vol_target_annual이 같다. 6.9절 식 그대로의 느린 구현과 비교, 2010년 종가는 첫 sigma_t 창의 21개만 사용, 기간이 모자라면 예외. compute_regime_mc가 M8 표와 같고 vol_target_annual 없이 계산됨, t 이후 종가 미사용, 2011년 초 bear_t 이력이 없을 때 rebound_t = 0이면 0, 1이면 결측(D4), io.py로 index를 읽어 계산 (io.py가 없으면 오류 안내). 리포트의 데이터 지문이 2016년 이후 종가와 무관, 리포트 폴더 구성, 같은 run_id 덮어쓰기 거부 (R-11) |
@@ -348,8 +383,8 @@ rebound_t = 1인데 bear_t를 계산할 수 없으면 결측이다 (Insufficient
 
 | 작업 | 기한 | 이 설계에서 이어지는 부분 |
 |---|---|---|
-| B-02 | 11/8 | 구현과 값 계산을 마쳤다 (0.157263, 부록 1 기입). 남은 것: A 리뷰 승인, 부록 3 Q-12 결과 칸(PM PR #2와 같은 표라 PM이 기입), D4 기록(B 결정, A 동의·PM 기록 대기) |
+| B-02 | 11/8 | 완료: 0.157263을 부록 1에 기입, PR #11 병합. Q-12 결과 칸은 PM이 기입했고 D4는 DEC-19로 기록됐다 |
 | B-03 | 11/13 | 단계 1~5와 엔진 위 실행을 구현했다 (2절). C의 M5(PR #8 헤드)를 합친 상태에서 합성 시장 실행을 확인했다: 목표 비중이 FakeEngine과 같고, 초과수익은 목표 합이 1인 체결(현금 부족 배율)에서만 최대 7e-5 다르다. 남은 것: PR #8 병합 후 테스트 재실행, 실제 신호(A-04)로 실행 |
-| B-04 | 11/16 | 경계 사례 테스트(한 업종 20종목, 보유 5종목, regime_mc = 1, sigma_t = 3 × vol_target_annual), 2011~2025년 E_t·regime_mc 그림 |
+| B-04 | 11/16 | 완료 기준 (1)·(2) 테스트 통과, (3) 그림 리포트 구현과 스크래치 미리보기 완료 (4절). A의 index 수정 확인(11/3). 남은 것: prereg.yaml 커밋(11/9) 뒤 `market_state_report`를 실행해 `reports/{run_id}/`에 남기기, A 리뷰 |
 | B-05 | 11/16 | M5 엔진 어댑터, 같은 비중일 때 버퍼 규칙과 체결·비용 결과 일치 |
 | B-06 | 11/23 | 폴드별 스냅샷 구성(D1, D5), R-10 기록(`reports/{run_id}/`), 베이스라인 신호 리허설 |
