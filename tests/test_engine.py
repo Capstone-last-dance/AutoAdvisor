@@ -177,6 +177,23 @@ def test_reopen_at_lower_limit_waits_for_next_signal():
     assert "000002" in second.state.holdings
 
 
+def test_reopen_never_buys_when_current_weight_fell_below_reduced_target():
+    days = pd.bdate_range("2020-01-01", periods=12)
+    dates = [day.strftime("%Y-%m-%d") for day in days]
+    closes = pd.DataFrame({"000001": [100.0] * 12,
+                           "000002": [100.0] * 7 + [85.0] * 5}, index=days)
+    halted = pd.DataFrame(False, index=days, columns=closes.columns)
+    halted.loc[days[6], "000002"] = True
+    engine = ExecutionEngine(closes, pd.Series(100.0, index=days),
+                             CostRates(0.002, 0.00015, 0.001),
+                             halted=halted, record_ledger=True)
+    first = engine.run_period(engine.initial_state(), {"000001": 0.80, "000002": 0.10},
+                              dates[0], dates[5])
+    engine.run_period(first.state, {"000001": 0.80, "000002": 0.09}, dates[5], dates[10])
+    reopen = next(row for row in engine.ledger if row["date"] == dates[7])
+    assert not any(fill.ticker == "000002" and fill.signed_quantity > 0 for fill in reopen["fills"])
+
+
 def test_sparse_prices_only_require_active_tickers():
     days = pd.bdate_range("2020-01-01", periods=5)
     d = [x.strftime("%Y-%m-%d") for x in days]

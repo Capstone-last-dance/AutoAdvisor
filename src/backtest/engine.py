@@ -192,7 +192,7 @@ class ExecutionEngine:
                 day_targets = {ticker: qty * px[ticker] / nav_before for ticker, qty in holdings.items()}
                 for ticker, target_weight in pending_rebalance_sells.items():
                     if ticker in holdings:
-                        day_targets[ticker] = target_weight
+                        day_targets[ticker] = min(target_weight, day_targets[ticker])
             # 주문·보유 대상만 검사한다. 다른 종목의 과거 폐지는 이 구간의
             # 체결에 영향이 없고, 전체 폐지 목록을 매 스텝 순회할 필요도 없다.
             delisted_today = {
