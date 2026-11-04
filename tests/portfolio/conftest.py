@@ -10,7 +10,11 @@ from src.portfolio.params import RiskLayerParams, RLParams
 from tests.portfolio.fakes import make_market
 
 HERE = Path(__file__).parent
-VOL_TARGET_FOR_TESTS = 0.15  # 단위 테스트 전용 임의값 (R-08). 실제 값은 작업 B-02에서 계산한다
+VOL_TARGET_FOR_TESTS = 0.15  # 단위 테스트 전용 임의값 (R-08). 실제 값은 부록 1 (B-02, reports/20261103_B_vol_target/)
+
+
+def pytest_configure(config):
+    config.addinivalue_line("markers", 'slow: PPO를 실제로 학습하는 테스트. -m "not slow"로 뺄 수 있다')
 
 
 @pytest.fixture(scope="session")

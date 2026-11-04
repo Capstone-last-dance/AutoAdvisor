@@ -18,6 +18,14 @@ from src.portfolio.risk_layer import market_state_table
 from src.portfolio.rl_data import SignalSnapshot
 
 
+def bm_crash_rebound_path(seed: int = 0) -> pd.Series:
+    """상승 → 급락 → 반등이 들어 있는 코스피 200 대용 경로 (regime_mc가 0과 1을 모두 지나도록)."""
+    rng = np.random.default_rng(seed)
+    drift = np.concatenate([np.full(350, 0.0015), np.full(100, -0.0045), np.full(50, 0.008), np.zeros(200)])
+    days = pd.bdate_range("2010-01-04", periods=len(drift))
+    return pd.Series(100.0 * np.exp(np.cumsum(drift + rng.normal(0.0, 0.01, len(drift)))), index=days)
+
+
 def fake_ir(a: np.ndarray) -> float:
     """6.6절 IR 식. C의 M5 함수가 나오기 전까지 테스트에서만 쓴다."""
     a = np.asarray(a, dtype=np.float64)

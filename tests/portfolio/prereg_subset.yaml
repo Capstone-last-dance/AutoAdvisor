@@ -7,12 +7,30 @@ calendar:
   execution: "next_trading_day_close"
   annualization: {daily: 252, weekly: 52}
 
+data:
+  start_date: "2010-01-04"
+  first_train_signal_year: 2011
+  price_column: "close"            # KRX 정규장 수정종가
+  raw_price_column: "close_raw"    # 동전주 판정 전용
+  investor_flow_lag_days: 1
+
 costs:
   sell_tax: 0.0020
   commission_per_side: 0.00015
   slippage_per_side: 0.0010
   stress_multiplier: 2.0
   cash_return: 0.0
+
+splits:
+  walk_forward_test_years: [2016, 2017, 2018, 2019, 2020, 2021, 2022, 2023, 2024, 2025]
+  validation_years: 2
+  purge: "drop_signal_dates_whose_label_window_reaches_next_segment"
+  holdout_signal_range: ["2026-01-01", "2026-10-31"]
+  holdout_open_date: "2026-12-11"
+  forward_test:
+    baseline_signals_from: "2026-11-06"
+    positions_from: "2026-11-20"
+    ml_signals_from: "2026-11-27"
 
 portfolio:
   buffer_rule:
