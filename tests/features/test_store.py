@@ -65,6 +65,15 @@ def test_raw_feature_missing_raises():
         _run(args, bm, ss, uni)
 
 
+def test_stub_membership_avoids_raising_and_defaults_to_not_allowed():
+    """구성종목 원천이 없어도(stub_membership=True) ss_regime=1 구간에서 예외 없이 돌아간다.
+    결측 대신 '구성종목 아님'으로 두므로 ss_allowed=0 — 실제 값이 아니라 파이프라인 점검용 스텁이다."""
+    args, bm, ss, uni = _inputs()
+    ss = pd.Series(1, index=bm.index)
+    f = _run(args, bm, ss, uni, stub_membership=True)
+    assert (f["ss_allowed"] == 0).all()
+
+
 def test_ss_allowed_with_constituents():
     args, bm, ss, uni = _inputs()
     ss = pd.Series(1, index=bm.index)
