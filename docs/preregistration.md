@@ -58,3 +58,5 @@
 | DEC-21 | RL 환경 세부값 8개 | 11/9 전 | `portfolio.rl`에 추가 |
 
 이미 반영한 결정: DEC-19(`regime_mc` 이력 부족 처리, 식과 값 변경 없음), DEC-22(수급 피처 제외와 개인 행동 프록시 대체 정의, [deviation log](deviation_log.md)). DEC-22는 부록 1 값을 바꾸지 않는다. 대체 정의는 `retail_proxy.fallback_if_flows_unavailable`에 이미 있다.
+
+11/4 PM 결정은 [DEC-25~29](decisions.md)에 기록했다. 정지 중 평가·재개일 처리, 거래량 0 대체, 공용 지수 분리, 재사용 두 건의 보완 데이터 기준을 v1 설계에 반영한다. `features.model_input_exclusions`에 `ss_allowed`를 넣고 `ss_regime`은 모델 입력으로 유지한다. 확인 불가한 `ss_allowed`는 피처 파일에 결측으로 저장한다. 담당 파트의 코드·데이터 반영과 검증 결과는 별도로 확인한다.
