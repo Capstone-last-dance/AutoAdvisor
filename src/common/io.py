@@ -113,13 +113,7 @@ SCHEMAS: dict[str, dict[str, Col]] = {
         "valid_from": _c("date"),
         "valid_to": _c("date", nullable=True),
     },
-    "investor_flows": {
-        "date": _c("date"),
-        "ticker": _c("ticker"),
-        "retail_net": _c("int64"),
-        "foreign_net": _c("int64"),
-        "inst_net": _c("int64"),
-    },
+    # DEC-22: investor_flows는 원천이 없어 만들지 않는다.
     "disclosures": {
         "rcept_no": _c("str"),
         "rcept_dt": _c("datetime_kst"),

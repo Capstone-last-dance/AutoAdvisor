@@ -30,7 +30,7 @@ import pandas as pd
 from src.common import io
 
 PROCESSED_TABLES = (
-    "prices", "index", "tickers", "status", "universe", "delisted", "sector", "investor_flows",
+    "prices", "index", "tickers", "status", "universe", "delisted", "sector",
     "disclosures", "news",
 )
 

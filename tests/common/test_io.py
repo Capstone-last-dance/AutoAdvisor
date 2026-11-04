@@ -42,9 +42,6 @@ def sample(name: str) -> pd.DataFrame:
         "sector": dict(ticker=tickers, sector=["전기전자", "미분류"],
                        valid_from=pd.to_datetime(["2010-01-04", "2010-01-04"]),
                        valid_to=pd.to_datetime([None, None])),
-        "investor_flows": dict(date=d, ticker=tickers, retail_net=np.array([1, -1], dtype="int64"),
-                               foreign_net=np.array([2, -2], dtype="int64"),
-                               inst_net=np.array([3, -3], dtype="int64")),
         "disclosures": dict(rcept_no=["1", "2"], rcept_dt=kst, ticker=["005930", None],
                             corp_name=["가", "비상장"], report_nm=["주식 소각 결정", "기타"],
                             report_nm_norm=["주식소각결정", "기타"]),
@@ -267,6 +264,12 @@ class ValidateRejectsTest(unittest.TestCase):
         df = sample("features"); df["mom_12_1_na"] = np.array([0, 2], dtype="int8")
         self.assertRejects("features", df)
         df = sample("features"); df["mom_12_1"] = ["a", "b"]
+        self.assertRejects("features", df)
+
+    def test_dec22_no_investor_flows(self):
+        """DEC-22: 원천이 없어 investor_flows 테이블·피처(retail/foreign/inst_net_20)를 안 만든다."""
+        self.assertNotIn("investor_flows", io.SCHEMAS)
+        df = sample("features"); df["retail_net_20"] = [0.1, 0.2]
         self.assertRejects("features", df)
 
     def test_not_a_dataframe(self):
