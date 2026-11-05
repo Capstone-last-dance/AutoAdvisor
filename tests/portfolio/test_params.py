@@ -13,6 +13,7 @@ from src.portfolio.params import (
     RiskLayerParams,
     RLParams,
     load_prereg,
+    vol_target_years,
 )
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -35,6 +36,10 @@ def test_appendix1_values(cfg):
 
     buffer = BufferRuleParams.from_prereg(cfg)
     assert (buffer.enter_rank_max, buffer.exit_rank_greater_than, buffer.max_holdings) == (20, 40, 20)
+
+
+def test_vol_target_years_from_appendix1(cfg):
+    assert vol_target_years(cfg) == (2011, 2015)  # 6.9절: 2011~2015년, 2016년 이후 금지
 
 
 def test_fill_value_stops_real_computation(cfg):
@@ -67,7 +72,7 @@ def test_subset_matches_configs_prereg(cfg):
     if path.stat().st_size == 0:
         pytest.skip("configs/prereg.yaml이 아직 비어 있다 (작업 PM-07)")
     real = load_prereg(path)
-    for section in ("calendar", "costs", "portfolio", "risk_layer"):
+    for section in ("calendar", "data", "costs", "splits", "portfolio", "risk_layer"):
         expected, actual = copy.deepcopy(cfg[section]), copy.deepcopy(real[section])
         if section == "risk_layer":  # B-02에서 채우는 값만 다를 수 있다
             expected.pop("vol_target_annual")

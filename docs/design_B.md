@@ -12,16 +12,18 @@
 | 파일 | 내용 | 상태 |
 |---|---|---|
 | `src/portfolio/params.py` | 부록 1 `portfolio`, `risk_layer` 읽기. `FILL_` 값은 None으로 읽고, 실제로 쓰는 순간 `PreregValueMissing` (R-08) | 구현 |
-| `src/portfolio/risk_layer.py` | M8 Step 1~6, 불변식, positions 행 생성, t일 유효 업종표 | 구현. 경계 사례 테스트와 2011~2025년 그림은 B-04 |
-| 〃 `compute_regime_mc(date)`, `compute_vol_target_annual` | 공개 함수, Q-12 값 계산 | 골격 (B-02) |
-| `src/portfolio/buffer_rule.py` | 버퍼 규칙 단계 1~4 | 골격 (B-03) |
+| `src/portfolio/risk_layer.py` | M8 Step 1~6, 불변식, positions 행 생성, t일 유효 업종표 | 구현. 경계 사례 테스트 추가 (B-04) |
+| 〃 `compute_regime_mc(date)`, `compute_vol_target_annual` | 공개 함수, Q-12 값 계산 | 구현 (B-02). 값 0.157263을 부록 1에 기입했다 (4절) |
+| `src/portfolio/vol_target_report.py` | B-02 결과 리포트: `python -m src.portfolio.vol_target_report --run-id {YYYYMMDD}_B_{설명}` → `reports/{run_id}/`에 config.yaml 사본, git_commit.txt, metrics.json (R-10) | 구현 (B-02) |
+| `src/portfolio/market_state_report.py` | B-04 결과 리포트: `python -m src.portfolio.market_state_report --run-id {YYYYMMDD}_B_{설명}` → 위 세 파일과 `figures/e_t_regime_mc.svg`(2011~2025년 일별 E_t·regime_mc 그림), 그 원자료 `figures/e_t_regime_mc.csv` | 구현 (B-04). 실제 실행은 4절 |
+| `src/portfolio/buffer_rule.py` | 버퍼 규칙 단계 1~5와 엔진 위 실행 (`run_buffer_rule`) | 구현 (B-03). 실제 M5 연결은 B-05 |
 | `src/portfolio/interfaces.py` | B가 C(M5)와 PM(M9)에 기대하는 호출 형태 | 초안. C·PM 확인 필요 (5절) |
 | `src/portfolio/rl_data.py` | 9.3절 표 → 신호일별 스냅샷 | 구현 |
 | `src/portfolio/rl_env.py` | gymnasium 환경: 관측, 행동 해석, M8 호출, 보상 | 구현. 실제 M5 연결은 B-05 |
 | `src/portfolio/rl_train.py` | λ 선택, 본 학습, 검증 IR 체크포인트, 결정적 운용 | 구현. 폴드 데이터 구성과 R-10 기록은 B-06 |
 | `tests/portfolio/` | 단위 테스트와 테스트 전용 가짜 입력(`fakes.py`) | 구현 (7절) |
 
-모듈 의존 방향은 `params` ← `risk_layer` ← `rl_data` ← `rl_env` ← `rl_train`이다. `risk_layer.py`는 numpy와 pandas만 쓴다. A가 피처 `regime_mc`를 만들 때 import해도 torch나 gymnasium이 필요 없다.
+모듈 의존 방향은 `params` ← `risk_layer` ← `rl_data` ← `rl_env` ← `rl_train`이고, `buffer_rule`은 `rl_data`까지만 쓴다 (torch·gymnasium 불필요). `risk_layer.py`는 numpy와 pandas만 쓴다. A가 피처 `regime_mc`를 만들 때 import해도 torch나 gymnasium이 필요 없다.
 
 ---
 
@@ -29,11 +31,15 @@
 
 | 6.5절 | 코드 | 상태 |
 |---|---|---|
-| 단계 1 보유 집합 H | `buffer_rule_weights(holdings, ...)`. H는 M5 상태(직전 체결 후 실제 보유)에서 읽는다 | B-03 |
-| 단계 2 유지 조건 | 〃 rank ≤ `exit_rank_greater_than`, crash_flag = 0, U_t 소속, 쿨다운 아님 | B-03 |
-| 단계 3 추가 | 〃 rank ≤ `enter_rank_max`, rank 오름차순, `max_holdings`까지 | B-03 |
-| 단계 4 동일가중 | 〃 1 ÷ 종목 수. 종목이 없으면 빈 Series (현금 100%) | B-03 |
-| 단계 5 M8 | `apply_risk_layer(..., constructor="buffer")` | 구현 |
+| 단계 1 보유 집합 H | `buffer_rule_weights(holdings, ...)`. `run_buffer_rule`은 직전 `run_period`가 돌려준 실제 보유(`weights_obs` > 0)를 H로 쓴다. M9 청산이나 체결 실패로 목표와 달라도 실제 보유를 따른다 | 구현 |
+| 단계 2 유지 조건 | 〃 rank ≤ `exit_rank_greater_than`, crash_flag = 0, U_t 소속, 쿨다운 아님. signals에 없는 보유 종목은 rank가 없으므로 판다 | 구현 |
+| 단계 3 추가 | 〃 보유하지 않은 종목 중 rank ≤ `enter_rank_max`, crash_flag = 0, 쿨다운 아님을 rank 오름차순으로 `max_holdings`까지. 같은 rank는 종목코드 순 | 구현 |
+| 단계 4 동일가중 | 〃 1 ÷ 종목 수. 종목이 없으면 빈 Series (현금 100%) | 구현 |
+| 단계 5 M8 | `buffer_targets`: RL 환경과 같은 배열 경로(`risk_layer_weights`, `check_invariants`). `mode="off"`(G7)이면 M9 쿨다운도 끄고, full이 아니면 E_t = 1 | 구현 |
+| 엔진 위 실행 | `run_buffer_rule(snapshots, engine, ...)`: 첫 신호일 현금 100%에서 시작해 신호일마다 단계 1~5 → `engine.run_period`. 마지막 신호일은 비중만 기록하고 체결하지 않는다 (RL `episode="full"`과 같음) | 구현. FakeEngine과 C의 `ExecutionEngine`(PR #8 헤드 a901420을 합친 상태) 위에서 실행 확인. 실제 데이터 연결은 B-05 |
+
+- **입력**: RL과 같은 신호일 스냅샷(`rl_data.build_snapshots`)을 쓴다. 그래서 G5 비교에서 두 구성기의 신호, U_t, 쿨다운, 업종, E_t가 같다.
+- **단계 3과 U_t**: 6.5절 단계 3은 U_t 소속을 따로 묻지 않는다. 하지만 rank가 U_t 안의 순위이고(6.4절), 스냅샷은 signals 종목이 U_t와 같은지 확인한다. 그래서 후보가 모두 U_t 종목이고 결과가 같다.
 
 ---
 
@@ -115,8 +121,8 @@ R_net을 체결 직전 NAV로 재면, 행동 a_t가 일으킨 t+1일 체결 비�
 | 재배분 금지 | 어느 단계도 비중을 늘리지 않는다. 잘린 비중은 모두 현금이다 |
 | 출력 | `positions_frame`: 9.3절 열(date, ticker, target_weight, constructor, exposure, regime_mc). 비중이 0보다 큰 종목과 "CASH" 행 |
 | 불변식 | `check_invariants`. 어기면 `RiskLayerViolation` (G0) |
-| 공개 함수 | `apply_risk_layer` (구현), `compute_regime_mc(date)` (B-02) |
-| vol_target_annual | `compute_vol_target_annual` (B-02). 부록 1 값이 `FILL_`인 동안 Step 4는 `PreregValueMissing`으로 멈춘다 (R-08) |
+| 공개 함수 | `apply_risk_layer`, `compute_regime_mc(date)`. 후자는 `bm_close`, `params`를 넘기지 않으면 `io.read_table("index")`와 `configs/prereg.yaml`에서 읽는다. Step 5만 쓰므로 vol_target_annual이 없어도 된다 |
+| vol_target_annual | `compute_vol_target_annual(bm_close, params, vol_target_years(cfg))`: Step 4와 같은 `sigma_series`의 2011~2015년 매 거래일 평균. 2015년보다 늦은 종가는 계산 전에 잘라낸다. 부록 1 값이 `FILL_`인 동안 Step 4는 `PreregValueMissing`으로 멈춘다 (R-08) |
 | G7 'M8·M9 미적용' | `mode="off"`: Step 2~6과 쿨다운을 끄고 crash_flag·U_t 필터만 남긴다. 불변식은 비음수, 현금 ≥ 0, 합계만 확인한다 |
 | G4 '노출 조절 제외' 진단 | `mode="no_exposure"`: E_t = 1 |
 
@@ -125,13 +131,33 @@ R_net을 체결 직전 NAV로 재면, 행동 a_t가 일으킨 t+1일 체결 비�
 - 버퍼 규칙과 파이프라인은 pandas 경로(`apply_risk_layer`)를, RL 환경은 배열 경로(`risk_layer_weights`, `check_invariants`)를 쓴다. pandas 경로도 안에서 같은 배열 함수를 부른다.
 - R-03: `market_state`는 t일보다 늦은 코스피 200 종가를 잘라낸 뒤 계산한다. `apply_risk_layer`는 signals에 t가 아닌 날짜가 있으면 예외를 낸다.
 - 부동소수 오차로 Σw가 1을 1e−9 이내에서 넘으면 현금을 0으로 둔다. 그래서 '현금 ≥ 0'은 정확히, '합계 = 1 ± 1e−9'는 허용 오차 안에서 지킨다.
-- 창을 채울 코스피 200 이력이 없으면 `InsufficientHistory`를 낸다 (D4).
+- 창을 채울 코스피 200 이력이 없으면 `InsufficientHistory`를 낸다. 단, rebound_t = 0이면 bear_t의 창(종가 311개)이 차지 않아도 regime_mc_t = bear_t × 0 = 0으로 계산한다 (D4).
+- vol_target_annual의 기간: 시작 연도는 `data.first_train_signal_year`(2011), 끝 연도는 walk-forward 첫 테스트 연도의 전년(2015)으로 부록 1에서 만든다. 2011년 첫 거래일의 sigma_t도 6.9절 정의대로 직전 20개 수익률을 쓰므로 2010년 12월 종가 21개가 들어간다. 부록 2 B-02 완료 기준의 '2011~2015년 데이터만'은 6.9절 정의(우선순위가 높다, 0.1절)에 맞춰 '2016년 이후 데이터 미사용과 이 21개 밖의 2010년 데이터 미사용'으로 확인한다.
+- vol_target_annual 계산 결과 (2026-11-03, `reports/20261103_B_vol_target/`):
+  - 값: **0.157263** (0.1572629338). 2011~2015년 1,236거래일의 sigma_t 평균이다. 연도별 평균은 0.249, 0.169, 0.132, 0.110, 0.126
+  - 입력: A-02 `index.parquet`(11/3 받은 파일, A PR #1 병합 전). 2010-12-03 ~ 2015-12-30 종가 1,256개를 썼고, 그 sha256을 metrics.json에 남겼다
+  - 설정: `configs/prereg.yaml`이 비어 있어(PM-07) 부록 1과 같은 값을 담은 `tests/portfolio/prereg_subset.yaml`로 계산했다. 쓰는 키는 `vol_lookback_days`, `calendar.annualization`, `data.first_train_signal_year`, `splits.walk_forward_test_years`다
+  - A-02 지수가 바뀌면 지문이 달라지므로 새 run_id로 다시 계산한다
+- 완료 기준 (3) 그림 (B-04): `market_state_report`가 2011년 첫 거래일 ~ 2025년 마지막 거래일의 매 거래일 E_t와 regime_mc를 계산한다.
+  - 그림은 SVG로 직접 쓴다. requirements(D 소유)에 그림 라이브러리가 없다.
+  - 기간: 시작은 `data.first_train_signal_year`, 끝은 walk-forward 마지막 테스트 연도다. 2025년보다 늦은 종가는 계산 전에 잘라낸다.
+  - 멈추는 경우: 하루라도 E_t·regime_mc가 결측이면 `InsufficientHistory`, vol_target_annual이 `FILL_`이면 `PreregValueMissing`.
+  - A의 `index.parquet`는 11/3 21:29 파일부터 KOSPI200만 남아 io 검사를 통과한다. KOSDAQ150은 `index_kosdaq.parquet`로 따로 뺐다 (DEC-27). 이 파일로 B-02 값과 입력 지문이 그대로 재현됐다.
+- 그림 결과 (2026-11-04, `reports/20261104_B_m8_states/`):
+  - 실행: 커밋 f2e8cf3에서 미커밋 파일 없이 돌렸다. 설정은 `configs/prereg.yaml` 초안(de685a8)이고 vol_target_annual은 0.157263이다.
+  - 입력: `load_kospi200()`(io 경로). 2010-01-04 ~ 2025-12-30 종가 3,939개, sha256 1607e468…를 metrics.json에 남겼다.
+  - 3,688거래일 모두 결측이 없다. bear 창이 차지 않는 2011년 초 59일은 rebound = 0이라 regime_mc = 0이다 (D4).
+  - regime_mc = 1은 55일, 14개 구간이다 (2011년 10~11월, 2020년 4~6월, 2025년 5~7월 등).
+  - E_t 평균은 0.894다. 하한 0.30에 걸린 날 19일, 국면 상한 0.70에 걸린 날 40일이다.
+  - 11/9 공식 사전등록에서 `risk_layer`, `vol_lookback_days`, `calendar.annualization`, `data.first_train_signal_year`, `splits.walk_forward_test_years` 중 하나라도 바뀌면 새 run_id로 다시 만든다.
 
 ---
 
 ## 5. 다른 역할과의 인터페이스
 
 B는 다른 역할의 파일과 코드를 고치지 않는다 (R-17). 아래는 B가 기대하는 형태이고, `src/portfolio/interfaces.py`에 같은 내용이 있다. 실제 함수가 나오면 B-05에서 어댑터로 연결한다.
+
+C-01(`docs/design_C.md`, PR #3 병합)은 5.1절 형태를 `src.backtest.engine.ExecutionEngine`으로 그대로 받아들였다. 체결 직전 NAV 기준의 a_k, `nav_max`, M9 우선, positions에 없는 종목 = 0도 같다.
 
 ### 5.1 M5 체결 엔진 (C 손석범)
 
@@ -155,6 +181,32 @@ B는 다른 역할의 파일과 코드를 고치지 않는다 (R-17). 아래는 
 3. positions에 없는 종목의 목표 비중은 0으로 해석한다.
 4. IR 함수는 주간 초과수익 배열을 받아 실수 하나를 돌려준다 (`IRFunction`).
 
+B-05 어댑터가 A의 9.3절 파일을 엔진 입력으로 바꾸는 규칙 (11/4 PM 결정 반영):
+
+| 엔진 입력 | 만드는 법 | 근거 |
+|---|---|---|
+| `halted` | 일별 `status.is_halted`. v1은 `volume == 0`이다 | DEC-24, DEC-26 |
+| `closes` | `prices.close` 그대로 넘긴다 | 정지일 평가 가격은 엔진이 마지막 거래일 수정종가로 바꾼다 (DEC-25, PR #8 c82fa1b) |
+| `delistings` | `delisted.delist_date`를 마지막 가격일(전 거래일)로 옮긴다 | PR #8 docstring |
+
+- 정지일 평가 가격 (DEC-25):
+  - 11/4 A 데이터에서 거래량 0인 288,431행 가운데 수정종가가 마지막 거래일과 다른 행은 19,294행이다 (보통주 1,621).
+  - 직전 신호일 U_t에 든 종목은 그중 0행이라, 지금 데이터에서는 결과가 달라지지 않는다.
+  - PR #8 c82fa1b부터 엔진이 직접 마지막 거래일 가격으로 평가한다 (`test_halted_valuation_uses_last_traded_close_even_if_source_close_changes`). 그래서 어댑터는 가격을 채우지 않는다.
+- DEC-25 재개일 처리는 PR #8(0ba98eb, c82fa1b)에서 합성 시장으로 모두 확인했다:
+  - 재개 첫날에는 목표를 넘는 만큼만 판다.
+  - 매수는 다시 시도하지 않는다.
+  - 재개일이 하한가 근접이면 다음 신호일에 다시 판단한다.
+  - 재개 전에 새 신호가 나오면 새 목표를 따른다.
+  - 회전율은 원래 체결일 목표로 한 번만 센다 (정지가 없을 때와 같은 값). 매도 비용은 재개일 원장에 남는다.
+- DEC-28 재사용 코드(101970, 036220):
+  - 옛 회사 보유분은 폐지일에 정리매매 가격으로 청산된다.
+  - 0ba98eb에서는 폐지일 뒤에도 같은 코드를 계속 폐지 종목으로 봐서 새 회사 매수가 `cooldown_or_delisted`로 막혔다.
+  - C가 c82fa1b에서 고쳤다. 두 코드에 한해, 폐지 뒤 가격 공백 다음의 첫 가격일부터 폐지 제한을 푼다 (`relisting_index`). 그날은 전일 종가가 없으므로 가격 제한 판정을 하지 않는다.
+  - B 재현(옛 회사 D4 폐지, 새 회사 D10 상장)에서 새 회사 0.3 매수가 체결됐다. B main과 합친 전체 테스트는 336 통과, 1 건너뜀이다.
+  - B 코드(`rl_env.py`, `buffer_rule.py`)는 보유를 엔진 상태에서만 읽어, 종목코드별로 남는 기록이 없다.
+  - 실제 데이터 확인은 A가 옛 회사의 폐지일·정리매매 가격을 보완한 뒤 B-05에서 한다.
+
 ### 5.2 M9 쿨다운 (PM 장지원)
 
 `CooldownFunction(신호일 t) -> 종목코드 목록`: 체결일 t+1에 신규 진입이 금지된 종목이다. 접수 시각이 t일 15:30 이전인 공시만 쓴다 (R-03). 쿨다운 기간은 6.10절대로 접수일 다음 거래일부터 20거래일이다.
@@ -171,9 +223,11 @@ B는 다른 역할의 파일과 코드를 고치지 않는다 (R-17). 아래는 
 
 ### 5.4 입출력과 실행 환경 (D 임소현)
 
-- B는 positions를 `io.write_table("positions", df, date=t)` 또는 `run_id=...`로 쓴다 (R-18). B가 만드는 `date` 열은 `datetime.date`다. `io.validate`의 자료형과 맞는지 확인이 필요하다.
-- 단위 테스트는 `tests/portfolio/`에 두었다 (`tests/__init__.py` 포함). 다른 역할도 `tests/{모듈}/`을 쓰면 실행 명령 하나로 모두 돌릴 수 있다.
-- 검증에 쓴 버전 (Q-18 참고): Python 3.13.7, numpy 2.5.4, pandas 3.1.0, gymnasium 1.4.0, stable-baselines3 2.9.2, torch 2.14.1, PyYAML 6.0.3, pytest 9.2.0.
+- B는 positions를 `io.write_table("positions", df, date=t)` 또는 `run_id=...`로 쓴다 (R-18). 앞 단계 파일이 아직 없으면 `stub=True`로 읽는다. B가 만드는 `date` 열은 io.py(D-02) 규칙대로 시각 없는 datetime64[ns]다. io.py로 쓰고 읽어도 그대로인지는 `test_positions_round_trip_through_io`가 확인한다.
+- 단위 테스트는 `tests/portfolio/`에 두었다 (`tests/__init__.py` 포함). README의 `tests/{영역}/` 규칙과 같다.
+- 검증한 환경:
+  - B-01: macOS, Python 3.13.7, numpy 2.5.4, pandas 3.1.0, gymnasium 1.4.0, stable-baselines3 2.9.2, torch 2.14.1, PyYAML 6.0.3, pytest 9.2.0
+  - B-02부터: D-01 고정 버전(`requirements-lock.txt`), Windows, Python 3.12.10, torch 2.15.0+cpu, pytest 9.2.0 (D-02에서 lock에 추가)
 
 ---
 
@@ -194,14 +248,19 @@ M5 `run_period`가 호출당 1 ms면 약 5.3시간이 더 든다. 폴드와 시�
 
 ## 7. 테스트
 
-실행: `.venv/bin/python -m pytest tests/portfolio -p no:cacheprovider`
+실행: `python -m pytest tests/portfolio -p no:cacheprovider` (README 절차로 만든 `.venv`에서)
+
+PPO를 실제로 학습하는 테스트 2개는 `slow`로 표시했다. `-m "not slow"`를 붙이면 뺀다. B의 Windows 환경에서 전체는 약 15초, `slow` 2개가 그중 약 10초다.
 
 | 파일 | 확인 내용 |
 |---|---|
+| `test_buffer_rule.py` | **B-03 완료 기준**: 단계 2 버퍼(rank 21~40 유지, 41부터 매도, 미보유 rank 21~40은 사지 않음), crash_flag·쿨다운·U_t 밖·signals에 없는 보유 종목 매도, 단계 3 후보 부족·전액 현금, 유지 종목이 보유 상한에 포함됨, 단계 5 M8(업종 한도·E_t)과 G7·G4 모드, H를 엔진의 실제 보유에서 읽음, 합성 시장 전 구간을 엔진 위에서 실행(불변식·보유 20개 이하), 같은 실행을 C의 M5 엔진에서 해 목표 비중이 같음(엔진이 없으면 건너뜀), 버퍼가 회전율을 낮춤 |
 | `test_params.py` | 부록 1 값과 키 이름 (R-14), FILL_ 값을 쓰면 멈춤 (R-08), 구현하지 않은 설정값 거부, `configs/prereg.yaml` 커밋 뒤 테스트 입력과 같은지 (커밋 전에는 건너뜀) |
-| `test_risk_layer.py` | Step 4~5를 6.9절 식 그대로의 느린 구현과 비교, regime_mc = 1일 때 E_t 상한, t 이후 코스피 200 미사용 (R-03), Step 1~3·6 손계산, '미분류' 한 그룹, mode off, 무작위 입력 200건의 불변식, 위반 시 예외 |
+| `test_market_state_report.py` | **B-04 완료 기준 (3)**: 그림 기간의 매 거래일이 결측 없이 계산되고 M8 표와 같다. 기간 뒤 종가를 바꿔도 결과와 데이터 지문이 같다. 이력 부족·해가 끝나지 않음·FILL_이면 멈춘다. metrics와 일별 표가 일치하고, SVG가 올바른 XML이며 같은 입력이면 같다. 리포트 폴더 구성과 덮어쓰기 거부 (R-11) |
+| `test_risk_layer.py` | **B-04 완료 기준 (1)·(2)**. (2) 경계 사례는 손으로 계산할 수 있는 결정적 코스피 200 경로로 확인한다: 한 업종 20종목(업종 있음·'미분류', 한 종목 쏠림), 보유 5종목(한도 0.10, 업종 합이 정확히 0.30), regime_mc = 1(상한 0.70이 걸릴 때와 안 걸릴 때), sigma_t = 3배(E_t = 1/3)와 4배(하한 0.30), 네 경계가 겹칠 때. 그 밖에 Step 4~5를 6.9절 식 그대로의 느린 구현과 비교, regime_mc = 1일 때 E_t 상한, t 이후 코스피 200 미사용 (R-03), Step 1~3·6 손계산, '미분류' 한 그룹, mode off, 무작위 입력 200건의 불변식, 위반 시 예외, positions를 io.py로 쓰고 읽기 (io.py가 있을 때) |
 | `test_rl_env.py` | SB3·gymnasium 환경 검사, 관측 배치, 보유·U_t 밖 슬롯, 마스킹, 상위 20개와 min_weight, 전액 현금, 보상 식, 52스텝과 구간 경계, 슬롯 초과, 9.3절 표 → 스냅샷 |
-| `test_rl_train.py` | **B-01 완료 기준**: 합성 입력으로 λ 탐색 → 시드별 학습 → 체크포인트 저장·로드 → 결정적 운용이 끝까지 돈다. 저장한 체크포인트로 검증 IR 재현, 같은 시드면 같은 학습 결과, 연도 경계 모델 교체 |
+| `test_rl_train.py` | **B-01 완료 기준** (`slow`): 합성 입력으로 λ 탐색 → 시드별 학습 → 체크포인트 저장·로드 → 결정적 운용이 끝까지 돈다. 저장한 체크포인트로 검증 IR 재현, 같은 시드면 같은 학습 결과 (`slow`). 연도 경계 모델 교체 |
+| `test_vol_target.py` | **B-02 완료 기준**: 2016년 이후 종가를 바꿔도 vol_target_annual이 같다. 6.9절 식 그대로의 느린 구현과 비교, 2010년 종가는 첫 sigma_t 창의 21개만 사용, 기간이 모자라면 예외. compute_regime_mc가 M8 표와 같고 vol_target_annual 없이 계산됨, t 이후 종가 미사용, 2011년 초 bear_t 이력이 없을 때 rebound_t = 0이면 0, 1이면 결측(D4), io.py로 index를 읽어 계산 (io.py가 없으면 오류 안내). 리포트의 데이터 지문이 2016년 이후 종가와 무관, 리포트 폴더 구성, 같은 run_id 덮어쓰기 거부 (R-11) |
 
 `tests/portfolio/fakes.py`의 가짜 엔진과 합성 시장은 테스트 전용이다. 4.3절 상·하한가, 거래정지, 상장폐지, M9 청산은 구현하지 않았고, 실험과 보고서에 쓰지 않는다.
 
@@ -293,6 +352,21 @@ M5 `run_period`가 호출당 1 ms면 약 5.3시간이 더 든다. 폴드와 시�
 영향: compute_regime_mc(B-02), regime_mc 피처(A-05), RL 관측, M8 노출 조절
 ```
 
+A-02 데이터(11/3)로 확인했다. 코스피 200이 2010-01-04부터라 bear_t의 창은 2011-03-31에 처음 찬다. universe 신호일 가운데 2011-01-07 ~ 2011-03-25의 12개가 여기에 걸린다.
+
+**B 결정 (2026-11-03, 조윤상)**: A가 Open API에 2009년 코스피 200 원천이 없음을 확인해 C는 할 수 없다. 대신 아래 규칙을 쓴다. 6.9절 식과 부록 1 값은 바뀌지 않고, 학습 신호일도 빠지지 않는다. A 동의와 PM의 decisions.md 기록을 기다린다.
+
+```text
+regime_mc_t = bear_t × rebound_t 그대로 계산한다.
+rebound_t = 0이면 bear_t의 창이 차지 않아도 regime_mc_t = 0이다 (곱이 bear_t와 상관없이 0).
+rebound_t = 1인데 bear_t를 계산할 수 없으면 결측이다 (InsufficientHistory).
+```
+
+- **근거**: rebound_t는 종가 21개만 있으면 원래 식대로 계산된다. 2011-01-03 ~ 03-30의 59거래일 모두 계산되고, 최댓값이 0.0866이라 전부 0이다. 그래서 이 기간 regime_mc는 추정 없이 0으로 정해진다
+- **확인**: 2011년 이후 3,890거래일에 결측이 없다. bear_t가 계산되는 3,831일은 수정 전 값(bear × rebound)과 같다
+- **옵션 B와 비교**: B(초기 신호일 12개를 학습에서 제외)는 값이 이미 정해진 신호일을 버린다
+- **참고**: bear_t가 1이 되려면 2009년 고점이 300.14 이상이어야 한다 (2010-10 ~ 2011-03 최저 종가 240.11 ÷ 0.8). 2010-01-04 종가는 223.49였다
+
 ### D5. 4.7절 폴드 분할·purge 공용 함수의 담당
 
 ```text
@@ -314,8 +388,8 @@ M5 `run_period`가 호출당 1 ms면 약 5.3시간이 더 든다. 폴드와 시�
 
 | 작업 | 기한 | 이 설계에서 이어지는 부분 |
 |---|---|---|
-| B-02 | 11/8 | `compute_vol_target_annual`, `compute_regime_mc(date)`, D4 |
-| B-03 | 11/13 | `buffer_rule_weights` |
-| B-04 | 11/16 | 경계 사례 테스트(한 업종 20종목, 보유 5종목, regime_mc = 1, sigma_t = 3 × vol_target_annual), 2011~2025년 E_t·regime_mc 그림 |
+| B-02 | 11/8 | 완료: 0.157263을 부록 1에 기입, PR #11 병합. Q-12 결과 칸은 PM이 기입했고 D4는 DEC-19로 기록됐다 |
+| B-03 | 11/13 | 단계 1~5와 엔진 위 실행을 구현했다 (2절). C의 M5(PR #8 헤드)를 합친 상태에서 합성 시장 실행을 확인했다: 목표 비중이 FakeEngine과 같고, 초과수익은 목표 합이 1인 체결(현금 부족 배율)에서만 최대 7e-5 다르다. PR #8 병합(b2b32a6) 뒤 main에서 `test_runs_on_c_execution_engine`이 건너뛰지 않고 통과한다 (전체 336 통과). 남은 것: A 코드 리뷰 승인. 실제 신호(A-04) 실행은 완료 기준 밖이라 B-05 완료 기준 (베이스라인 신호로 에피소드 끝까지)에서 확인한다 |
+| B-04 | 11/16 | 완료: 완료 기준 (1)·(2) 테스트 통과, (3) 그림 `reports/20261104_B_m8_states/` (4절, prereg.yaml 초안 기준), A 승인 (PR #13). 11/9 공식 사전등록에서 쓰는 키가 바뀌면 새 run_id로 다시 만든다 |
 | B-05 | 11/16 | M5 엔진 어댑터, 같은 비중일 때 버퍼 규칙과 체결·비용 결과 일치 |
 | B-06 | 11/23 | 폴드별 스냅샷 구성(D1, D5), R-10 기록(`reports/{run_id}/`), 베이스라인 신호 리허설 |

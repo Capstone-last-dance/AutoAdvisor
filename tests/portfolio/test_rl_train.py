@@ -1,6 +1,7 @@
 """PPO 학습 루프 (6.5절 λ 선택, 본 학습, 체크포인트, 테스트 행동).
 
 작업 B-01 완료 기준 '임의 입력으로 PPO 학습 루프가 돈다'를 확인한다. 스텝 수는 테스트 전용 축소값이다.
+PPO를 실제로 학습하는 테스트는 slow로 표시했다 (pytest -m "not slow"로 뺄 수 있다).
 """
 from __future__ import annotations
 
@@ -40,6 +41,7 @@ def _small(rl):
     )
 
 
+@pytest.mark.slow
 def test_ppo_loop_runs_on_synthetic_input(segments, rl_params, risk_params, tmp_path):
     train, val, engine = segments
     rl = _small(rl_params)
@@ -67,6 +69,7 @@ def test_ppo_loop_runs_on_synthetic_input(segments, rl_params, risk_params, tmp_
     assert (pos["constructor"] == "rl").all()
 
 
+@pytest.mark.slow
 def test_same_seed_gives_same_training(segments, rl_params, risk_params, tmp_path):
     train, val, engine = segments
     rl = _small(rl_params)

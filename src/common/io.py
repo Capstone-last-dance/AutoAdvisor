@@ -48,7 +48,7 @@ class Col:
     """열 하나의 규칙.
 
     kind: date, datetime_kst, str, ticker, ticker_or_cash, float64, int64, int32, int8,
-          nullable_int8, bool, number
+          nullable_int8, bool, nullable_bool, number
     """
 
     kind: str
@@ -90,13 +90,12 @@ SCHEMAS: dict[str, dict[str, Col]] = {
         "delisting_date": _c("date", nullable=True),
         "security_type": _c("str"),
     },
+    # DEC-24: 구성종목 2열은 쓰는 곳이 없어 뺀다. is_admin은 v2 전까지만 결측 허용 (False로 채우지 않는다)
     "status": {
         "date": _c("date"),
         "ticker": _c("ticker"),
-        "is_admin": _c("bool"),
+        "is_admin": _c("nullable_bool", nullable=True),
         "is_halted": _c("bool"),
-        "in_kospi200": _c("bool"),
-        "in_kosdaq150": _c("bool"),
     },
     "universe": {
         "date": _c("date"),
@@ -115,13 +114,7 @@ SCHEMAS: dict[str, dict[str, Col]] = {
         "valid_from": _c("date"),
         "valid_to": _c("date", nullable=True),
     },
-    "investor_flows": {
-        "date": _c("date"),
-        "ticker": _c("ticker"),
-        "retail_net": _c("int64"),
-        "foreign_net": _c("int64"),
-        "inst_net": _c("int64"),
-    },
+    # DEC-22: investor_flows는 원천이 없어 만들지 않는다.
     # DEC-09: 실제 접수 시각(rcept_dt)을 모르면 결측. 시점 판단은 available_at으로 한다.
     "disclosures": {
         "rcept_no": _c("str"),
@@ -202,8 +195,7 @@ SCHEMAS: dict[str, dict[str, Col]] = {
 # 6.2절 피처. 순위 변환 피처만 {피처}_na 열을 가진다.
 RANK_FEATURES = (
     "mom_12_1", "mom_12_7", "rev_1m", "rev_1w", "high52_prox", "vol_20", "vol_60",
-    "max_ret_20", "turnover_spike", "retail_net_20", "foreign_net_20", "inst_net_20",
-    "log_mcap", "news_cnt_spike", "news_sent_5",
+    "max_ret_20", "turnover_spike", "log_mcap", "news_cnt_spike", "news_sent_5",
 )
 RAW_FEATURES = (
     "penny_flag", "ss_allowed",
@@ -440,6 +432,9 @@ def _check_column(s: pd.Series, rule: Col) -> list[str]:
     elif kind in ("float64", "int64", "int32", "int8", "bool"):
         if s.dtype != np.dtype(kind):
             errors.append(f"자료형이 {kind}이 아니다 ({s.dtype})")
+    elif kind == "nullable_bool":
+        if s.dtype != np.dtype("bool") and s.dtype != pd.BooleanDtype():
+            errors.append(f"자료형이 bool(결측 허용 시 boolean)이 아니다 ({s.dtype})")
     elif kind == "nullable_int8":
         if s.dtype != np.dtype("int8") and s.dtype != pd.Int8Dtype():
             errors.append(f"자료형이 int8(결측 허용 시 Int8)이 아니다 ({s.dtype})")
