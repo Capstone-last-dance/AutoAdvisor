@@ -154,7 +154,8 @@ def test_delisted_reused_supplement_for_known_tickers():
     from src.data.build_openapi import REUSED_TICKER_OLD_LAST_DAY, build_delisted_reused
     days = [pd.Timestamp(d) for d in
             ["2015-03-13", "2015-03-16", "2015-03-17",            # 101970 마지막 거래일(03-16) 다음이 03-17
-             "2016-05-03", "2016-05-04", "2016-05-06"]]            # 036220 마지막 거래일(05-04) 다음이 05-06 (05-05 어린이날)
+             "2016-05-03", "2016-05-04", "2016-05-09"]]            # 036220 마지막 거래일(05-04) 다음이 05-09
+                                                                    # (05-05 어린이날, 05-06 임시공휴일, 05-07~08 주말)
     p = pd.DataFrame([
         {"ticker": "101970", "date": pd.Timestamp("2015-03-16"), "close_raw": 830.0},
         {"ticker": "036220", "date": pd.Timestamp("2016-05-04"), "close_raw": 3500.0},
@@ -163,7 +164,7 @@ def test_delisted_reused_supplement_for_known_tickers():
     assert set(out["ticker"]) == set(REUSED_TICKER_OLD_LAST_DAY)
     row = out.set_index("ticker")
     assert row.loc["101970", "last_price"] == 830.0 and row.loc["101970", "delist_date"] == pd.Timestamp("2015-03-17")
-    assert row.loc["036220", "last_price"] == 3500.0 and row.loc["036220", "delist_date"] == pd.Timestamp("2016-05-06")
+    assert row.loc["036220", "last_price"] == 3500.0 and row.loc["036220", "delist_date"] == pd.Timestamp("2016-05-09")
 
 
 def test_delisted_reused_raises_if_price_missing_in_covered_range():
