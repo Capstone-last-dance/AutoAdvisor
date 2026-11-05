@@ -150,7 +150,7 @@ risk_layer:
 
 events:
   report_name_normalization: "remove_spaces_and_middle_dots"
-  exit: "close_of_next_trading_day_after_receipt"
+  exit: "close_of_next_trading_day_after_available_date"
   cooldown_trading_days: 20
   title_filters:                     # ev_*와 T1~T6 후보에서 신규 사건이 아닌 공시를 뺀다 (Q-13)
     strip_prefixes: ["[첨부추가]", "[정정명령부과]"]  # 원 공시에 나중에 붙는 표시. 떼고 판정
