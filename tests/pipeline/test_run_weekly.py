@@ -95,12 +95,12 @@ class FailureTest(TempRootTest):
         self.assertEqual(rw.run(DAY, steps), 1)
         self.assertFalse((self.tmp / "_stub" / "signals" / f"{DAY}.parquet").exists())
 
-    def test_all_real_steps_reach_unimplemented_commit(self):
-        # 스텁이 없으면 7단계 커밋을 해야 하는데, D-04 전에는 조용히 넘어가지 않고 실패한다
+    def test_all_real_steps_without_signals_fail_commit(self):
+        # 스텁이 없으면 7단계에서 커밋한다. 신호 파일이 없으면 조용히 넘어가지 않고 실패한다
         noop = lambda ctx: None
         steps = with_entries(s1=noop, s2=noop, s3=noop, s4=noop, s5=noop, s6=noop)
         self.assertEqual(rw.run(DAY, steps), 1)
-        self.assertIn("NotImplementedError", self.log_text())
+        self.assertIn("7단계 M7 forward test 커밋: 실패", self.log_text())
 
 
 class StubPropagationTest(TempRootTest):

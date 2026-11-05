@@ -28,6 +28,7 @@ from pathlib import Path
 import pandas as pd
 
 from src.common import io
+from src.pipeline import forward_test
 
 PROCESSED_TABLES = (
     "prices", "index", "tickers", "status", "universe", "delisted", "sector", "disclosures", "news",
@@ -121,8 +122,8 @@ def forward_test_commit(ctx: StepContext) -> None:
         ctx.log.info("7단계: 스텁이 쓰인 실행이라 forward test 커밋을 하지 않는다 (스텁 단계: %s)",
                      ", ".join(ctx.stubbed))
         return
-    # 신호·비중 커밋과 해시 기록은 작업 D-04에서 구현한다. 조용히 건너뛰지 않도록 실패로 끝낸다.
-    raise NotImplementedError("forward test 커밋은 D-04에서 구현한다")
+    commit_hash = forward_test.record(ctx.date)
+    ctx.log.info("7단계: 신호 커밋 %s를 forward_log.csv에 기록하고 push했다", commit_hash)
 
 
 def _no_stub(ctx: StepContext) -> None:
