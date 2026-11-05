@@ -455,6 +455,22 @@ python -m src.pipeline.run_weekly --date YYYY-MM-DD
 - 스텁이 하나라도 쓰인 실행은 forward test 커밋을 하지 않는다.
 - 모듈 연결: `src/pipeline/run_weekly.py`의 `STEPS`에서 해당 단계의 `entry`에 `"모듈경로:함수이름"`을 적는다. 함수는 `fn(ctx)` 형태로, 입력은 `ctx.read_table`, 출력은 `ctx.write_table`로 다룬다. 연결할 함수가 준비되면 D에게 알려 준다.
 
+#### forward test 기록
+
+```bash
+git fetch origin
+git switch -c forward/YYYYMMDD origin/main
+python -m src.pipeline.forward_test --date YYYY-MM-DD --source-commit <신호를 만든 코드 커밋>
+```
+
+`signals/{date}.parquet`(있으면 `positions/{date}.parquet`도)를 커밋하고, 그 커밋 해시를 `forward_log.csv`에 적어 한 번 더 커밋한다. 신호 커밋에 태그 `ft-YYYYMMDD`를 붙이고 브랜치와 태그를 push한다. 주간 실행의 7단계도 같은 기록을 한다 (명세서 6.8절, DEC-04).
+
+- `forward/YYYYMMDD` 브랜치에서만 기록한다. main에는 PR을 merge commit으로만 병합한다 (squash·rebase 금지, 해시 보존).
+- 신호일 23:59 KST가 지나면 기록하지 않는다. 이미 기록한 신호일도 다시 기록하지 않는다.
+- `_stub/`의 파일은 읽지 않는다. 신호 파일 외의 변경은 커밋에 넣지 않는다.
+- `--source-commit`의 커밋은 로컬에 있어야 한다 (없으면 `git fetch`). 두 커밋 메시지에 적힌다.
+- 리허설은 `--no-push`로 커밋·태그까지만 한다. push만 실패하면 안내된 `git push` 명령을 직접 실행한다.
+
 #### 일간 경보와 대시보드
 
 > **작성 예정** (D-06: 일간 경보 실행기, D-05: 대시보드)
