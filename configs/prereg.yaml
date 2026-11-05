@@ -63,6 +63,7 @@ features:
   rank_transform: "pct_average_within_universe"
   missing_fill: 0.5
   add_missing_flag: true
+  model_input_exclusions: ["ss_allowed"]  # DEC-29. v1에서 ss_regime은 유지
   event_window_days: 20
   news_window_days: 5
   news_baseline_offsets: [-64, -5]
