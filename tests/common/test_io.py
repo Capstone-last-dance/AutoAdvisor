@@ -40,7 +40,7 @@ def sample(name: str) -> pd.DataFrame:
         "universe": dict(date=d, ticker=tickers, mcap_rank=np.array([1, 2], dtype="int32"),
                          in_universe=[True, True]),
         "delisted": dict(ticker=tickers, delist_date=d, last_price=[100.0, np.nan]),
-        "delisted_reused": dict(ticker=["101970", "036220"], delist_date=pd.to_datetime(["2015-03-17", "2016-05-06"]),
+        "delisted_reused": dict(ticker=["101970", "036220"], delist_date=pd.to_datetime(["2015-03-17", "2016-05-09"]),
                                 last_price=[10.0, 20.0]),
         "sector": dict(ticker=tickers, sector=["전기전자", "미분류"],
                        valid_from=pd.to_datetime(["2010-01-04", "2010-01-04"]),
