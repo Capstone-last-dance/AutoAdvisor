@@ -108,6 +108,12 @@ SCHEMAS: dict[str, dict[str, Col]] = {
         "delist_date": _c("date"),
         "last_price": _c("float64", nullable=True),
     },
+    # DEC-28: 재사용 종목코드의 옛 회사 상장폐지 보완. delisted와 같은 열·정의
+    "delisted_reused": {
+        "ticker": _c("ticker"),
+        "delist_date": _c("date"),
+        "last_price": _c("float64", nullable=True),
+    },
     "sector": {
         "ticker": _c("ticker"),
         "sector": _c("str"),
