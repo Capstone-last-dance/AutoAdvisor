@@ -35,8 +35,7 @@ def sample(name: str) -> pd.DataFrame:
                         listing_date=pd.to_datetime(["2000-01-04", "2001-01-04"]),
                         delisting_date=pd.to_datetime([None, "2020-01-02"]),
                         security_type=["common", "common"]),
-        "status": dict(date=d, ticker=tickers, is_admin=pd.array([False, None], dtype="boolean"),
-                       is_halted=[False, True]),
+        "status": dict(date=d, ticker=tickers, is_admin=pd.array([False, None], dtype="boolean"), is_halted=[False, True]),
         "universe": dict(date=d, ticker=tickers, mcap_rank=np.array([1, 2], dtype="int32"),
                          in_universe=[True, True]),
         "delisted": dict(ticker=tickers, delist_date=d, last_price=[100.0, np.nan]),
@@ -257,11 +256,6 @@ class ValidateRejectsTest(unittest.TestCase):
         df = sample("status"); df["is_halted"] = pd.array([False, None], dtype="boolean")
         self.assertRejects("status", df)                                            # is_halted는 결측 불가
 
-    def test_dec22_no_investor_flows(self):
-        self.assertNotIn("investor_flows", io.SCHEMAS)
-        df = sample("features"); df["retail_net_20"] = [0.1, 0.2]
-        self.assertRejects("features", df)
-
     def test_nulls(self):
         df = sample("signals"); df["crash_prob"] = [0.1, np.nan]
         self.assertRejects("signals", df)
@@ -280,6 +274,12 @@ class ValidateRejectsTest(unittest.TestCase):
         df = sample("features"); df["mom_12_1_na"] = np.array([0, 2], dtype="int8")
         self.assertRejects("features", df)
         df = sample("features"); df["mom_12_1"] = ["a", "b"]
+        self.assertRejects("features", df)
+
+    def test_dec22_no_investor_flows(self):
+        """DEC-22: 원천이 없어 investor_flows 테이블·피처(retail/foreign/inst_net_20)를 안 만든다."""
+        self.assertNotIn("investor_flows", io.SCHEMAS)
+        df = sample("features"); df["retail_net_20"] = [0.1, 0.2]
         self.assertRejects("features", df)
 
     def test_not_a_dataframe(self):

@@ -1,0 +1,4 @@
+snapshot: 2026-11-02
+processed: /home/sogang007@SGVDI.local/env/_stub/data/processed
+no_krx: True
+command: /home/sogang007@SGVDI.local/env/src/data/quality_report.py --snapshot 2026-11-02 --no-krx --tag full

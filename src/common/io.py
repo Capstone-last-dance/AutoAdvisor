@@ -79,7 +79,7 @@ SCHEMAS: dict[str, dict[str, Col]] = {
     },
     "index": {
         "date": _c("date"),
-        "index_code": _c("str", allowed={"KOSPI200"}),
+        "index_code": _c("str", allowed={"KOSPI200"}),   # PM 결정(2026-11-04): 코스닥150은 io.py 안 바꾸고 A 배포 파일에서 뺀다
         "close": _c("float64"),
     },
     "tickers": {
@@ -94,7 +94,7 @@ SCHEMAS: dict[str, dict[str, Col]] = {
     "status": {
         "date": _c("date"),
         "ticker": _c("ticker"),
-        "is_admin": _c("nullable_bool", nullable=True),
+        "is_admin": _c("nullable_bool", nullable=True),   # 관리종목 이력 원천 확보 전(Q-06) 결측 허용 (DEC-24, v2까지)
         "is_halted": _c("bool"),
     },
     "universe": {
@@ -426,6 +426,9 @@ def _check_column(s: pd.Series, rule: Col) -> list[str]:
     elif kind == "nullable_int8":
         if s.dtype != np.dtype("int8") and s.dtype != pd.Int8Dtype():
             errors.append(f"자료형이 int8(결측 허용 시 Int8)이 아니다 ({s.dtype})")
+    elif kind == "nullable_bool":
+        if s.dtype != pd.BooleanDtype():
+            errors.append(f"자료형이 boolean(결측 허용 bool)이 아니다 ({s.dtype})")
     elif kind == "number":
         if not pd.api.types.is_numeric_dtype(s) or pd.api.types.is_bool_dtype(s):
             errors.append(f"숫자 자료형이 아니다 ({s.dtype})")
