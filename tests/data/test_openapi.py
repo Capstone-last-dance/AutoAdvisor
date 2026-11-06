@@ -122,6 +122,43 @@ def test_fetch_saves_verbatim_skips_existing_and_keeps_empty_days(tmp_path):
     assert not list(out.rglob("*.tmp"))
 
 
+def test_settled_waits_two_business_days_across_a_weekend():
+    friday = date(2026, 11, 6)
+    assert not co.settled(friday, today=friday)                      # 당일
+    assert not co.settled(friday, today=date(2026, 11, 9))           # 다음 영업일(월) 하루뿐
+    assert co.settled(friday, today=date(2026, 11, 10))              # 영업일 2일(월·화)이 지남
+    assert not co.settled(date(2026, 11, 10), today=date(2026, 11, 9))   # 미래 날짜는 확정이 아니다
+    assert co.settled(friday, today=date(2026, 11, 9), business_days=0)  # 휴장일이 확실하면 기다리지 않을 수 있다
+
+
+def test_empty_response_for_an_unsettled_day_is_not_saved_and_is_retried(tmp_path):
+    """공개 전 빈 응답을 저장하면 pending()이 '이미 받음'으로 보고 다시 호출하지 않는다(2026-11-06에 실제로 막혔던 지점)."""
+    out = tmp_path / "raw"
+    d = date(2026, 11, 6)
+    f = Fake((200, EMPTY))
+    held, fails = [], []
+    n = co.fetch_all(_client(tmp_path, f), out, "krx_dd_trd", [d], 0, fails, sleep=lambda s: None,
+                     held=held, today=d)
+    assert n == 0 and held == [d] and fails == []
+    assert not co.raw_path(out, "krx_dd_trd", d).exists()
+    assert co.pending(out, "krx_dd_trd", [d]) == [d]        # 다음 실행에서 다시 호출한다
+
+    f2 = Fake((200, OK))                                     # 공개된 뒤 같은 명령을 다시 돌리면 그대로 받는다
+    assert co.fetch_all(_client(tmp_path, f2), out, "krx_dd_trd", [d], 0, fails, sleep=lambda s: None, today=d) == 1
+    assert co.raw_path(out, "krx_dd_trd", d).read_text() == OK
+
+
+def test_empty_response_for_a_settled_day_is_saved_as_a_holiday(tmp_path):
+    out = tmp_path / "raw"
+    d = date(2026, 11, 6)
+    held = []
+    n = co.fetch_all(_client(tmp_path, Fake((200, EMPTY))), out, "krx_dd_trd", [d], 0, [], sleep=lambda s: None,
+                     held=held, today=date(2026, 11, 10))
+    assert n == 1 and held == []
+    assert co.raw_path(out, "krx_dd_trd", d).read_text() == EMPTY
+    assert d not in co.calendar_days(out, "krx_dd_trd", [d])   # 휴장일 판정은 그대로다
+
+
 def test_fetch_aborts_after_consecutive_failures_but_records_them(tmp_path):
     f = Fake((400, "bad"))
     fails = []
