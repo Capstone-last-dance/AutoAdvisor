@@ -16,10 +16,12 @@
 | 〃 `compute_regime_mc(date)`, `compute_vol_target_annual` | 공개 함수, Q-12 값 계산 | 구현 (B-02). 값 0.157263을 부록 1에 기입했다 (4절) |
 | `src/portfolio/vol_target_report.py` | B-02 결과 리포트: `python -m src.portfolio.vol_target_report --run-id {YYYYMMDD}_B_{설명}` → `reports/{run_id}/`에 config.yaml 사본, git_commit.txt, metrics.json (R-10) | 구현 (B-02) |
 | `src/portfolio/market_state_report.py` | B-04 결과 리포트: `python -m src.portfolio.market_state_report --run-id {YYYYMMDD}_B_{설명}` → 위 세 파일과 `figures/e_t_regime_mc.svg`(2011~2025년 일별 E_t·regime_mc 그림), 그 원자료 `figures/e_t_regime_mc.csv` | 구현 (B-04). 실제 실행은 4절 |
-| `src/portfolio/buffer_rule.py` | 버퍼 규칙 단계 1~5와 엔진 위 실행 (`run_buffer_rule`) | 구현 (B-03). 실제 M5 연결은 B-05 |
+| `src/portfolio/buffer_rule.py` | 버퍼 규칙 단계 1~5와 엔진 위 실행 (`run_buffer_rule`) | 구현 (B-03). C 엔진 연결은 `engine_adapter.py` |
+| `src/portfolio/engine_adapter.py` | 9.3절 `prices`·`status`·`index`·`delisted`(+ DEC-28 `delisted_reused`)와 부록 1 `costs`·`execution` → C의 `ExecutionEngine` (`engine_inputs`, `load_engine_inputs`, `build_engine`, `cost_rates`) | 구현 (B-05). 규칙은 5.1절 |
+| `src/portfolio/env_check.py` | B-05 완료 기준 확인: `run_full_episode`(끝까지 실행), `compare_buffer_and_env`(같은 비중이면 같은 체결·비용), `BufferWeightsEnv`, `ledger_counts` | 구현 (B-05). 실제 신호 리포트는 A PR #1 병합 뒤 |
 | `src/portfolio/interfaces.py` | B가 C(M5)와 PM(M9)에 기대하는 호출 형태 | 초안. C·PM 확인 필요 (5절) |
 | `src/portfolio/rl_data.py` | 9.3절 표 → 신호일별 스냅샷 | 구현 |
-| `src/portfolio/rl_env.py` | gymnasium 환경: 관측, 행동 해석, M8 호출, 보상 | 구현. 실제 M5 연결은 B-05 |
+| `src/portfolio/rl_env.py` | gymnasium 환경: 관측, 행동 해석, M8 호출, 보상 | 구현. C 엔진 위 실행 확인 (B-05) |
 | `src/portfolio/rl_train.py` | λ 선택, 본 학습, 검증 IR 체크포인트, 결정적 운용 | 구현. 폴드 데이터 구성과 R-10 기록은 B-06 |
 | `tests/portfolio/` | 단위 테스트와 테스트 전용 가짜 입력(`fakes.py`) | 구현 (7절) |
 
@@ -181,13 +183,23 @@ C-01(`docs/design_C.md`, PR #3 병합)은 5.1절 형태를 `src.backtest.engine.
 3. positions에 없는 종목의 목표 비중은 0으로 해석한다.
 4. IR 함수는 주간 초과수익 배열을 받아 실수 하나를 돌려준다 (`IRFunction`).
 
-B-05 어댑터가 A의 9.3절 파일을 엔진 입력으로 바꾸는 규칙 (11/4 PM 결정 반영):
+B-05 어댑터(`engine_adapter.py`)가 A의 9.3절 파일을 엔진 입력으로 바꾸는 규칙 (11/4 PM 결정 반영):
 
 | 엔진 입력 | 만드는 법 | 근거 |
 |---|---|---|
-| `halted` | 일별 `status.is_halted`. v1은 `volume == 0`이다 | DEC-24, DEC-26 |
+| `halted` | 일별 `status.is_halted`. v1은 `volume == 0`이다. status 행이 없는 칸은 결측(알 수 없음)이고, 종가가 있는데 행이 없으면 멈춘다 | DEC-24, DEC-26 |
 | `closes` | `prices.close` 그대로 넘긴다 | 정지일 평가 가격은 엔진이 마지막 거래일 수정종가로 바꾼다 (DEC-25, PR #8 c82fa1b) |
-| `delistings` | `delisted.delist_date`를 마지막 가격일(전 거래일)로 옮긴다 | PR #8 docstring |
+| `bm_close` | `index`에서 `index_code` = KOSPI200. 가격 표의 거래일이 하나라도 빠지면 멈춘다 | DEC-27 |
+| `delistings` | `delisted`와 `delisted_reused`를 합친다. `delist_date`를 마지막 가격일(전 거래일)로 옮기고, 원종가 `last_price`는 그날 close ÷ close_raw로 수정종가 단위로 바꾼다. 결측이면 0으로 청산 | PR #8 docstring, DEC-28, 부록 1 `execution.delisted_without_price_value` |
+| 비용 | 부록 1 `costs`. 기본 실행은 배율 1, 스트레스 실행만 `stress_multiplier` | 4.8절 |
+| 쿨다운·이벤트 청산 | M9(PM) 함수가 나오기 전까지 비어 있다 | 5.2절 |
+
+- 엔진은 실행마다 새로 만든다 (`rebalance_count`가 인스턴스에 쌓인다). 표 변환(`EngineInputs`)은 한 번만 한다.
+- 부록 1의 `costs.cash_return`이 0이 아니거나, `execution.delisted_without_price_value`가 0이 아니거나, `calendar.execution`이 다음 거래일 종가가 아니면 멈춘다. 엔진이 그 동작만 구현한다.
+- 폐지 뒤 가격이 다시 나타나는데 엔진이 새 상장으로 인식하지 않는 코드가 있으면 멈춘다 (DEC-28은 두 건만 다룬다).
+- 11/4 실제 데이터(로컬 A 파일): 4,141거래일 × 3,697종목, 빈 칸 39.0%, 정지 칸 288,431, 폐지 930건. 표 읽기·변환 15.5초, 엔진 생성 0.26초.
+  - `delisted` 930건 모두 마지막 가격일이 `delist_date`의 전 거래일이고, `last_price` = 그날 원종가 = 수정종가다.
+  - DEC-28 옛 회사 두 건(A 154b089의 `build_delisted_reused`로 만듦)은 원종가와 수정종가가 다르다. 101970은 830원 → 18,639.16, 036220은 3,500원 → 20,000이다. 원종가 그대로 청산하면 보유분이 각각 −96%, −83%로 잘못 평가된다. 그래서 단위를 바꾼다.
 
 - 정지일 평가 가격 (DEC-25):
   - 11/4 A 데이터에서 거래량 0인 288,431행 가운데 수정종가가 마지막 거래일과 다른 행은 19,294행이다 (보통주 1,621).
@@ -205,11 +217,32 @@ B-05 어댑터가 A의 9.3절 파일을 엔진 입력으로 바꾸는 규칙 (11
   - C가 c82fa1b에서 고쳤다. 두 코드에 한해, 폐지 뒤 가격 공백 다음의 첫 가격일부터 폐지 제한을 푼다 (`relisting_index`). 그날은 전일 종가가 없으므로 가격 제한 판정을 하지 않는다.
   - B 재현(옛 회사 D4 폐지, 새 회사 D10 상장)에서 새 회사 0.3 매수가 체결됐다. B main과 합친 전체 테스트는 336 통과, 1 건너뜀이다.
   - B 코드(`rl_env.py`, `buffer_rule.py`)는 보유를 엔진 상태에서만 읽어, 종목코드별로 남는 기록이 없다.
-  - 실제 데이터 확인은 A가 옛 회사의 폐지일·정리매매 가격을 보완한 뒤 B-05에서 한다.
+  - 어댑터로 넘기면 옛 회사는 폐지일에 청산되고 새 회사는 살 수 있다 (`test_reused_ticker_old_company_liquidated_and_new_company_buyable`). 실제 데이터에서도 엔진이 두 코드를 새 상장으로 인식한다.
+
+B-05 완료 기준 확인 (`env_check.py`):
+
+- (1) `run_full_episode`: RL 환경(`episode="full"`)이 첫 신호일부터 마지막 신호일까지 엔진으로 체결한다.
+- (2) `compare_buffer_and_env`: 행동 해석 자리에 버퍼 규칙 단계 1~4의 w_raw를 넣은 RL 환경(`BufferWeightsEnv`)과 `run_buffer_rule`을 각자 새 엔진에서 돌린다. 목표 비중, 일별 체결(수량·금액·비용)과 거부 이유, 일별 NAV·현금, 구간 초과수익·회전율을 비교한다.
+- 합성 시장(테스트, 157개 신호일, 정지 칸 1.8%, 보유 중 폐지 1건): 차이는 모두 0이다. 정지 거부 119번, 폐지 청산 1번이 실제로 일어났다.
+- 실제 데이터 미리보기 (11/4 스크래치, 공식 결과 아님):
+  - 조건: B main과 A PR #1(154b089)을 임시로 합친 폴더에서 돌렸다. 신호는 A의 `baseline_signals`, vol_20은 A의 정의대로 B가 계산했다. 쿨다운은 비어 있다.
+  - 2011-01-07 ~ 2025-12-26의 781개 신호일(U_t 평균 419종목)이 행동 0과 무작위 행동 모두 끝까지 돌았다. 스텝당 0.55 ms다.
+  - (2)의 차이는 모두 0이다. 체결 12,277건이 있었고, 거부는 정지 71번, 하한가 근접 5번, 상한가 근접 2번이었다. 보유 중 폐지는 없었다.
+- 남은 것: A PR #1 병합 뒤 A의 signals·features로 같은 실행을 `reports/{run_id}/`에 남긴다.
 
 ### 5.2 M9 쿨다운 (PM 장지원)
 
-`CooldownFunction(신호일 t) -> 종목코드 목록`: 체결일 t+1에 신규 진입이 금지된 종목이다. 접수 시각이 t일 15:30 이전인 공시만 쓴다 (R-03). 쿨다운 기간은 6.10절대로 접수일 다음 거래일부터 20거래일이다.
+6.10절(PR #16 반영본)을 따른다.
+
+- 쿨다운 기간: 경보 근거 공시의 `available_at`이 속한 KST 날짜의 다음 KRX 거래일부터 20거래일이다. 같은 사건의 후속 공시는 기존 종료일을 유지하고, 별개 사건은 각각 20거래일을 적용한다. 걸린 기간이 하나라도 있으면 진입 금지다.
+- 사건 연결과 거래일 계산은 M9(PM)가 한다. B는 결과인 종목 집합만 쓰므로, `rcept_no` 형식(`KIND:<acptno>` 포함)이나 같은 경보가 두 출처에서 온 것은 B 결과를 바꾸지 않는다.
+
+| 쓰는 곳 | 형태 | 포함하는 경보 |
+|---|---|---|
+| 신호일 t의 목표 (버퍼 규칙 단계 2·3, RL 마스킹, M8 Step 1) | `CooldownFunction(t) -> 종목코드 목록`: 체결일 t+1에 진입 금지인 종목 | `available_at < cutoff_at`(t)인 경보만 (R-03) |
+| 체결 (C 엔진 `cooldowns`, `event_liquidations`) | 체결일 → 종목코드 집합 | 그 체결일에 걸린 모든 경보 |
+
+- t일 컷오프 뒤에 공개된 경보(금요일 저녁·주말 공개 포함)도 쿨다운은 t+1부터 걸린다. 신호일에는 쓸 수 없는 정보라 목표에는 남을 수 있다. 그 매수는 엔진이 체결일에 거부하고(현금으로 남음), 보유 종목이면 엔진이 t+1 종가에 청산한다 (6.10절 처리: 보유 종목).
 
 ### 5.3 신호와 피처 (A 김윤하)
 
@@ -256,6 +289,8 @@ PPO를 실제로 학습하는 테스트 2개는 `slow`로 표시했다. `-m "not
 |---|---|
 | `test_buffer_rule.py` | **B-03 완료 기준**: 단계 2 버퍼(rank 21~40 유지, 41부터 매도, 미보유 rank 21~40은 사지 않음), crash_flag·쿨다운·U_t 밖·signals에 없는 보유 종목 매도, 단계 3 후보 부족·전액 현금, 유지 종목이 보유 상한에 포함됨, 단계 5 M8(업종 한도·E_t)과 G7·G4 모드, H를 엔진의 실제 보유에서 읽음, 합성 시장 전 구간을 엔진 위에서 실행(불변식·보유 20개 이하), 같은 실행을 C의 M5 엔진에서 해 목표 비중이 같음(엔진이 없으면 건너뜀), 버퍼가 회전율을 낮춤 |
 | `test_params.py` | 부록 1 값과 키 이름 (R-14), FILL_ 값을 쓰면 멈춤 (R-08), 구현하지 않은 설정값 거부, `configs/prereg.yaml` 커밋 뒤 테스트 입력과 같은지 (커밋 전에는 건너뜀) |
+| `test_engine_adapter.py` | B-05 어댑터: 표 → 종가·정지 행렬(상장 전 결측, KOSPI200 행만), status 행이나 지수 거래일이 빠지면 멈춤, 폐지일을 전 거래일로 옮기고 원종가를 수정종가 단위로 바꿔 청산, 가격 없는 폐지는 0, 잘못된 delist_date 거부, DEC-28 옛 회사 청산과 새 회사 매수, 엔진이 모르는 재상장은 멈춤, 정지일 평가(DEC-25), 비용 배율, 엔진이 구현하지 않은 부록 1 값 거부 |
+| `test_env_check.py` | **B-05 완료 기준 (1)·(2)** (합성 신호): 9.3절 형식 합성 표(정지 칸, 보유 중 폐지 1건)를 어댑터로 C 엔진에 넣는다. RL 환경이 행동 0·무작위 행동으로 끝까지 돌고, 버퍼 비중을 넣은 RL 환경과 버퍼 규칙의 체결·비용·NAV 차이가 0이며 정지 거부와 폐지 청산이 실제로 일어난다. 비용 배율을 다르게 하면 차이가 잡힌다 |
 | `test_market_state_report.py` | **B-04 완료 기준 (3)**: 그림 기간의 매 거래일이 결측 없이 계산되고 M8 표와 같다. 기간 뒤 종가를 바꿔도 결과와 데이터 지문이 같다. 이력 부족·해가 끝나지 않음·FILL_이면 멈춘다. metrics와 일별 표가 일치하고, SVG가 올바른 XML이며 같은 입력이면 같다. 리포트 폴더 구성과 덮어쓰기 거부 (R-11) |
 | `test_risk_layer.py` | **B-04 완료 기준 (1)·(2)**. (2) 경계 사례는 손으로 계산할 수 있는 결정적 코스피 200 경로로 확인한다: 한 업종 20종목(업종 있음·'미분류', 한 종목 쏠림), 보유 5종목(한도 0.10, 업종 합이 정확히 0.30), regime_mc = 1(상한 0.70이 걸릴 때와 안 걸릴 때), sigma_t = 3배(E_t = 1/3)와 4배(하한 0.30), 네 경계가 겹칠 때. 그 밖에 Step 4~5를 6.9절 식 그대로의 느린 구현과 비교, regime_mc = 1일 때 E_t 상한, t 이후 코스피 200 미사용 (R-03), Step 1~3·6 손계산, '미분류' 한 그룹, mode off, 무작위 입력 200건의 불변식, 위반 시 예외, positions를 io.py로 쓰고 읽기 (io.py가 있을 때) |
 | `test_rl_env.py` | SB3·gymnasium 환경 검사, 관측 배치, 보유·U_t 밖 슬롯, 마스킹, 상위 20개와 min_weight, 전액 현금, 보상 식, 52스텝과 구간 경계, 슬롯 초과, 9.3절 표 → 스냅샷 |
@@ -391,5 +426,5 @@ rebound_t = 1인데 bear_t를 계산할 수 없으면 결측이다 (Insufficient
 | B-02 | 11/8 | 완료: 0.157263을 부록 1에 기입, PR #11 병합. Q-12 결과 칸은 PM이 기입했고 D4는 DEC-19로 기록됐다 |
 | B-03 | 11/13 | 단계 1~5와 엔진 위 실행을 구현했다 (2절). C의 M5(PR #8 헤드)를 합친 상태에서 합성 시장 실행을 확인했다: 목표 비중이 FakeEngine과 같고, 초과수익은 목표 합이 1인 체결(현금 부족 배율)에서만 최대 7e-5 다르다. PR #8 병합(b2b32a6) 뒤 main에서 `test_runs_on_c_execution_engine`이 건너뛰지 않고 통과한다 (전체 336 통과). 남은 것: A 코드 리뷰 승인. 실제 신호(A-04) 실행은 완료 기준 밖이라 B-05 완료 기준 (베이스라인 신호로 에피소드 끝까지)에서 확인한다 |
 | B-04 | 11/16 | 완료: 완료 기준 (1)·(2) 테스트 통과, (3) 그림 `reports/20261104_B_m8_states/` (4절, prereg.yaml 초안 기준), A 승인 (PR #13). 11/9 공식 사전등록에서 쓰는 키가 바뀌면 새 run_id로 다시 만든다 |
-| B-05 | 11/16 | M5 엔진 어댑터, 같은 비중일 때 버퍼 규칙과 체결·비용 결과 일치 |
+| B-05 | 11/16 | 엔진 어댑터와 완료 기준 확인 함수 구현 (5.1절). 합성 시장에서 (1) 끝까지 실행, (2) 버퍼 규칙과 차이 0. 실제 A 베이스라인 신호 미리보기도 781개 신호일 끝까지, 차이 0. 남은 것: A PR #1 병합 뒤 리포트(`reports/{run_id}/`), A 리뷰 |
 | B-06 | 11/23 | 폴드별 스냅샷 구성(D1, D5), R-10 기록(`reports/{run_id}/`), 베이스라인 신호 리허설 |

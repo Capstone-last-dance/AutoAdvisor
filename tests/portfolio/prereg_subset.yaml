@@ -21,6 +21,10 @@ costs:
   stress_multiplier: 2.0
   cash_return: 0.0
 
+execution:
+  limit_move_abs_return: 0.295
+  delisted_without_price_value: 0.0
+
 splits:
   walk_forward_test_years: [2016, 2017, 2018, 2019, 2020, 2021, 2022, 2023, 2024, 2025]
   validation_years: 2

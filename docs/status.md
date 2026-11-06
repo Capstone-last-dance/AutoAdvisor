@@ -36,9 +36,9 @@
 | A-11 | A 김윤하 | 기한 없음 | 대기 | | |
 | B-01 | B 조윤상 | 11/1 | 완료 | docs/design_B.md; src/portfolio/; [PR #4](https://github.com/Capstone-last-dance/AutoAdvisor/pull/4) | M4·M8 설계와 PPO 골격. 합성 입력으로 학습 루프 테스트 통과, A 리뷰 후 병합 |
 | B-02 | B 조윤상 | 11/8 | 완료 | src/portfolio/risk_layer.py; src/portfolio/vol_target_report.py; reports/20261103_B_vol_target/; [PR #11](https://github.com/Capstone-last-dance/AutoAdvisor/pull/11) | vol_target_annual = 0.157263 계산·부록 1 기입, 2011~2015 데이터만 사용 테스트 통과. compute_regime_mc 공개, DEC-19 반영 |
-| B-03 | B 조윤상 | 11/13 | 진행 중 | src/portfolio/buffer_rule.py; tests/portfolio/test_buffer_rule.py | 단계 1~5 단위 테스트 통과. PR #8 병합 뒤 main에서 C의 M5 위 합성 시장 실행 테스트 통과(건너뛰지 않음). A 코드 리뷰 승인 남음. 실제 신호(A-04) 실행은 B-05에서 확인 |
+| B-03 | B 조윤상 | 11/13 | 완료 | src/portfolio/buffer_rule.py; tests/portfolio/test_buffer_rule.py; [PR #13](https://github.com/Capstone-last-dance/AutoAdvisor/pull/13) | 단계 1~5 단위 테스트 통과. PR #8 병합 뒤 main에서 C의 M5 위 합성 시장 실행 테스트 통과(건너뛰지 않음). A 승인. 실제 신호(A-04) 실행은 B-05에서 확인 |
 | B-04 | B 조윤상 | 11/16 | 완료 | src/portfolio/risk_layer.py; src/portfolio/market_state_report.py; tests/portfolio/test_risk_layer.py; tests/portfolio/test_market_state_report.py; reports/20261104_B_m8_states/; [PR #13](https://github.com/Capstone-last-dance/AutoAdvisor/pull/13) | 불변식·경계 사례 테스트 통과, 2011~2025년 E_t·regime_mc 그림(prereg.yaml 초안 기준). A 승인. 11/9 공식 사전등록에서 쓰는 키가 바뀌면 새 run_id로 다시 만듦 |
-| B-05 | B 조윤상 | 11/16 | 대기 | docs/design_B.md 5.1절 | 어댑터 규칙에 DEC-25·26 반영. PR #8(c82fa1b)에서 DEC-25 재개일 처리·정지일 평가와 DEC-28 재사용 코드(옛 회사 청산, 새 회사 매수)를 합성 시장으로 확인. 실제 데이터 확인은 A 보완 데이터와 PR #8 병합 뒤 |
+| B-05 | B 조윤상 | 11/16 | 진행 중 | src/portfolio/engine_adapter.py; src/portfolio/env_check.py; tests/portfolio/test_engine_adapter.py; tests/portfolio/test_env_check.py; docs/design_B.md 5.1절 | 9.3절 표 → C 엔진 어댑터(DEC-24~28 반영) 구현. 합성 시장에서 완료 기준 (1) 끝까지 실행, (2) 버퍼 규칙과 체결·비용 차이 0 통과. A 베이스라인 신호 미리보기(781개 신호일)도 통과. A PR #1 병합 뒤 리포트와 A 리뷰 남음 |
 | B-06 | B 조윤상 | 11/23 | 대기 | | |
 | B-07 | B 조윤상 | 11/30 | 대기 | | |
 | B-08 | B 조윤상 | 12/7 | 대기 | | |
