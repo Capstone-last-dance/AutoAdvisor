@@ -2,9 +2,11 @@
 
 사용: python3 -m src.data.build_openapi --snapshot 2026-11-02 --start 2025-09-01 --end 2026-10-30 [--first-signal-year 2011]
 
-만드는 것: prices, index(코스피200), index_kosdaq(코스닥150, 공용 스키마 밖), tickers, status(일별, is_halted 포함), universe(스텁), delisted.
+만드는 것: prices, index(코스피200), index_kosdaq(코스닥150, 공용 스키마 밖), tickers, status(일별, is_halted 포함), universe, delisted.
 만들지 못하는 것 (Open API에 원천이 없다, 보고서의 [결정 필요]): investor_flows(투자자별 순매수), sector(업종; 코스피 종목의 SECT_TP_NM이 비어 있다),
-status.is_admin(관리종목, Q-06). 이 값은 결측으로 두고 그 값이 필요한 universe는 스텁으로만 쓴다 (R-08).
+status.is_admin(관리종목, Q-06). 이 값은 결측으로 둔다.
+universe는 is_admin이 결측이라 4.4절 3단계(관리종목 제외)만 적용하지 못하지만, DEC-24 (4)가 그 상태를 universe v1의
+정의 자체로 확정했으므로 스텁이 아니라 정식 산출물이다 (PM 2026-11-06). 관리종목 단계 미적용 사실은 품질 리포트에 남긴다.
 in_kospi200·in_kosdaq150(구성종목)은 쓰는 곳이 없어 status 스키마에서 뺐다 (PM 2026-11-03).
 공용 index.parquet에는 KOSPI200만 넣는다. 코스닥150은 공용 스키마 밖의 index_kosdaq.parquet로 따로 둔다.
 소비처가 생기면 PM이 기록한 뒤 D가 공용 스키마에 추가한다 (DEC-27).
@@ -219,7 +221,7 @@ def main(argv=None):
     paths = {}
     for name in ("prices", "index", "tickers", "status", "delisted"):
         paths[name] = str(io_shim.write(name, out[name]))
-    paths["universe"] = str(io_shim.write("universe", out["universe"], force_stub=True))   # is_admin 결측(Q-06)이라 스텁
+    paths["universe"] = str(io_shim.write("universe", out["universe"]))   # DEC-24 (4): 관리종목 단계만 빼고 적용한 것이 v1 정의다
     kosdaq_path = Path(paths["index"]).parent / "index_kosdaq.parquet"   # 공용 스키마 밖 (DEC-27), 검증 없이 직접 쓴다
     out["index_kosdaq"].to_parquet(kosdaq_path, index=False)
     paths["index_kosdaq"] = str(kosdaq_path)

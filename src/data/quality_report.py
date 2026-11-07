@@ -176,12 +176,17 @@ def main():
     split_rows.to_csv(out / "split_cases.csv", index=False, encoding="utf-8-sig")
 
     nt = universe[universe["in_universe"]].groupby("date").size()
+    # DEC-24 (4): 관리종목 제외(4.4절 3단계)만 빼고 적용한 것이 universe v1의 정의다. 스텁이 아니라 정식 산출물이지만
+    # 어느 단계가 빠졌는지는 리포트에 남긴다 (PM 2026-11-06). 파일 경로가 아니라 is_admin 실제 값으로 판정한다
+    admin_step_applied = not bool(status["is_admin"].isna().all())
     m["c5_nt"] = {"n_signal_days": int(len(nt)), "min": int(nt.min()) if len(nt) else None, "median": float(nt.median()) if len(nt) else None,
                   "max": int(nt.max()) if len(nt) else None,
-                  "universe_is_stub": not (ROOT / "data" / "processed" / "universe.parquet").exists()}
+                  "admin_step_applied": admin_step_applied,
+                  "universe_note": "DEC-24 (4) v1: 4.4절 3단계(관리종목 제외) 미적용 — is_admin 원천 미확정(Q-06)"
+                                   if not admin_step_applied else "4.4절 1~5단계 전부 적용"}
     fig, ax = plt.subplots(figsize=(10, 3.5))
     ax.plot(nt.index, nt.values, lw=1)
-    ax.set(title="신호일별 유니버스 종목 수 N_t" + (" (스텁: 관리종목 이력 미반영)" if m["c5_nt"]["universe_is_stub"] else ""), ylabel="N_t")
+    ax.set(title="신호일별 유니버스 종목 수 N_t" + ("" if admin_step_applied else " (v1: 관리종목 제외 단계 미적용)"), ylabel="N_t")
     ax.axhline(500, color="gray", ls="--", lw=0.8)
     fig.tight_layout(); fig.savefig(out / "figures" / "n_t.png", dpi=150); plt.close(fig)
 

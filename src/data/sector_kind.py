@@ -87,7 +87,7 @@ def main(argv=None):
     corp_list = parse_corp_list(raw_bytes)
 
     tickers = io_shim.read("tickers")
-    universe = io_shim.read("universe", force_stub=True)   # universe가 아직 스텁이면 그걸로 커버리지를 본다
+    universe = io_shim.read("universe")   # DEC-24 (4) 이후 universe는 정식 경로에 있다 (PM 2026-11-06)
     sector = build_sector(tickers, corp_list)
     coverage = unclassified_coverage(universe, sector)
 
