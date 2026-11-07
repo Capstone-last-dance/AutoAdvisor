@@ -172,6 +172,27 @@ def build_labels(
         raise ValueError("KOSPI200 종가는 양수여야 합니다")
 
     closes = {(row.date, row.ticker): row.close for row in price_frame.itertuples()}
+    raw_closes = (
+        {(row.date, row.ticker): row.close_raw for row in price_frame.itertuples()}
+        if "close_raw" in price_frame else None
+    )
+
+    def exit_close(ticker: str, exit_day: date, last_price: float | None) -> float:
+        if pd.isna(last_price):
+            return 0.0
+        value = float(last_price)
+        if raw_closes is None:
+            # 작은 합성 입력에서는 last_price를 이미 수정종가 단위로 준다.
+            return value
+        position = day_position.get(exit_day)
+        if position is None or position == 0:
+            raise ValueError(f"{ticker} 폐지일의 전 거래일이 없습니다")
+        last_day = days[position - 1]
+        adjusted, raw = closes.get((last_day, ticker)), raw_closes.get((last_day, ticker))
+        if (adjusted is None or raw is None or pd.isna(adjusted)
+                or pd.isna(raw) or raw <= 0):
+            raise ValueError(f"{ticker} 마지막 가격일의 수정·원종가가 없습니다")
+        return value * float(adjusted) / float(raw)
     halts = {(row.date, row.ticker): row.is_halted for row in status_frame.itertuples()}
     if not pd.api.types.is_bool_dtype(status_frame["is_halted"]):
         raise ValueError("status.is_halted는 bool이어야 합니다")
@@ -261,8 +282,7 @@ def build_labels(
                     and exit_info[0] is not None
                     and exit_info[0] <= nominal_end
                 ):
-                    last_price = exit_info[1]
-                    end_close = 0.0 if pd.isna(last_price) else float(last_price)
+                    end_close = exit_close(ticker, exit_info[0], exit_info[1])
                     actual_end = exit_info[0]
                     if end_close < 0:
                         raise ValueError("상장폐지 정리매매 가격은 음수일 수 없습니다")
@@ -276,10 +296,7 @@ def build_labels(
                             and exit_info[0] is not None
                             and exit_info[0] <= day
                         ):
-                            last_price = exit_info[1]
-                            end_close = (
-                                0.0 if pd.isna(last_price) else float(last_price)
-                            )
+                            end_close = exit_close(ticker, exit_info[0], exit_info[1])
                             actual_end = exit_info[0]
                             break
                         is_halted = halts.get((day, ticker))

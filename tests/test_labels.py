@@ -202,14 +202,15 @@ def test_dec28_separate_old_delisting_and_current_company_exit():
     active = list(range(5)) + list(range(10, 16))
     prices = pd.DataFrame([
         {"date": days[i], "ticker": ticker,
-         "close": 50.0 if i == 4 else 80.0 if i >= 10 else 100.0}
+         "close": 50.0 if i == 4 else 80.0 if i >= 10 else 100.0,
+         "close_raw": 25.0 if i == 4 else 80.0 if i >= 10 else 50.0}
         for i in active
     ])
     index = pd.DataFrame({"date": days, "index_code": "KOSPI200", "close": 100.0})
     universe = pd.DataFrame({"date": [days[0], days[10]], "ticker": ticker, "in_universe": True})
     status = prices[["date", "ticker"]].copy()
     status["is_halted"] = False
-    old = pd.DataFrame([{"ticker": ticker, "delist_date": days[5], "last_price": 50.0}])
+    old = pd.DataFrame([{"ticker": ticker, "delist_date": days[5], "last_price": 25.0}])
     current = pd.DataFrame([{"ticker": ticker, "delist_date": days[16], "last_price": 40.0}])
     result = build_labels(
         prices=prices, index=index, universe=universe, status=status,
