@@ -4,6 +4,9 @@ import pandas as pd
 import pytest
 
 from src.backtest.retail_proxy import cohort_effect_hac, select_retail_cohort
+from src.backtest.retail_proxy import CohortEffect, evaluate_g2, simulate_retail_proxy
+from src.backtest.accounting import CostRates
+from src.backtest.engine import ExecutionEngine
 
 
 def test_cohort_uses_only_signal_day_and_reports_missing_history():
@@ -41,3 +44,57 @@ def test_g2_daily_effect_drops_missing_pairs_and_undefined_days():
     assert result.hac_t_statistic is not None and result.hac_t_statistic < 0
     assert result.signal_days_undefined == 1
     assert result.missing_pairs == 1
+
+
+def test_gate_avoids_flagged_loss_with_overlapping_cohorts():
+    days = pd.bdate_range("2020-01-01", periods=30)
+    closes = pd.DataFrame({"000001": [100.0] * 4 + [50.0] * 26,
+                           "000002": [100.0] * 30}, index=days)
+    cohorts = pd.DataFrame({"date": [days[0], days[0], days[5], days[5]],
+                            "ticker": ["000001", "000002", "000001", "000002"]})
+    signals = cohorts.assign(crash_flag=[1, 0, 1, 0])
+    engine = ExecutionEngine(closes, pd.Series(100.0, index=days), CostRates(0, 0, 0))
+    end_date = days[-1].strftime("%Y-%m-%d")
+
+    baseline = simulate_retail_proxy(engine, cohorts, signals, end_date=end_date, gate=False)
+    guarded = simulate_retail_proxy(engine, cohorts, signals, end_date=end_date, gate=True)
+    assert baseline.mdd > 0
+    assert guarded.mdd == pytest.approx(0)
+    assert baseline.daily_nav.iloc[-1] < guarded.daily_nav.iloc[-1]
+    assert guarded.daily_nav.iloc[-1] == pytest.approx(1.0)
+    assert baseline.cagr < guarded.cagr
+    effect = CohortEffect(pd.Series([-0.2, -0.1]), -0.15, -4.0, 0, 0)
+    decision = evaluate_g2(baseline, guarded, effect)
+    assert decision.mdd_reduction_relative == pytest.approx(1.0)
+    assert decision.cagr_gate_not_lower is True
+    assert decision.passed is True
+
+
+def test_cohort_exit_retries_after_lower_limit_and_buy_cost_scales_cash():
+    days = pd.bdate_range("2020-01-01", periods=25)
+    closes = pd.DataFrame({"000001": [100.0] * 21 + [70.5, 75.0, 75.0, 75.0]}, index=days)
+    cohorts = pd.DataFrame({"date": [days[0]], "ticker": ["000001"]})
+    signals = cohorts.assign(crash_flag=0)
+    engine = ExecutionEngine(closes, pd.Series(100.0, index=days),
+                             CostRates(0.002, 0.01, 0))
+    result = simulate_retail_proxy(engine, cohorts, signals,
+                                   end_date=days[-1].strftime("%Y-%m-%d"),
+                                   gate=False, cohort_fraction=1.0)
+    assert result.daily_nav.iloc[0] == pytest.approx(1 / 1.01)
+    assert result.ledger.loc[result.ledger["date"] == days[21].strftime("%Y-%m-%d"),
+                             "rejected"].iloc[0]["000001"] == "near_lower_limit"
+    assert result.ledger.loc[result.ledger["date"] == days[22].strftime("%Y-%m-%d"),
+                             "cost"].iloc[0] > 0
+
+
+def test_g2_does_not_claim_success_without_drawdown_or_hac_sample():
+    days = pd.bdate_range("2020-01-01", periods=25)
+    closes = pd.DataFrame({"000001": [100.0] * 25}, index=days)
+    engine = ExecutionEngine(closes, pd.Series(100.0, index=days), CostRates(0, 0, 0))
+    cohort = pd.DataFrame({"date": [days[0]], "ticker": ["000001"]})
+    run = simulate_retail_proxy(engine, cohort, cohort.assign(crash_flag=0),
+                                end_date=days[-1].strftime("%Y-%m-%d"), gate=False)
+    effect = CohortEffect(pd.Series(dtype="float64"), None, None, 1, 0)
+    decision = evaluate_g2(run, run, effect)
+    assert decision.mdd_reduction_relative is None
+    assert decision.passed is None
