@@ -282,6 +282,19 @@ B-01의 `IRFunction`은 `float`를 반환하고 검증 콜백은 비유한 IR을
 `d_t` 평균의 t값은 rank IC와 같은 상수항 OLS·HAC(`maxlags=4`)로
 계산한다. DEC-22 대체 정의와 누락 표본을 실행 설정·리포트에 남긴다.
 
+코호트 선정, `d_t`, 운용 NAV와 G2 판정은
+`src.backtest.retail_proxy`에 분리한다.
+분모 60거래일에 0 또는 65거래일 중 결측이 있으면 해당 종목의
+정렬 점수를 만들지 않고 사유별 건수를 기록한다. `d_t`는 유효한
+`crash_flag`와 h=20 초과수익이 모두 있는 쌍만 쓰며, 한쪽 집단이
+비면 그 신호일은 미산출로 센다. `simulate_retail_proxy`는 코호트별
+보유 수량을 따로 추적하고, 공통 C `execute_orders`·`trade_cost`와
+엔진의 정지일 평가 가격을 사용한다. 20거래일 뒤 매도가 정지·하한가로
+막히면 다음 거래일에 다시 시도하고, 막힌 매수는 재시도하지 않는다.
+이 청산 재시도 해석은 실제 데이터 연결 전에 PM·B와 확인한다.
+G2 판정은 게이트 전후 동일한 NAV 날짜, 상대 MDD 축소, CAGR 비열화,
+`d_t` HAC t값이 모두 정의됐을 때만 성공/실패를 낸다.
+
 ### Forward test 사후 성과 — C-04 설계
 
 D가 신호일에 먼저 커밋한 `signals/{t}.parquet`·`positions/{t}.parquet`와
