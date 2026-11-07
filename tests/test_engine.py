@@ -245,3 +245,48 @@ def test_halted_valuation_uses_last_traded_close_even_if_source_close_changes():
     d = [x.strftime("%Y-%m-%d") for x in days]
     engine.run_period(engine.initial_state(), {"005930": 0.5}, d[0], d[3])
     assert next(row for row in engine.ledger if row["date"] == d[2])["nav_after"] == pytest.approx(1.0)
+
+
+def test_forward_replay_stops_at_signal_close_without_future_price():
+    engine = market([100, 110, 120, 130])
+    result = engine.run_to_signal_close(engine.initial_state(), {"005930": 0.5}, day(0), day(3))
+
+    assert result.state.asof_date == day(3)
+    assert result.nav_start == pytest.approx(1.0)
+    assert result.nav_end == pytest.approx(0.5 + 0.5 * 130 / 110)
+    assert result.weights_obs["005930"] == pytest.approx((0.5 * 130 / 110) / result.nav_end)
+    assert result.cash_obs + sum(result.weights_obs.values()) == pytest.approx(1.0)
+    assert engine.ledger[-1]["date"] == day(3)
+    with pytest.raises(ValueError, match="평가 종료일"):
+        engine.run_period(engine.initial_state(), {"005930": 0.5}, day(0), day(3))
+
+
+def test_forward_replay_uses_actual_holdings_and_matches_full_engine():
+    days = pd.bdate_range("2025-01-06", periods=9)
+    dates = [day.strftime("%Y-%m-%d") for day in days]
+    closes = pd.DataFrame({"000001": [100.0] * 9,
+                           "000002": [100.0, 129.5, 100.0, 100.0, 100.0, 100.0, 100.0, 100.0, 100.0]},
+                          index=days)
+    bm = pd.Series(100.0, index=days)
+    events = {dates[6]: frozenset({"000001"})}
+    kwargs = dict(event_liquidations=events, record_ledger=True)
+    forward = ExecutionEngine(closes.iloc[:8], bm.iloc[:8], CostRates(0.002, 0.00015, 0.001), **kwargs)
+    historical = ExecutionEngine(closes, bm, CostRates(0.002, 0.00015, 0.001), **kwargs)
+    first_target = {"000001": 0.4, "000002": 0.4}
+    second_target = {"000001": 0.3, "000002": 0.3}
+
+    first = forward.run_to_signal_close(forward.initial_state(), first_target, dates[0], dates[3])
+    assert "000002" not in first.state.holdings  # 상한가로 매수하지 못한 목표 비중
+    full_first = historical.run_period(historical.initial_state(), first_target, dates[0], dates[3])
+    assert first.state.holdings == historical.ledger[3]["holdings"]
+    assert first.nav_end == pytest.approx(historical.ledger[3]["nav_after"])
+
+    second = forward.run_to_signal_close(first.state, second_target, dates[3], dates[7])
+    historical.run_period(full_first.state, second_target, dates[3], dates[7])
+    assert second.state.asof_date == dates[7]
+    assert second.state.holdings == historical.ledger[7]["holdings"]
+    assert second.state.cash == pytest.approx(historical.ledger[7]["cash"])
+    assert [(row["date"], row["cost"], row["fills"]) for row in forward.ledger] == [
+        (row["date"], row["cost"], row["fills"]) for row in
+        historical.ledger[:3] + historical.ledger[4:8]
+    ]
