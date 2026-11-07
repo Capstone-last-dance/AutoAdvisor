@@ -122,6 +122,7 @@ def build_labels(
     policy: DataAccessPolicy,
     allow_holdout: bool,
     run_date: date,
+    delisted_reused: pd.DataFrame | None = None,
 ) -> LabelBuildResult:
     """유효한 U_t 종목의 ``ret``, ``er``, ``y_rank``, ``y_crash``를 계산한다.
 
@@ -147,12 +148,19 @@ def build_labels(
     delisted_frame = _frame(
         delisted, {"ticker", "delist_date", "last_price"}, "delisted"
     )
+    reused_frame = _frame(
+        delisted_reused if delisted_reused is not None else pd.DataFrame(
+            columns=["ticker", "delist_date", "last_price"]
+        ),
+        {"ticker", "delist_date", "last_price"}, "delisted_reused",
+    )
     for name, frame, keys in (
         ("prices", price_frame, ["date", "ticker"]),
         ("index", index_frame, ["date", "index_code"]),
         ("universe", universe_frame, ["date", "ticker"]),
         ("status", status_frame, ["date", "ticker"]),
         ("delisted", delisted_frame, ["ticker"]),
+        ("delisted_reused", reused_frame, ["ticker"]),
     ):
         _unique(frame, keys, name)
 
@@ -177,18 +185,26 @@ def build_labels(
         row.ticker: (row.delist_date, row.last_price)
         for row in delisted_frame.itertuples()
     }
-    # DEC-28의 두 재사용 종목코드는 폐지 뒤 가격 공백 다음에 신회사가
-    # 상장한다. 구회사 폐지 기록을 신회사 라벨에 적용하지 않는다.
+    old_exits = {
+        row.ticker: (row.delist_date, row.last_price)
+        for row in reused_frame.itertuples()
+    }
+    # DEC-28: 공용 delisted는 현재 회사, 별도 파일은 재사용 코드의 구회사다.
+    # 오래된 호출자가 구회사 이력을 delisted에 직접 준 경우도 계속 지원한다.
     relisted_at = {}
-    for ticker in ("101970", "036220"):
-        exit_info = exits.get(ticker)
-        if exit_info is not None and exit_info[0] is not None:
-            later = price_frame.loc[
-                (price_frame["ticker"] == ticker)
-                & (price_frame["date"] >= exit_info[0]), "date"
-            ]
-            if not later.empty:
-                relisted_at[ticker] = later.min()
+    reusable_exits = {
+        key: value for key, value in exits.items() if key in {"101970", "036220"}
+    }
+    reusable_exits.update(old_exits)
+    for ticker, (exit_day, _) in reusable_exits.items():
+        if exit_day is None:
+            raise ValueError("재사용 코드의 구회사 폐지일이 없습니다")
+        later = price_frame.loc[
+            (price_frame["ticker"] == ticker)
+            & (price_frame["date"] >= exit_day), "date"
+        ]
+        if not later.empty:
+            relisted_at[ticker] = later.min()
     members = {
         day: tuple(frame.loc[frame["in_universe"], "ticker"])
         for day, frame in universe_frame.groupby("date", sort=False)
@@ -210,9 +226,13 @@ def build_labels(
             continue
         entry_day = days[entry_position]
         for ticker in tickers:
-            exit_info = exits.get(ticker)
-            if ticker in relisted_at and entry_day >= relisted_at[ticker]:
-                exit_info = None
+            old_exit = old_exits.get(ticker)
+            if old_exit is not None and (ticker not in relisted_at or entry_day < relisted_at[ticker]):
+                exit_info = old_exit
+            else:
+                exit_info = exits.get(ticker)
+                if old_exit is None and ticker in relisted_at and entry_day >= relisted_at[ticker]:
+                    exit_info = None
             if exit_info and exit_info[0] is not None and exit_info[0] <= entry_day:
                 missing["delisted_before_entry"] += len(rules.horizons_days)
                 continue
