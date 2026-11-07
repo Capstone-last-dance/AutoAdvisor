@@ -47,7 +47,7 @@
 | C-01 | C 손석범 | 11/1 | 완료 | [PR #3](https://github.com/Capstone-last-dance/AutoAdvisor/pull/3); [설계](design_C.md) | 4.6·6.6절 라벨·평가·체결 설계 작성 및 병합. 후속 PM 결정은 PR #8에 반영 |
 | C-02 | C 손석범 | 11/6 | 진행 중 | [병합 PR #8](https://github.com/Capstone-last-dance/AutoAdvisor/pull/8) | 라벨·홀드아웃 가드 구현은 병합됨. A의 구회사 폐지 보완 데이터로 실제 라벨 전수 검증이 남음 |
 | C-03 | C 손석범 | 11/6 | 진행 중 | [병합 PR #8](https://github.com/Capstone-last-dance/AutoAdvisor/pull/8) | 공통 체결·비용·NAV 엔진과 평가지표 구현은 병합됨. B 최종 승인과 B-05 실제 데이터 미리보기에서 781개 신호일 실행·같은 비중의 체결/비용/NAV 일치를 확인함. A 최종본 반영 후 C 평가 실행이 남음 |
-| C-04 | C 손석범 | 11/16 | 진행 중 | [병합 PR #8](https://github.com/Capstone-last-dance/AutoAdvisor/pull/8) | G0 검사 선행 구현. forward test의 실제 보유 재생용 `run_to_signal_close`를 추가 중. 개인 행동 프록시·forward test 사후 성과와 실데이터 검증은 남음 |
+| C-04 | C 손석범 | 11/16 | 진행 중 | [병합 PR #8](https://github.com/Capstone-last-dance/AutoAdvisor/pull/8), [PR #22](https://github.com/Capstone-last-dance/AutoAdvisor/pull/22) | G0 검사 선행 구현. forward test의 실제 보유 재생용 `run_to_signal_close`를 PR #22에 추가. 개인 행동 프록시·forward test 사후 성과와 실데이터 검증은 남음 |
 | C-05 | C 손석범 | 11/23 | 대기 | | |
 | C-06 | C 손석범 | 12/4 | 대기 | | |
 | C-07 | C 손석범 | 11/30 | 대기 | | |
