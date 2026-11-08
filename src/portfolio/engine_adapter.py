@@ -9,14 +9,14 @@ A의 prices, status, index, delisted 표와 부록 1의 costs, execution 값으�
 - bm_close: index에서 index_code = KOSPI200 (DEC-27)
 - delistings: delisted.delist_date는 마지막 가격일의 다음 거래일이므로 엔진에는 전 거래일로 옮겨 넘긴다.
   last_price(원종가)는 그날의 close ÷ close_raw로 수정종가 단위로 바꾼다
-- delisted_reused: 재사용 종목코드의 옛 회사 폐지 (DEC-28). 공용 스키마 밖 파일이다
+- delisted_reused: 재사용 종목코드의 옛 회사 폐지 (DEC-28). delisted와 같은 열이고 io.py로 읽는다 (D PR #18).
+  가격이 중간에 끊긴 종목은 끊긴 첫날이 그 종목의 delist_date여야 한다. 아니면 폐지 기록이 빠진 것이라 멈춘다
 - M9 쿨다운·이벤트 청산은 PM 함수가 나오기 전까지 호출자가 넘기지 않으면 비어 있다
 """
 from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import dataclass
-from pathlib import Path
 from typing import Any
 
 import numpy as np
@@ -25,7 +25,6 @@ import pandas as pd
 from src.portfolio.params import _expect
 
 BENCHMARK = "KOSPI200"
-REUSED_DELISTED_PATH = Path(__file__).resolve().parents[2] / "data" / "processed" / "delisted_reused.parquet"
 
 
 @dataclass(frozen=True)
@@ -63,6 +62,28 @@ def _delistings(
     return out
 
 
+def _check_price_gaps(closes: pd.DataFrame, delistings: Mapping[str, tuple[str, float | None]]) -> None:
+    """첫 가격과 마지막 가격 사이에 빈 칸이 있는 종목은 빈 칸 바로 앞날이 그 종목의 마지막 가격일(폐지)이어야
+    한다 (DEC-28). delisted_reused가 비었거나 일부 기간으로 만들어져 옛 회사 폐지가 빠지면, 그 종목을 들고
+    있을 때만 엔진이 멈추고 들고 있지 않으면 아무 오류 없이 결과가 달라진다. 그래서 입력을 만들 때 막는다."""
+    v = closes.notna().to_numpy()
+    first = v.argmax(axis=0)
+    last = len(v) - 1 - v[::-1].argmax(axis=0)
+    rows = np.arange(len(v))[:, None]
+    hole = (rows > first) & (rows < last) & ~v & v.any(axis=0)  # 가격이 하나도 없는 열은 검사하지 않는다
+    for j in np.flatnonzero(hole.any(axis=0)):
+        ticker = str(closes.columns[j])
+        starts = np.flatnonzero(hole[:, j] & ~np.r_[False, hole[:-1, j]])  # 빈 구간마다 첫날
+        if len(starts) > 1:
+            raise ValueError(f"{ticker}: 가격이 중간에 {len(starts)}번 끊긴다. 상장 구간이 셋 이상인 코드는 v1에서 다루지 않는다")
+        gap_start, last_day = closes.index[starts[0]], closes.index[starts[0] - 1]
+        if delistings.get(ticker, (None,))[0] != last_day.strftime("%Y-%m-%d"):
+            raise ValueError(
+                f"{ticker}: {gap_start:%Y-%m-%d}부터 가격이 끊겼다가 다시 나오는데 그날 폐지 기록이 없다 "
+                "(DEC-28 delisted_reused를 확인한다)"
+            )
+
+
 def engine_inputs(
     prices: pd.DataFrame,
     status: pd.DataFrame,
@@ -89,18 +110,16 @@ def engine_inputs(
 
     rows = [delisted] if delisted_reused is None or delisted_reused.empty else [delisted, delisted_reused]
     delistings = _delistings(pd.concat(rows, ignore_index=True), closes, close_raw)
+    _check_price_gaps(closes, delistings)
     return EngineInputs(closes, halted, bm, delistings)
 
 
 def load_engine_inputs() -> EngineInputs:
-    """io.py로 9.3절 표를 읽어 엔진 입력을 만든다 (R-18). delisted_reused는 공용 스키마 밖 파일이라
-    있을 때만 직접 읽는다 (DEC-28)."""
+    """io.py로 9.3절 표를 읽어 엔진 입력을 만든다 (R-18). delisted_reused도 필수 입력이라 파일이 없으면
+    io.read_table이 FileNotFoundError를 낸다 (DEC-28)."""
     from src.common import io
 
-    reused = pd.read_parquet(REUSED_DELISTED_PATH) if REUSED_DELISTED_PATH.exists() else None
-    return engine_inputs(
-        io.read_table("prices"), io.read_table("status"), io.read_table("index"), io.read_table("delisted"), reused
-    )
+    return engine_inputs(*(io.read_table(name) for name in ("prices", "status", "index", "delisted", "delisted_reused")))
 
 
 def cost_rates(cfg: Mapping[str, Any], *, stress: bool = False):

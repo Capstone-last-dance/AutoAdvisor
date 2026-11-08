@@ -8,7 +8,8 @@ import pandas as pd
 import pytest
 
 from src.backtest.accounting import CostRates
-from src.portfolio.engine_adapter import build_engine, cost_rates, engine_inputs
+from src.common import io
+from src.portfolio.engine_adapter import build_engine, cost_rates, engine_inputs, load_engine_inputs
 
 DAYS = pd.bdate_range("2020-01-01", periods=15)
 D = [d.strftime("%Y-%m-%d") for d in DAYS]
@@ -115,6 +116,43 @@ def test_reused_ticker_old_company_liquidated_and_new_company_buyable(cfg):
     assert new.state.holdings["101970"] > 0
     with pytest.raises(ValueError, match="두 개"):
         engine_inputs(t["prices"], t["status"], t["index"], reused, delisted_reused=reused)
+
+
+def test_price_gap_without_a_delisting_at_its_start_stops(cfg):
+    """DEC-28: 가격이 끊겼다가 다시 나오는 종목은 끊긴 첫날에 폐지 기록이 있어야 한다. delisted_reused가
+    빠지거나 비어 있으면 그 종목을 들고 있지 않아도 멈춘다 (A 리뷰, PR #21)."""
+    closes = pd.DataFrame({"000001": 100.0, "101970": 40.0}, index=DAYS)
+    closes.loc[DAYS[5]:DAYS[8], "101970"] = np.nan
+    t = _tables(closes)
+    for reused in (None, _delisted([])):
+        with pytest.raises(ValueError, match="2020-01-08부터 가격이 끊겼다가"):
+            engine_inputs(t["prices"], t["status"], t["index"], _delisted([]), delisted_reused=reused)
+    twice = closes.copy()
+    twice.loc[DAYS[11], "101970"] = np.nan
+    t2 = _tables(twice)
+    with pytest.raises(ValueError, match="2번 끊긴다"):
+        engine_inputs(t2["prices"], t2["status"], t2["index"], _delisted([]), _delisted([("101970", DAYS[5], 41.0)]))
+
+
+def test_load_engine_inputs_reads_delisted_reused_through_io(cfg, monkeypatch):
+    """D PR #18 뒤로 delisted_reused도 io.read_table로 읽는다. 파일이 없으면 FileNotFoundError가 그대로 나간다."""
+    closes = pd.DataFrame({"000001": 100.0, "101970": 40.0}, index=DAYS)
+    closes.loc[DAYS[5]:DAYS[8], "101970"] = np.nan
+    tables = {**_tables(closes), "delisted": _delisted([]), "delisted_reused": _delisted([("101970", DAYS[5], 41.0)])}
+    read: list[str] = []
+
+    def fake_read_table(name, *args, **kwargs):
+        read.append(name)
+        if name not in tables:
+            raise FileNotFoundError(name)
+        return tables[name]
+
+    monkeypatch.setattr(io, "read_table", fake_read_table)
+    assert load_engine_inputs().delistings == {"101970": (D[4], 41.0)}
+    assert read == ["prices", "status", "index", "delisted", "delisted_reused"]
+    del tables["delisted_reused"]
+    with pytest.raises(FileNotFoundError, match="delisted_reused"):
+        load_engine_inputs()
 
 
 def test_relisting_the_engine_does_not_recognize_stops(cfg):

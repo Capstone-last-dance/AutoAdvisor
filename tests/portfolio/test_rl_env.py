@@ -166,6 +166,45 @@ def test_full_episode_acts_on_every_date_without_last_execution(rl_params, risk_
     assert len(engine.calls) == 4
 
 
+def test_purged_signal_date_is_never_stepped_over(rl_params, risk_params):
+    """D3 (g): 한 스텝은 달력에서 바로 이어지는 두 신호일 사이다. purge로 빠진 신호일을 건너뛰지 않는다."""
+    calendar = _dates(120)
+    snaps = [make_snapshot(date=d) for d in calendar[:60] + calendar[61:]]  # 61번째 신호일이 purge됨
+    engine = ScriptedEngine()
+    env = PortfolioEnv(snaps, engine, rl_params, risk_params, 0.0, "random", calendar=calendar)
+    starts = set()
+    for seed in range(40):
+        env.reset(seed=seed)
+        starts.add(calendar.index(env.current_date))
+        while not env.step(env.action_space.sample())[3]:
+            pass
+    assert starts <= set(range(0, 8)) | set(range(61, 68)) and min(starts) < 60 < max(starts)
+    assert all(calendar.index(b) == calendar.index(a) + 1 for _, a, b in engine.calls)
+
+    # full: 끊긴 자리에서는 체결하지 않고, 다음 신호일에 현금 100%로 다시 시작한다
+    engine = ScriptedEngine(_held({"000001": 0.5}))
+    env = PortfolioEnv(snaps[57:63], engine, rl_params, risk_params, 0.0, "full", calendar=calendar)
+    env.reset()
+    steps = []
+    for _ in range(6):
+        obs, _, _, _, info = env.step(np.zeros(61, dtype=np.float32))
+        steps.append((info["executed"], float(obs[N_SLOT_OBS])))  # 공통 관측의 첫 값 = 현금 비중
+    assert steps == [(True, 0.5), (True, 0.5), (False, 1.0), (True, 0.5), (True, 0.5), (False, 0.5)]
+    assert [(calendar.index(a), calendar.index(b)) for _, a, b in engine.calls] == [(57, 58), (58, 59), (61, 62), (62, 63)]
+
+
+def test_calendar_must_hold_the_snapshots_in_order(rl_params, risk_params):
+    calendar = _dates(70)
+    with pytest.raises(ValueError, match="달력에 없는"):
+        PortfolioEnv(_snaps(3), ScriptedEngine(), rl_params, risk_params, 0.0, "full", calendar=calendar[1:])
+    with pytest.raises(ValueError, match="오름차순"):
+        backwards = [make_snapshot(date=d) for d in (calendar[2], calendar[1])]
+        PortfolioEnv(backwards, ScriptedEngine(), rl_params, risk_params, 0.0, "full", calendar=calendar)
+    with pytest.raises(ValueError, match="구간이 없다"):  # 69개지만 끊기지 않은 구간은 35개, 34개
+        split = [make_snapshot(date=d) for d in calendar[:35] + calendar[36:]]
+        PortfolioEnv(split, ScriptedEngine(), rl_params, risk_params, 0.0, "random", calendar=calendar)
+
+
 def test_slot_overflow_keeps_every_holding(rl_params, risk_params):
     held = {f"{i:06d}": 0.01 for i in range(41, 66)}  # 체결 제약으로 25종목 보유
     env = PortfolioEnv(_snaps(3, n=70), ScriptedEngine(_held(held)), rl_params, risk_params, 0.0, "full")
