@@ -18,7 +18,7 @@ from tests.common.test_io import sample
 
 DAY = "2026-11-06"
 BEFORE = lambda: pd.Timestamp(f"{DAY} 19:30", tz=ft.KST)   # 마감 전
-AFTER = lambda: pd.Timestamp("2026-11-07 00:00:01", tz=ft.KST)
+AFTER = lambda: pd.Timestamp("2026-11-09 09:00:00", tz=ft.KST)   # 다음 거래일 09:00 정각부터 마감
 
 
 class RepoTest(unittest.TestCase):
@@ -76,8 +76,10 @@ class RepoTest(unittest.TestCase):
 class RecordTest(RepoTest):
     def test_first_record_signals_only(self):
         io.write_table("signals", sample("signals"), date=DAY)
-        commit_hash = self.record()
+        commit_hash = self.record(memo="universe v1: 관리종목 단계 미적용 (DEC-24)")
 
+        self.assertIn("관리종목 단계 미적용", self.git("log", "-1", "--format=%B", commit_hash))
+        self.assertIn("관리종목 단계 미적용", self.git("log", "-1", "--format=%B", "HEAD"))
         self.assertEqual(self.commits()[:2], [f"forward test: {DAY} 해시 기록", f"forward test: {DAY} 신호 커밋"])
         self.assertEqual(self.files_in(commit_hash), {f"signals/{DAY}.parquet"})
         self.assertEqual(self.files_in("HEAD"), {"forward_log.csv"})
@@ -138,7 +140,7 @@ def clock(*times):
     return lambda: stamps.pop(0) if len(stamps) > 1 else stamps[0]
 
 
-OK, LATE = f"{DAY} 23:59:58", "2026-11-07 00:00:01"
+OK, LATE = "2026-11-09 08:59:58", "2026-11-09 09:00:01"
 
 
 class DeadlineDuringRecordTest(RepoTest):
@@ -268,6 +270,13 @@ class RefuseTest(RepoTest):
         sig = sample("signals"); sig.loc[1, "model_version"] = "lgbm_v1"
         io.write_table("signals", sig, date=DAY)
         self.assertRefused()
+
+
+class CommitDeadlineTest(unittest.TestCase):
+    def test_next_trading_day_0900(self):
+        self.assertEqual(ft.commit_deadline("2026-11-06"), pd.Timestamp("2026-11-09 09:00", tz=ft.KST))   # 주말
+        self.assertEqual(ft.commit_deadline("2026-11-11"), pd.Timestamp("2026-11-12 09:00", tz=ft.KST))
+        self.assertEqual(ft.commit_deadline("2026-12-24"), pd.Timestamp("2026-12-28 09:00", tz=ft.KST))   # 12/25 휴장
 
 
 class LabelReadyDateTest(unittest.TestCase):

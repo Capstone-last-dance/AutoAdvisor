@@ -9,7 +9,7 @@
 run_weekly 7단계도 같은 record()를 부른다.
 
 - forward/{YYYYMMDD} 브랜치에서만 기록한다. main에 직접 커밋하지 않는다 (DEC-04).
-- 신호일 t 23:59:59 KST가 지나면 기록하지 않는다. 커밋·로그 기록·push 직전마다 다시 확인한다.
+- 마감은 신호일 다음 거래일 09:00 KST다 (DEC-04). 지나면 기록하지 않고, 커밋·로그 기록·push 직전마다 다시 확인한다.
 - 날짜별 입력을 커밋 전에 검사한다 (6.8절): 11/20 전 baseline만, 11/20~26 baseline+positions, 11/27부터 ML+positions.
 - 이미 기록한 신호일은 다시 기록하지 않는다 (커밋한 신호는 고치지 않는다).
 - 스텁(_stub/)은 읽지 않는다. 실제 폴더의 파일만 커밋한다.
@@ -61,28 +61,41 @@ def expected_input(day: pd.Timestamp) -> tuple[str, bool]:
 
 def label_ready_date(date: str | pd.Timestamp, h: int = LABEL_H) -> pd.Timestamp:
     """신호일 t의 라벨이 확정되는 날 = t+1+h 거래일 (4.6절)."""
-    days = pd.bdate_range(pd.Timestamp(date) + pd.Timedelta(days=1), CALENDAR_END)
-    days = days[~days.isin(KRX_CLOSED_DAYS)]
+    days = _trading_days_after(date)
     if len(days) < 1 + h:
         raise ForwardTestError(f"{CALENDAR_END.date()} 이후 거래일을 알 수 없다. KRX_CLOSED_DAYS를 갱신한다")
     return days[h]
 
 
-def record(date: str, source_commit: str, push: bool = True,
+def commit_deadline(date: str | pd.Timestamp) -> pd.Timestamp:
+    """기록 마감 = 신호일 다음 거래일 09:00 KST (DEC-04 변경). 이 시각 전에 커밋하고 push한다."""
+    days = _trading_days_after(date)
+    if len(days) == 0:
+        raise ForwardTestError(f"{CALENDAR_END.date()} 이후 거래일을 알 수 없다. KRX_CLOSED_DAYS를 갱신한다")
+    return days[0].replace(hour=9).tz_localize(KST)
+
+
+def _trading_days_after(date: str | pd.Timestamp) -> pd.DatetimeIndex:
+    days = pd.bdate_range(pd.Timestamp(date) + pd.Timedelta(days=1), CALENDAR_END)
+    return days[~days.isin(KRX_CLOSED_DAYS)]
+
+
+def record(date: str, source_commit: str, push: bool = True, memo: str | None = None,
            now: Callable[[], pd.Timestamp] | None = None) -> str:
     """신호일 date의 신호를 커밋하고 해시를 forward_log.csv에 적는다. 신호 커밋 해시를 돌려준다.
 
     source_commit: 신호를 만든 코드의 커밋 (DEC-04).
     push: False면 커밋과 태그까지만 하고 push하지 않는다 (리허설용).
+    memo: 두 커밋 메시지에 덧붙일 설명. 예: universe v1의 관리종목 단계 미적용 (DEC-24).
     """
     io._check_date_arg(date)
     now = now or (lambda: pd.Timestamp.now(tz=KST))
-    deadline = pd.Timestamp(f"{date} 23:59:59", tz=KST)
+    deadline = commit_deadline(date)
 
     def check_deadline(done: str | None = None) -> None:
-        if now() <= deadline:
+        if now() < deadline:
             return
-        late = f"마감({deadline:%Y-%m-%d %H:%M} KST)이 지났다 (6.8절)"
+        late = f"마감({deadline:%Y-%m-%d %H:%M} KST)이 지났다 (DEC-04)"
         if done is None:
             raise ForwardTestError(f"{late}. 아무것도 기록하지 않았다")
         raise ForwardTestPartial(f"{late}. {done}. 남은 단계는 하지 않았다. PM에게 알리고 deviation log에 남긴다")
@@ -127,7 +140,7 @@ def record(date: str, source_commit: str, push: bool = True,
     if (len(paths) > 1) != want_positions:
         raise ForwardTestError(f"{date}은 positions {'포함' if want_positions else '없이'} 기록하는 날이다 (6.8절)")
 
-    note = f"\n\n신호를 만든 코드 커밋: {code_commit}"
+    note = f"\n\n신호를 만든 코드 커밋: {code_commit}" + (f"\n{memo}" if memo else "")
     check_deadline()
     commit_hash = _commit_signals(date, paths, note)
     check_deadline(f"신호 커밋 {commit_hash}까지 끝났고 forward_log.csv에는 적지 않았다")
@@ -165,7 +178,7 @@ def record(date: str, source_commit: str, push: bool = True,
         try:
             _git("push", "origin", branch, f"refs/tags/{tag}")
         except ForwardTestError as exc:
-            raise ForwardTestPartial(f"커밋과 태그는 끝났고 push만 실패했다. 23:59 전에 직접 push한다: "
+            raise ForwardTestPartial(f"커밋과 태그는 끝났고 push만 실패했다. 마감 전에 직접 push한다: "
                                      f"git push origin {branch} {tag} ({exc})") from None
         log.info("기록 완료: %s 신호 커밋 %s, %s·%s push", date, commit_hash, branch, tag)
     else:
@@ -215,10 +228,11 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--date", required=True, help="신호일 YYYY-MM-DD")
     parser.add_argument("--source-commit", required=True, help="신호를 만든 코드의 커밋 해시 (DEC-04)")
     parser.add_argument("--no-push", action="store_true", help="커밋과 태그까지만 한다 (리허설용)")
+    parser.add_argument("--memo", help="커밋 메시지에 덧붙일 설명")
     args = parser.parse_args(argv)
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
     try:
-        commit_hash = record(args.date, source_commit=args.source_commit, push=not args.no_push)
+        commit_hash = record(args.date, source_commit=args.source_commit, push=not args.no_push, memo=args.memo)
     except (ForwardTestError, FileNotFoundError, ValueError) as exc:
         print(f"오류: {exc}", file=sys.stderr)
         return 1
