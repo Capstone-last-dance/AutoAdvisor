@@ -7,6 +7,7 @@ numpy==2.5.4
 pandas==3.1.0
 pyarrow==26.0.0
 scipy==1.18.1
+lxml==6.1.3    # A-02: sector_kind.py의 KIND 상장법인목록 pd.read_html 파싱 (DEC-23). D 확인 후 lock 재생성 필요
 
 # 신호 모델과 평가 (6.3절, 6.4절, 6.6절)
 lightgbm==4.7.0
