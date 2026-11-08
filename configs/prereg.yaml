@@ -63,10 +63,11 @@ features:
   rank_transform: "pct_average_within_universe"
   missing_fill: 0.5
   add_missing_flag: true
+  model_input_exclusions: ["ss_allowed"]  # DEC-29. v1에서 ss_regime은 유지
   event_window_days: 20
   news_window_days: 5
   news_baseline_offsets: [-64, -5]
-  event_keywords:                  # 초기값. PM이 2026-11-08까지 검증 (Q-13)
+  event_keywords:                  # 후보 검색용. events.title_filters를 함께 적용 (Q-13)
     ev_earnings: ["영업(잠정)실적", "매출액또는손익구조"]
     ev_buyback: ["자기주식취득결정"]
     ev_cancel: ["주식소각결정"]
@@ -150,14 +151,38 @@ risk_layer:
 
 events:
   report_name_normalization: "remove_spaces_and_middle_dots"
-  exit: "close_of_next_trading_day_after_receipt"
+  exit: "close_of_next_trading_day_after_available_date"
   cooldown_trading_days: 20
+  title_filters:                     # ev_*와 T1~T6 후보에서 신규 사건이 아닌 공시를 뺀다 (Q-13)
+    strip_prefixes: ["[첨부추가]", "[정정명령부과]"]  # 원 공시에 나중에 붙는 표시. 떼고 판정
+    exclude_prefixes: ["[기재정정]", "[첨부정정]"]    # 따로 접수된 후속 정정
+    exclude_terms: ["철회", "취소"]
   triggers:                          # 초기값. PM이 2026-11-08까지 검증 (Q-13)
-    T1: {name: "관리종목 지정", keywords: ["관리종목지정"]}
-    T2: {name: "상장폐지 관련 심사·사유", keywords: ["상장적격성실질심사", "상장폐지사유발생"]}
-    T3: {name: "횡령·배임", keywords: ["횡령", "배임"]}
-    T4: {name: "회생절차", keywords: ["회생절차개시신청"]}
-    T5: {name: "부도", keywords: ["부도발생"]}
+    T1:
+      name: "관리종목 지정"
+      keywords: ["관리종목지정"]  # 후보 검색용
+      sources: ["kind", "opendart"]
+      exclude_terms: ["우려", "사유발생", "사유추가", "사유변경", "해소", "해제", "예고", "내부결산시점"]
+      require_confirmed_designation: true
+    T2:
+      name: "상장폐지 관련 심사·사유"
+      keywords: ["상장적격성실질심사", "상장폐지사유발생"]  # 후보 검색용
+      require_any: ["대상결정", "사유발생", "실질심사관련)", "실질심사관련안내)", "실질심사관련매매거래정지"]
+      exclude_terms: ["우려", "제외결정", "기한", "조사기간연장", "해제", "청산예정", "지속", "계속"]
+    T3:
+      name: "횡령·배임"
+      keywords: ["횡령", "배임"]  # 후보 검색용. 한 공시는 한 번만 센다
+      require_any: ["혐의발생", "사실확인", "협의발생"]
+      exclude_terms: ["진행사항", "무혐의", "취하", "각하", "기각", "해소", "손해배상"]
+      require_company_confirmation_if_any: ["풍문", "소문", "조회공시", "답변"]
+    T4:
+      name: "회생절차"
+      keywords: ["회생절차개시신청"]  # 후보 검색용
+      exclude_terms: ["자회사", "종속회사", "풍문", "조회공시", "신청설", "기각", "취하", "해소", "각하", "항고", "종결", "기타시장안내"]
+    T5:
+      name: "부도"
+      keywords: ["부도발생"]  # 후보 검색용
+      exclude_terms: ["자회사", "종속회사", "해소", "풍문"]
     T6: {name: "대규모 희석 유상증자", keywords: ["유상증자결정"], methods: ["주주배정", "일반공모"], min_amount_to_mcap: 0.10}
 
 retail_proxy:

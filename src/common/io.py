@@ -108,6 +108,12 @@ SCHEMAS: dict[str, dict[str, Col]] = {
         "delist_date": _c("date"),
         "last_price": _c("float64", nullable=True),
     },
+    # DEC-28: 재사용 종목코드의 옛 회사 상장폐지 보완. delisted와 같은 열·정의
+    "delisted_reused": {
+        "ticker": _c("ticker"),
+        "delist_date": _c("date"),
+        "last_price": _c("float64", nullable=True),
+    },
     "sector": {
         "ticker": _c("ticker"),
         "sector": _c("str"),
@@ -115,17 +121,23 @@ SCHEMAS: dict[str, dict[str, Col]] = {
         "valid_to": _c("date", nullable=True),
     },
     # DEC-22: investor_flows는 원천이 없어 만들지 않는다.
+    # DEC-09: 실제 접수 시각(rcept_dt)을 모르면 결측. 시점 판단은 available_at으로 한다.
     "disclosures": {
         "rcept_no": _c("str"),
-        "rcept_dt": _c("datetime_kst"),
+        "rcept_date": _c("date"),
+        "rcept_dt": _c("datetime_kst", nullable=True),
+        "available_at": _c("datetime_kst"),
+        "corp_code": _c("str"),
         "ticker": _c("ticker", nullable=True),  # 비상장은 null
         "corp_name": _c("str"),
         "report_nm": _c("str"),
         "report_nm_norm": _c("str"),
     },
+    # DEC-09: 발행 시각(published_at)을 모르면 결측. 시점 판단은 available_at으로 한다.
     "news": {
         "news_id": _c("str"),
-        "published_at": _c("datetime_kst"),
+        "published_at": _c("datetime_kst", nullable=True),
+        "available_at": _c("datetime_kst"),
         "ticker": _c("ticker"),
         "title": _c("str"),
         "url": _c("str"),
@@ -169,7 +181,8 @@ SCHEMAS: dict[str, dict[str, Col]] = {
         "trigger_type": _c("str", allowed={"T1", "T2", "T3", "T4", "T5", "T6"}),
         "rcept_no": _c("str"),
         "report_nm": _c("str"),
-        "rcept_dt": _c("datetime_kst"),
+        "rcept_dt": _c("datetime_kst", nullable=True),
+        "available_at": _c("datetime_kst"),
     },
     "forward_log": {
         "signal_date": _c("date"),
@@ -207,6 +220,9 @@ DATED_FOLDERS = {
 }
 
 EVIDENCE_FOLDER = "evidence"
+# DEC-09: available_at과 비교할 실제 접수(발행) 시각 열
+RECEIVED_AT = {"disclosures": "rcept_dt", "alerts": "rcept_dt", "news": "published_at"}
+
 EVIDENCE_KEYS = ("date", "ticker", "signal_type", "summary", "sources", "disclaimer")
 EVIDENCE_SOURCE_KEYS = ("n", "type", "id", "title", "url", "timestamp")
 EVIDENCE_SIGNAL_TYPES = frozenset({"crash", "rank", "alert"})
@@ -273,6 +289,8 @@ def validate(name: str, df: pd.DataFrame) -> None:
 
     if name == "labels" and not missing:
         errors.extend(_check_labels_rows(df))
+    if name in RECEIVED_AT and not missing and not errors:
+        errors.extend(_check_available_after_receipt(df, RECEIVED_AT[name]))
 
     if errors:
         raise SchemaError(f"{name} 스키마 위반\n- " + "\n- ".join(errors))
@@ -494,6 +512,20 @@ def _check_labels_rows(df: pd.DataFrame) -> list[str]:
         errors.append("y_crash: h = 20 행에 결측이 있다")
     if df.loc[~is20, "y_crash"].notna().any():
         errors.append("y_crash: h = 20이 아닌 행에 값이 있다 (h = 20 행만)")
+    return errors
+
+
+def _check_available_after_receipt(df: pd.DataFrame, received: str) -> list[str]:
+    """DEC-09: 이용 가능 시각은 실제 접수(발행) 시각이나 접수일보다 빠를 수 없다."""
+    errors = []
+    early = df[received].notna() & (df["available_at"] < df[received])
+    if early.any():
+        errors.append(f"available_at이 {received}보다 빠른 행이 {int(early.sum())}건 있다 (DEC-09)")
+    if "rcept_date" in df.columns:
+        day = df["available_at"].dt.tz_localize(None).dt.normalize()
+        early = day < df["rcept_date"]
+        if early.any():
+            errors.append(f"available_at이 rcept_date보다 빠른 행이 {int(early.sum())}건 있다 (DEC-09)")
     return errors
 
 
