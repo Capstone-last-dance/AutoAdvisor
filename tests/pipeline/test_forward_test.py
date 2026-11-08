@@ -63,6 +63,15 @@ class RepoTest(unittest.TestCase):
         kwargs.setdefault("now", BEFORE)
         return ft.record(date, **kwargs)
 
+    def prepare(self, date, version="baseline", positions=False):
+        """date의 forward 브랜치로 옮겨 입력 파일을 만든다."""
+        self.git("switch", "-q", "-c", f"forward/{date.replace('-', '')}")
+        sig = sample("signals"); sig["date"] = pd.Timestamp(date); sig["model_version"] = version
+        io.write_table("signals", sig, date=date)
+        if positions:
+            pos = sample("positions"); pos["date"] = pd.Timestamp(date)
+            io.write_table("positions", pos, date=date)
+
 
 class RecordTest(RepoTest):
     def test_first_record_signals_only(self):
@@ -90,23 +99,19 @@ class RecordTest(RepoTest):
         self.assertEqual(row["label_ready_date"], pd.Timestamp("2026-12-07"))
         self.assertTrue(pd.isna(row["mean_er_top20"]))
 
-    def test_with_positions_and_second_record(self):
+    def test_schedule_6_8(self):
         io.write_table("signals", sample("signals"), date=DAY)
         self.record()
+        last = None
+        for date, version, positions in [("2026-11-13", "baseline", False), ("2026-11-20", "baseline", True),
+                                         ("2026-11-27", "lgbm_v1", True)]:
+            self.prepare(date, version, positions)
+            last = self.record(date, now=lambda: pd.Timestamp(f"{date} 20:00", tz=ft.KST))
 
-        nxt = "2026-11-13"
-        self.git("switch", "-q", "-c", "forward/20261113")
-        sig = sample("signals"); sig["date"] = pd.Timestamp(nxt); sig["model_version"] = "lgbm_v1"
-        pos = sample("positions"); pos["date"] = pd.Timestamp(nxt)
-        io.write_table("signals", sig, date=nxt)
-        io.write_table("positions", pos, date=nxt)
-        commit_hash = self.record(nxt, now=lambda: pd.Timestamp(f"{nxt} 20:00", tz=ft.KST))
-
-        self.assertEqual(self.files_in(commit_hash), {f"signals/{nxt}.parquet", f"positions/{nxt}.parquet"})
+        self.assertEqual(self.files_in(last), {"signals/2026-11-27.parquet", "positions/2026-11-27.parquet"})
         log = io.read_table("forward_log")
-        self.assertEqual(list(log["signal_date"]), [pd.Timestamp(DAY), pd.Timestamp(nxt)])
-        self.assertEqual(list(log["signal_source"]), ["baseline", "ml"])
-        self.assertEqual(list(log["has_positions"]), [0, 1])
+        self.assertEqual(list(log["signal_source"]), ["baseline", "baseline", "baseline", "ml"])
+        self.assertEqual(list(log["has_positions"]), [0, 0, 1, 1])
         self.assertEqual(log.iloc[1]["label_ready_date"], pd.Timestamp("2026-12-14"))
 
     def test_other_changes_are_not_committed(self):
@@ -127,12 +132,101 @@ class RecordTest(RepoTest):
         self.assertEqual(io.read_table("forward_log").iloc[0]["commit_hash"], signal_commit)
 
 
+def clock(*times):
+    """부를 때마다 다음 시각을 돌려주는 시계. 마지막 시각은 계속 유지한다."""
+    stamps = [pd.Timestamp(t, tz=ft.KST) for t in times]
+    return lambda: stamps.pop(0) if len(stamps) > 1 else stamps[0]
+
+
+OK, LATE = f"{DAY} 23:59:58", "2026-11-07 00:00:01"
+
+
+class DeadlineDuringRecordTest(RepoTest):
+    """시작, 커밋, 로그 기록, push 직전에 마감을 확인한다."""
+
+    def setUp(self):
+        super().setUp()
+        io.write_table("signals", sample("signals"), date=DAY)
+        self.head = self.git("rev-parse", "HEAD")
+
+    def test_before_commit_nothing_done(self):
+        with self.assertRaises(ft.ForwardTestError) as ctx:
+            self.record(now=clock(OK, LATE))
+        self.assertNotIsInstance(ctx.exception, ft.ForwardTestPartial)
+        self.assertEqual(self.git("rev-parse", "HEAD"), self.head)
+
+    def test_before_log_is_partial(self):
+        with self.assertRaisesRegex(ft.ForwardTestPartial, "신호 커밋"):
+            self.record(now=clock(OK, OK, LATE))
+        self.assertEqual(self.commits()[0], f"forward test: {DAY} 신호 커밋")
+        self.assertTrue(io.read_table("forward_log").empty)
+        self.assertEqual(self.git("tag", "--list", "ft-20261106"), "")
+
+    def test_before_push_is_partial(self):
+        with self.assertRaisesRegex(ft.ForwardTestPartial, "push는 하지 않았다"):
+            self.record(now=clock(OK, OK, OK, LATE))
+        self.assertNotEqual(self.git("tag", "--list", "ft-20261106"), "")
+        result = subprocess.run(["git", "-C", str(self.remote), "rev-parse", "--verify", "--quiet",
+                                 "refs/heads/forward/20261106"], capture_output=True)
+        self.assertNotEqual(result.returncode, 0)
+
+
 class RefuseTest(RepoTest):
     def assertRefused(self, exc=ft.ForwardTestError, **kwargs):
         head = self.git("rev-parse", "HEAD")
         with self.assertRaises(exc):
             self.record(**kwargs)
         self.assertEqual(self.git("rev-parse", "HEAD"), head)   # 아무것도 커밋하지 않았다
+
+    def test_schedule_violations(self):
+        cases = [("2026-11-06", "lgbm_v1", False), ("2026-11-13", "baseline", True),
+                 ("2026-11-20", "baseline", False), ("2026-11-27", "baseline", True)]
+        for date, version, positions in cases:
+            with self.subTest(date=date):
+                self.prepare_case(date, version, positions)
+                self.assertRefused(date=date, now=lambda: pd.Timestamp(f"{date} 20:00", tz=ft.KST))
+                self.assertEqual(self.git("diff", "--cached", "--name-only"), "")
+                shutil.rmtree(self.tmp / "signals")
+                shutil.rmtree(self.tmp / "positions", ignore_errors=True)
+
+    def prepare_case(self, date, version, positions):
+        if date == DAY:   # setUp에서 이미 이 브랜치에 있다
+            self.git("switch", "-q", "main")
+            self.git("branch", "-q", "-D", "forward/20261106")
+        self.prepare(date, version, positions)
+
+    def test_signals_and_positions_in_different_commits(self):
+        date = "2026-11-20"
+        self.prepare(date, "baseline", True)
+        self.git("add", "signals")
+        self.git("commit", "-q", "-m", "신호 먼저")
+        self.git("add", "positions")
+        self.git("commit", "-q", "-m", "비중 나중")
+        self.assertRefused(date=date, now=lambda: pd.Timestamp(f"{date} 20:00", tz=ft.KST))
+        self.assertTrue(io.read_table("forward_log").empty)
+
+    def test_committed_signals_changed(self):
+        io.write_table("signals", sample("signals"), date=DAY)
+        self.git("add", "signals")
+        self.git("commit", "-q", "-m", "신호 커밋됨")
+        sig = sample("signals"); sig["rank_score"] = [0.8, 0.2]
+        io.write_table("signals", sig, date=DAY)
+        self.assertRefused()
+        self.assertEqual(self.git("diff", "--cached", "--name-only"), "")
+
+    def test_log_commit_failure_restores_csv(self):
+        # 커밋이 실패해도 forward_log.csv에 행이 남지 않아 다시 실행할 수 있다
+        io.write_table("signals", sample("signals"), date=DAY)
+        hook = self.tmp / ".git" / "hooks" / "pre-commit"
+        hook.write_text('#!/bin/sh\ngit diff --cached --name-only | grep -q forward_log && exit 1\nexit 0\n',
+                        encoding="utf-8", newline="\n")
+        hook.chmod(0o755)
+        with self.assertRaisesRegex(ft.ForwardTestPartial, "되돌렸다"):
+            self.record()
+        self.assertTrue(io.read_table("forward_log").empty)
+        hook.unlink()
+        self.record()
+        self.assertEqual(len(io.read_table("forward_log")), 1)
 
     def test_after_deadline(self):
         io.write_table("signals", sample("signals"), date=DAY)

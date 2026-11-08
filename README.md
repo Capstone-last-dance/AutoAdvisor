@@ -466,7 +466,8 @@ python -m src.pipeline.forward_test --date YYYY-MM-DD --source-commit <신호를
 `signals/{date}.parquet`(있으면 `positions/{date}.parquet`도)를 커밋하고, 그 커밋 해시를 `forward_log.csv`에 적어 한 번 더 커밋한다. 신호 커밋에 태그 `ft-YYYYMMDD`를 붙이고 브랜치와 태그를 push한다. 주간 실행의 7단계도 같은 기록을 한다 (명세서 6.8절, DEC-04).
 
 - `forward/YYYYMMDD` 브랜치에서만 기록한다. main에는 PR을 merge commit으로만 병합한다 (squash·rebase 금지, 해시 보존).
-- 신호일 23:59 KST가 지나면 기록하지 않는다. 이미 기록한 신호일도 다시 기록하지 않는다.
+- 날짜별 입력을 커밋 전에 검사한다: 11/20 전은 baseline만, 11/20~26은 baseline과 positions, 11/27부터는 ML과 positions.
+- 신호일 23:59 KST가 지나면 기록하지 않는다. 커밋·로그 기록·push 직전마다 다시 확인하고, 도중에 멈추면 끝난 단계와 남은 일을 알려 준다. 이미 기록한 신호일도 다시 기록하지 않는다.
 - `_stub/`의 파일은 읽지 않는다. 신호 파일 외의 변경은 커밋에 넣지 않는다.
 - `--source-commit`의 커밋은 로컬에 있어야 한다 (없으면 `git fetch`). 두 커밋 메시지에 적힌다.
 - 리허설은 `--no-push`로 커밋·태그까지만 한다. push만 실패하면 안내된 `git push` 명령을 직접 실행한다.

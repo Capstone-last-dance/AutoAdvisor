@@ -9,7 +9,8 @@
 run_weekly 7단계도 같은 record()를 부른다.
 
 - forward/{YYYYMMDD} 브랜치에서만 기록한다. main에 직접 커밋하지 않는다 (DEC-04).
-- 신호일 t 23:59:59 KST가 지나면 기록하지 않는다.
+- 신호일 t 23:59:59 KST가 지나면 기록하지 않는다. 커밋·로그 기록·push 직전마다 다시 확인한다.
+- 날짜별 입력을 커밋 전에 검사한다 (6.8절): 11/20 전 baseline만, 11/20~26 baseline+positions, 11/27부터 ML+positions.
 - 이미 기록한 신호일은 다시 기록하지 않는다 (커밋한 신호는 고치지 않는다).
 - 스텁(_stub/)은 읽지 않는다. 실제 폴더의 파일만 커밋한다.
 - 신호를 만든 코드의 커밋 해시를 두 커밋 메시지에 적는다 (DEC-04).
@@ -34,11 +35,28 @@ LABEL_H = 20  # 4.6절 ER_i(t,20). 라벨은 t+1+h일 종가에 확정된다
 KRX_CLOSED_DAYS = pd.to_datetime(["2026-12-25", "2026-12-31", "2027-01-01"])
 CALENDAR_END = pd.Timestamp("2027-01-31")  # 위 휴장일 목록이 맞다고 확인한 마지막 날
 
+# 6.8절 일정: 11/20부터 positions를 함께 기록하고, 11/27부터 ML 신호로 바꾼다
+POSITIONS_FROM = pd.Timestamp("2026-11-20")
+ML_FROM = pd.Timestamp("2026-11-27")
+
 log = logging.getLogger("forward_test")
 
 
 class ForwardTestError(RuntimeError):
     """기록하면 안 되는 상태. 아무것도 커밋하지 않고 멈춘다."""
+
+
+class ForwardTestPartial(ForwardTestError):
+    """기록 도중 멈췄다. 메시지에 끝난 단계와 남은 일을 적는다."""
+
+
+def expected_input(day: pd.Timestamp) -> tuple[str, bool]:
+    """신호일에 기록해야 하는 (signal_source, positions 포함 여부) (6.8절)."""
+    if day < POSITIONS_FROM:
+        return "baseline", False
+    if day < ML_FROM:
+        return "baseline", True
+    return "ml", True
 
 
 def label_ready_date(date: str | pd.Timestamp, h: int = LABEL_H) -> pd.Timestamp:
@@ -50,18 +68,26 @@ def label_ready_date(date: str | pd.Timestamp, h: int = LABEL_H) -> pd.Timestamp
     return days[h]
 
 
-def record(date: str, source_commit: str | None = None, push: bool = True,
+def record(date: str, source_commit: str, push: bool = True,
            now: Callable[[], pd.Timestamp] | None = None) -> str:
     """신호일 date의 신호를 커밋하고 해시를 forward_log.csv에 적는다. 신호 커밋 해시를 돌려준다.
 
-    source_commit: 신호를 만든 코드의 커밋. 없으면 지금 HEAD (run_weekly처럼 이 저장소에서 만든 경우).
+    source_commit: 신호를 만든 코드의 커밋 (DEC-04).
     push: False면 커밋과 태그까지만 하고 push하지 않는다 (리허설용).
     """
     io._check_date_arg(date)
     now = now or (lambda: pd.Timestamp.now(tz=KST))
     deadline = pd.Timestamp(f"{date} 23:59:59", tz=KST)
-    if now() > deadline:
-        raise ForwardTestError(f"마감({deadline:%Y-%m-%d %H:%M} KST)이 지나 기록하지 않는다 (6.8절)")
+
+    def check_deadline(done: str | None = None) -> None:
+        if now() <= deadline:
+            return
+        late = f"마감({deadline:%Y-%m-%d %H:%M} KST)이 지났다 (6.8절)"
+        if done is None:
+            raise ForwardTestError(f"{late}. 아무것도 기록하지 않았다")
+        raise ForwardTestPartial(f"{late}. {done}. 남은 단계는 하지 않았다. PM에게 알리고 deviation log에 남긴다")
+
+    check_deadline()
 
     stamp = date.replace("-", "")
     branch, tag = f"forward/{stamp}", f"ft-{stamp}"
@@ -73,7 +99,7 @@ def record(date: str, source_commit: str | None = None, push: bool = True,
     if _git("tag", "--list", tag):
         raise ForwardTestError(f"태그 {tag}가 이미 있다. 커밋한 신호는 고치지 않는다 (6.8절)")
     try:
-        code_commit = _git("rev-parse", "--verify", "--quiet", f"{source_commit or 'HEAD'}^{{commit}}")
+        code_commit = _git("rev-parse", "--verify", "--quiet", f"{source_commit}^{{commit}}")
     except ForwardTestError:
         raise ForwardTestError(f"신호를 만든 코드 커밋 {source_commit}을 찾을 수 없다. git fetch 후 다시 실행한다") from None
 
@@ -94,10 +120,17 @@ def record(date: str, source_commit: str | None = None, push: bool = True,
         io.read_table("positions", date=date)
         paths.append(f"positions/{date}.parquet")
     except FileNotFoundError:
-        pass  # 11/20 전에는 신호만 기록한다 (6.8절)
+        pass
+    want_source, want_positions = expected_input(day)
+    if source != want_source:
+        raise ForwardTestError(f"{date}은 {want_source} 신호를 기록하는 날인데 {source} 신호다 (6.8절)")
+    if (len(paths) > 1) != want_positions:
+        raise ForwardTestError(f"{date}은 positions {'포함' if want_positions else '없이'} 기록하는 날이다 (6.8절)")
 
     note = f"\n\n신호를 만든 코드 커밋: {code_commit}"
+    check_deadline()
     commit_hash = _commit_signals(date, paths, note)
+    check_deadline(f"신호 커밋 {commit_hash}까지 끝났고 forward_log.csv에는 적지 않았다")
 
     row = pd.DataFrame({
         "signal_date": [day],
@@ -112,17 +145,28 @@ def record(date: str, source_commit: str | None = None, push: bool = True,
         "bm_return": [float("nan")],
     })
     out = row if forward_log.empty else pd.concat([forward_log, row], ignore_index=True)
-    io.write_table("forward_log", out)
-    _git("add", "--", "forward_log.csv")
-    _git("commit", "-m", f"forward test: {date} 해시 기록\n\n신호 커밋: {commit_hash}{note}",
-         "--", "forward_log.csv")
-    _git("tag", tag, commit_hash)
+    try:
+        io.write_table("forward_log", out)
+        _git("add", "--", "forward_log.csv")
+        _git("commit", "-m", f"forward test: {date} 해시 기록\n\n신호 커밋: {commit_hash}{note}",
+             "--", "forward_log.csv")
+    except (ForwardTestError, ValueError, OSError) as exc:
+        # 파일에 행이 남으면 다시 실행할 때 '이미 기록됨'으로 막힌다
+        _git("restore", "--source=HEAD", "--staged", "--worktree", "--", "forward_log.csv")
+        raise ForwardTestPartial(f"신호 커밋 {commit_hash}까지 끝났고 forward_log.csv 기록은 되돌렸다. "
+                                 f"다시 실행하면 이어서 기록한다 ({exc})") from None
+    try:
+        _git("tag", tag, commit_hash)
+    except ForwardTestError as exc:
+        raise ForwardTestPartial(f"커밋은 끝났고 태그만 실패했다. 직접 실행한다: git tag {tag} {commit_hash} "
+                                 f"&& git push origin {branch} {tag} ({exc})") from None
     if push:
+        check_deadline(f"커밋과 태그까지 끝났고 push는 하지 않았다 ({branch}, {tag})")
         try:
             _git("push", "origin", branch, f"refs/tags/{tag}")
         except ForwardTestError as exc:
-            raise ForwardTestError(f"커밋과 태그는 끝났고 push만 실패했다. 23:59 전에 직접 push한다: "
-                                   f"git push origin {branch} {tag} ({exc})") from None
+            raise ForwardTestPartial(f"커밋과 태그는 끝났고 push만 실패했다. 23:59 전에 직접 push한다: "
+                                     f"git push origin {branch} {tag} ({exc})") from None
         log.info("기록 완료: %s 신호 커밋 %s, %s·%s push", date, commit_hash, branch, tag)
     else:
         log.info("기록 완료: %s 신호 커밋 %s (push 안 함)", date, commit_hash)
@@ -142,12 +186,18 @@ def _commit_signals(date: str, paths: list[str], note: str) -> str:
     """paths만 커밋하고 그 커밋 해시를 돌려준다. 다른 변경은 커밋에 넣지 않는다."""
     _git("add", "--", *paths)
     if not _git("diff", "--cached", "--name-only", "--", *paths):
-        # 지난 실행이 신호 커밋 뒤, 해시 기록 전에 멈춘 경우: 그 커밋을 그대로 쓴다
-        last = _git("log", "-1", "--format=%H", "--", paths[0])
-        if not last:
-            raise ForwardTestError(f"{paths[0]}에 커밋할 내용이 없다")
-        log.warning("%s는 이미 커밋돼 있어 그 커밋(%s)의 해시를 기록한다", paths[0], last)
+        # 지난 실행이 신호 커밋 뒤, 해시 기록 전에 멈춘 경우: 모든 파일이 든 그 커밋을 그대로 쓴다
+        commits = {_git("log", "-1", "--format=%H", "--", path) for path in paths}
+        if len(commits) != 1:
+            raise ForwardTestError(f"{', '.join(paths)}가 서로 다른 커밋에 있어 하나의 해시로 기록할 수 없다")
+        last = commits.pop()
+        log.warning("%s는 이미 커밋돼 있어 그 커밋(%s)의 해시를 기록한다", ", ".join(paths), last)
         return last
+    committed = [path for path in paths if _git("ls-tree", "--name-only", "HEAD", "--", path)]
+    if committed:
+        _git("restore", "--staged", "--", *paths)
+        raise ForwardTestError(f"이미 커밋된 파일이 달라졌다: {', '.join(committed)}. "
+                               "커밋한 신호는 고치지 않는다 (6.8절)")
     _git("commit", "-m", f"forward test: {date} 신호 커밋{note}", "--", *paths)
     return _git("rev-parse", "HEAD")
 
