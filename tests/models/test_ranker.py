@@ -5,6 +5,7 @@ import pandas as pd
 import pytest
 from scipy.stats import spearmanr
 
+from src.models.gate import load_booster
 from src.models.ranker import (RIDGE_ALPHAS, mean_rank_ic, rank_in_universe, rank_labels, save_fold, train_ranker)
 from src.models.splits import Fold
 
@@ -148,11 +149,13 @@ def test_holdout_dates_rejected():
         train_ranker(20, features=feat, labels=lab, folds=[late], grid=GRID, fixed=FIXED)
 
 
-def test_saved_model_reproduces_predictions(run, tmp_path):
+@pytest.mark.parametrize("folder", ["models", "보고서 모델"])   # 비 ASCII 경로에서도 저장·로드가 되어야 한다
+def test_saved_model_reproduces_predictions(run, tmp_path, folder):
     feat, _, r = run
-    save_fold(r, tmp_path)
-    booster = lgb.Booster(model_file=str(tmp_path / "ranker_2016_h20.txt"))
-    aux = joblib.load(tmp_path / "ranker_2016_h20_aux.joblib")
+    d = tmp_path / folder
+    save_fold(r, d)
+    booster = load_booster(d / "ranker_2016_h20.txt")
+    aux = joblib.load(d / "ranker_2016_h20_aux.joblib")
     te = feat[feat["date"].dt.year == 2016].reset_index(drop=True)
     np.testing.assert_allclose(booster.predict(te[aux["features"]]), r.predictions["rank_score"].to_numpy(), atol=1e-12)
     np.testing.assert_allclose(aux["ridge"].predict(te[aux["features"]]), r.predictions["b3_score"].to_numpy(), atol=1e-12)

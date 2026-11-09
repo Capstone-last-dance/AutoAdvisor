@@ -48,8 +48,8 @@ def train_final(features: pd.DataFrame, labels: pd.DataFrame, signal_dates, trad
 def save_final(models: FinalModels, directory: Path):
     d = Path(directory)
     d.mkdir(parents=True, exist_ok=True)
-    models.gate_booster.save_model(str(d / "final_gate.txt"), num_iteration=models.gate_iteration)
-    models.ranker_booster.save_model(str(d / "final_ranker.txt"), num_iteration=models.ranker_iteration)
+    gate.save_booster(models.gate_booster, d / "final_gate.txt", models.gate_iteration)
+    gate.save_booster(models.ranker_booster, d / "final_ranker.txt", models.ranker_iteration)
     joblib.dump({"calibrator": models.calibrator, "gate_features": models.gate_features,
                  "ranker_features": models.ranker_features, "h": models.h}, d / "final_aux.joblib")
     (d / "final_meta.json").write_text(json.dumps(models.meta, ensure_ascii=False, indent=2), encoding="utf-8")
@@ -58,8 +58,8 @@ def save_final(models: FinalModels, directory: Path):
 def load_final(directory: Path) -> FinalModels:
     d = Path(directory)
     aux = joblib.load(d / "final_aux.joblib")
-    return FinalModels(lgb.Booster(model_file=str(d / "final_gate.txt")), aux["gate_features"], aux["calibrator"],
-                       lgb.Booster(model_file=str(d / "final_ranker.txt")), aux["ranker_features"], aux["h"],
+    return FinalModels(gate.load_booster(d / "final_gate.txt"), aux["gate_features"], aux["calibrator"],
+                       gate.load_booster(d / "final_ranker.txt"), aux["ranker_features"], aux["h"],
                        json.loads((d / "final_meta.json").read_text(encoding="utf-8")))
 
 

@@ -3,7 +3,8 @@ import pytest
 
 from src.common.guards import purge_signal_dates
 from src.data.calendar import signal_dates
-from src.models.splits import HOLDOUT_START, cross_fits, final_split, make_folds, purge, purge_after
+from src.models.splits import (HOLDOUT_START, cross_fits, final_split, label_end_dates, make_folds, purge,
+                               purge_after)
 
 DAYS = pd.bdate_range("2010-01-04", "2026-10-30")          # 휴장일 없이 평일 전부를 거래일로 본 합성 캘린더
 SIG = pd.DatetimeIndex(signal_dates(DAYS))
@@ -162,3 +163,21 @@ def test_cross_fit_purges_more_when_label_ends_are_delayed():
     before = lambda c: sum(d.year < year for d in c.train)
     after = lambda c: sum(d.year > year for d in c.train)
     assert before(slow[year]) < before(base[year]) and after(slow[year]) < after(base[year])
+
+
+def test_label_end_dates_takes_the_latest_end_per_signal_date():
+    """C의 end_dates(date, ticker, h, nominal_end, actual_end)를 신호일별 최종 종료일로 줄인다."""
+    frame = pd.DataFrame({
+        "date": ["2016-01-08", "2016-01-08", "2016-01-08", "2016-01-15"],
+        "ticker": ["000001", "000002", "000003", "000001"],
+        "h": [20, 20, 5, 20],
+        "nominal_end": ["2016-02-05", "2016-02-05", "2016-01-15", "2016-02-12"],
+        "actual_end": ["2016-02-05", "2016-03-02", "2016-01-15", "2016-02-12"],   # 000002만 재개가 늦었다
+    })
+    ends = label_end_dates(frame, h=20)
+    assert ends == {pd.Timestamp("2016-01-08"): pd.Timestamp("2016-03-02"),       # h = 5 행은 안 본다
+                    pd.Timestamp("2016-01-15"): pd.Timestamp("2016-02-12")}
+    with pytest.raises(ValueError, match="h = 1 행이 없다"):
+        label_end_dates(frame, h=1)
+    with pytest.raises(ValueError, match="없는 열"):
+        label_end_dates(frame.drop(columns=["actual_end"]), h=20)

@@ -21,7 +21,7 @@ import numpy as np
 import pandas as pd
 from sklearn.linear_model import Ridge
 
-from src.models.gate import FIXED, GRID, SEED, check_dates, feature_columns, labelled
+from src.models.gate import FIXED, GRID, SEED, check_dates, feature_columns, labelled, save_booster
 
 RIDGE_ALPHAS = [0.1, 1, 10, 100]   # 부록 1 models.ranker.baselines.B3
 IC_MIN_NAMES = 3                   # 한 신호일에 이보다 적은 종목이면 그날의 IC는 계산하지 않는다
@@ -139,7 +139,7 @@ def save_fold(res: RankerResult, directory: Path):
     d = Path(directory)
     d.mkdir(parents=True, exist_ok=True)
     tag = f"{res.test_year if res.test_year is not None else 'final'}_h{res.h}"
-    res.model.booster_.save_model(str(d / f"ranker_{tag}.txt"), num_iteration=res.model.best_iteration_)
+    save_booster(res.model.booster_, d / f"ranker_{tag}.txt", res.model.best_iteration_)
     joblib.dump({"ridge": res.ridge, "features": res.features}, d / f"ranker_{tag}_aux.joblib")
     (d / f"ranker_{tag}_meta.json").write_text(json.dumps(
         {"h": res.h, "params": res.params, "val_mean_rank_ic": res.val_ic, "best_iteration": int(res.model.best_iteration_),

@@ -67,10 +67,12 @@ def test_only_that_dates_features_are_used(trained):
     pd.testing.assert_frame_equal(a, generate_signals(d, feat[feat["date"] <= d], models, "v"))   # 이후 행을 지워도 같다
 
 
-def test_saved_models_reproduce_signals_exactly(trained, tmp_path):
+@pytest.mark.parametrize("folder", ["models", "보고서 모델"])   # 비 ASCII 경로에서도 저장·로드가 되어야 한다
+def test_saved_models_reproduce_signals_exactly(trained, tmp_path, folder):
     feat, _, models = trained
-    save_final(models, tmp_path)
-    loaded = load_final(tmp_path)
+    d = tmp_path / folder
+    save_final(models, d)
+    loaded = load_final(d)
     for d in ["2015-01-30", "2026-10-30"]:
         pd.testing.assert_frame_equal(generate_signals(d, feat, models, "v"), generate_signals(d, feat, loaded, "v"))
     assert loaded.meta == models.meta and loaded.h == 20

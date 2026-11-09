@@ -7,7 +7,8 @@ import pandas as pd
 import pytest
 from sklearn.metrics import roc_auc_score
 
-from src.models.gate import crash_labels, feature_columns, fit_fold, flag_top, save_fold, walk_forward_gate
+from src.models.gate import (crash_labels, feature_columns, fit_fold, flag_top, load_booster, save_fold,
+                             walk_forward_gate)
 from src.models.splits import Fold
 
 
@@ -144,12 +145,14 @@ def test_flag_top_small_universe():
     assert flag_top(df, "p").tolist() == [1, 0, 0]          # ceil(0.3) = 1개, 동점은 종목코드 순
 
 
-def test_saved_model_reproduces_predictions(run, tmp_path):
+@pytest.mark.parametrize("folder", ["models", "보고서 모델"])   # 비 ASCII 경로에서도 저장·로드가 되어야 한다
+def test_saved_model_reproduces_predictions(run, tmp_path, folder):
     feat, _, r = run
-    save_fold(r, tmp_path)
-    booster = lgb.Booster(model_file=str(tmp_path / "gate_2016.txt"))
-    aux = joblib.load(tmp_path / "gate_2016_aux.joblib")
+    d = tmp_path / folder
+    save_fold(r, d)
+    booster = load_booster(d / "gate_2016.txt")
+    aux = joblib.load(d / "gate_2016_aux.joblib")
     te = feat[feat["date"].dt.year == 2016].reset_index(drop=True)
     raw = booster.predict(te[aux["features"]])
     np.testing.assert_allclose(aux["calibrator"].predict(raw), r.predictions["crash_prob"].to_numpy(), atol=1e-12)
-    assert (tmp_path / "gate_2016_meta.json").exists()
+    assert (d / "gate_2016_meta.json").exists()

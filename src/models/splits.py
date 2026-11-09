@@ -59,6 +59,23 @@ def _label_ends(dates: pd.DatetimeIndex, days: pd.DatetimeIndex, h: int, actual_
     return pd.DatetimeIndex(np.maximum(ends, actual.to_numpy()))
 
 
+def label_end_dates(end_dates: pd.DataFrame, h: int = 20) -> dict:
+    """C의 `LabelBuildResult.end_dates`를 purge 입력으로 바꾼다 (DEC-09 (3), C 리뷰 요청).
+
+    열은 `date, ticker, h, nominal_end, actual_end`다. 신호일마다 그 날 라벨 전체에서 가장 늦게 끝나는
+    날짜를 고른다(거래정지로 재개가 늦어진 행이 있으면 그 행이 기준이 된다). 결과를 `purge()`·
+    `purge_after()`·`cross_fits()`의 `actual_end_dates`로 넘기면 명목 종료일 대신 이 날짜를 쓴다.
+    """
+    missing = {"date", "h", "nominal_end", "actual_end"} - set(end_dates.columns)
+    if missing:
+        raise ValueError(f"end_dates에 없는 열: {sorted(missing)}")
+    x = end_dates[end_dates["h"] == h]
+    if x.empty:
+        raise ValueError(f"end_dates에 h = {h} 행이 없다")
+    latest = pd.concat([pd.to_datetime(x["nominal_end"]), pd.to_datetime(x["actual_end"])], axis=1).max(axis=1)
+    return dict(latest.groupby(pd.to_datetime(x["date"])).max().items())
+
+
 def purge(dates, next_start, trading_days, h: int, actual_end_dates=None) -> pd.DatetimeIndex:
     """라벨 종료일이 next_start 이상인 t를 뺀다. dates와 next_start는 모두 거래일이어야 한다(아니면 ValueError)."""
     days = pd.DatetimeIndex(trading_days)

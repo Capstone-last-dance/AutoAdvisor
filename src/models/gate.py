@@ -132,12 +132,26 @@ def walk_forward_gate(features, labels, folds, **kw) -> list:
     return [fit_fold(features, labels, f, **kw) for f in folds]
 
 
+def save_booster(booster: lgb.Booster, path: Path, num_iteration: int | None = None) -> None:
+    """LightGBM 모델을 텍스트 파일로 저장한다.
+
+    `Booster.save_model`은 C++ 쪽에서 경로를 직접 열기 때문에 Windows의 한글(비 ASCII) 경로에서 실패한다.
+    모델을 문자열로 받아 파이썬이 쓰면 경로 처리 방식이 같아져 그런 경로에서도 동작한다.
+    """
+    Path(path).write_text(booster.model_to_string(num_iteration=num_iteration), encoding="utf-8")
+
+
+def load_booster(path: Path) -> lgb.Booster:
+    """save_booster로 쓴 모델을 읽는다. `model_file=`도 같은 경로 문제가 있어 문자열로 넘긴다."""
+    return lgb.Booster(model_str=Path(path).read_text(encoding="utf-8"))
+
+
 def save_fold(res: FoldResult, directory: Path):
     """M12(SHAP)가 읽을 모델 파일. LightGBM은 텍스트, 보정기와 베이스라인은 joblib."""
     d = Path(directory)
     d.mkdir(parents=True, exist_ok=True)
     tag = res.test_year if res.test_year is not None else "final"
-    res.model.booster_.save_model(str(d / f"gate_{tag}.txt"), num_iteration=res.model.best_iteration_)
+    save_booster(res.model.booster_, d / f"gate_{tag}.txt", res.model.best_iteration_)
     joblib.dump({"calibrator": res.calibrator, "baseline": res.baseline, "features": res.features}, d / f"gate_{tag}_aux.joblib")
     (d / f"gate_{tag}_meta.json").write_text(json.dumps(
         {"params": res.params, "val_auc": res.val_auc, "best_iteration": int(res.model.best_iteration_),
