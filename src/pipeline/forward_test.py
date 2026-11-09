@@ -20,9 +20,11 @@ from __future__ import annotations
 
 import argparse
 import logging
+import re
 import subprocess
 import sys
 from collections.abc import Callable, Sequence
+from io import BytesIO
 
 import pandas as pd
 
@@ -38,6 +40,8 @@ CALENDAR_END = pd.Timestamp("2027-01-31")  # 위 휴장일 목록이 맞다고 �
 # 6.8절 일정: 11/20부터 positions를 함께 기록하고, 11/27부터 ML 신호로 바꾼다
 POSITIONS_FROM = pd.Timestamp("2026-11-20")
 ML_FROM = pd.Timestamp("2026-11-27")
+
+PUBLISHED_TAGS = "refs/forward-published"  # origin의 ft-* 태그를 받아 두는 곳
 
 log = logging.getLogger("forward_test")
 
@@ -184,6 +188,35 @@ def record(date: str, source_commit: str, push: bool = True, memo: str | None = 
     else:
         log.info("기록 완료: %s 신호 커밋 %s (push 안 함)", date, commit_hash)
     return commit_hash
+
+
+def past_positions(t: str) -> dict[str, pd.DataFrame]:
+    """t보다 앞선 기록의 positions를 태그 ft-*에서 읽어 {신호일 "YYYY-MM-DD": 표}로 날짜순으로 돌려준다.
+
+    positions가 없는 기록(11/20 전)은 뺀다. 병합을 기다리지 않도록 작업 폴더가 아니라 태그에서 읽고,
+    origin에 게시된 태그만 전용 ref로 받아 읽는다. push에 실패해 로컬에만 남은 태그는 기록이 아니다.
+    태그의 파일이 스키마를 어기면 예외를 낸다.
+    """
+    io._check_date_arg(t)
+    _git("fetch", "-q", "--prune", "--no-tags", "origin", f"+refs/tags/ft-*:{PUBLISHED_TAGS}/ft-*")
+    dates = sorted(f"{m[1]}-{m[2]}-{m[3]}"
+                   for tag in _git("for-each-ref", "--format=%(refname:strip=2)", PUBLISHED_TAGS).splitlines()
+                   if (m := re.fullmatch(r"ft-(\d{4})(\d{2})(\d{2})", tag)))
+    out: dict[str, pd.DataFrame] = {}
+    for date in dates:
+        path = f"positions/{date}.parquet"
+        tag = f"{PUBLISHED_TAGS}/ft-{date.replace('-', '')}"
+        if date >= t or not _git("ls-tree", "--name-only", tag, "--", path):
+            continue
+        result = subprocess.run(["git", "-C", str(io.ROOT), "cat-file", "blob", f"{tag}:{path}"], capture_output=True)
+        if result.returncode != 0:
+            raise ForwardTestError(f"{tag}의 {path}를 읽지 못했다")
+        df = io._normalize_dates("positions", pd.read_parquet(BytesIO(result.stdout)))
+        io.validate("positions", df)
+        if not (df["date"] == pd.Timestamp(date)).all():
+            raise ForwardTestError(f"{tag}의 {path}에 다른 날짜의 행이 있다")
+        out[date] = df
+    return out
 
 
 def _signal_source(signals: pd.DataFrame) -> str:
