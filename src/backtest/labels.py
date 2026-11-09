@@ -210,6 +210,15 @@ def build_labels(
         row.ticker: (row.delist_date, row.last_price)
         for row in reused_frame.itertuples()
     }
+    duplicated_exits = {
+        ticker for ticker in exits.keys() & old_exits.keys()
+        if exits[ticker][0] == old_exits[ticker][0]
+    }
+    if duplicated_exits:
+        raise ValueError(
+            "같은 폐지 이력이 delisted와 delisted_reused에 중복되었습니다: "
+            f"{sorted(duplicated_exits)}"
+        )
     # DEC-28: 공용 delisted는 현재 회사, 별도 파일은 재사용 코드의 구회사다.
     # 오래된 호출자가 구회사 이력을 delisted에 직접 준 경우도 계속 지원한다.
     relisted_at = {}

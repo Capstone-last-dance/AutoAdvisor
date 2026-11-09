@@ -223,3 +223,11 @@ def test_dec28_separate_old_delisting_and_current_company_exit():
     new_label = result.labels[(result.labels.date == pd.Timestamp(days[10])) & (result.labels.h == 5)]
     assert old_label.iloc[0].ret == pytest.approx(-0.5)
     assert new_label.iloc[0].ret == pytest.approx(-0.5)
+    with pytest.raises(ValueError, match="중복"):
+        build_labels(
+            prices=prices, index=index, universe=universe, status=status,
+            delisted=old, delisted_reused=old,
+            trading_days=days, signal_dates=[days[0], days[10]],
+            rules=LabelRules((1, 5), 5, -0.15), policy=POLICY,
+            allow_holdout=False, run_date=days[-1],
+        )
