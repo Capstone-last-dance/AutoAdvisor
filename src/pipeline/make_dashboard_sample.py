@@ -21,9 +21,16 @@ from src.common import io
 KST = "Asia/Seoul"
 SIGNAL_DATES = ("2026-11-06", "2026-11-13")
 TICKERS = [f"{i:06d}" for i in range(10, 410, 10)]
+REPO = Path(__file__).resolve().parents[2]
+SAMPLE_MARKER = ".dashboard_sample"  # 이 생성기가 만든 폴더 표시
 
 
 def write_sample(root: Path) -> None:
+    """root에 샘플을 쓴다. 저장소 루트와 샘플 폴더가 아닌 기존 폴더는 ValueError로 거부한다."""
+    root = root.resolve()
+    _check_output(root)
+    root.mkdir(parents=True, exist_ok=True)
+    (root / SAMPLE_MARKER).touch()
     saved = io.ROOT
     io.ROOT = root
     try:
@@ -32,8 +39,21 @@ def write_sample(root: Path) -> None:
         io.ROOT = saved
 
 
+def _check_output(root: Path) -> None:
+    if root == REPO or root in REPO.parents:
+        raise ValueError(f"저장소 루트에는 샘플을 쓸 수 없다: {root}")
+    if root.exists() and (not root.is_dir() or (any(root.iterdir()) and not (root / SAMPLE_MARKER).exists())):
+        raise ValueError(f"샘플 폴더가 아닌 기존 경로에는 쓸 수 없다: {root}")
+
+
 def _write_all() -> None:
     n = len(TICKERS)
+    days = pd.bdate_range("2026-08-03", SIGNAL_DATES[-1])
+    io.write_table("index", pd.DataFrame({
+        "date": days,
+        "index_code": ["KOSPI200"] * len(days),
+        "close": np.full(len(days), 400.0),
+    }))
 
     for shift, date in enumerate(SIGNAL_DATES):
         day = pd.Timestamp(date)
@@ -98,7 +118,11 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="대시보드 샘플 데이터 생성")
     parser.add_argument("--out", default="_sample", help="출력 폴더")
     args = parser.parse_args(argv)
-    write_sample(Path(args.out).resolve())
+    try:
+        write_sample(Path(args.out))
+    except ValueError as exc:
+        print(f"오류: {exc}", file=sys.stderr)
+        return 1
     print(f"샘플 데이터를 {args.out}에 만들었다")
     return 0
 

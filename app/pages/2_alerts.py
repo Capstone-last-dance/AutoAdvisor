@@ -7,8 +7,11 @@ import dashboard as ui
 
 ui.start_page("주중 경보")
 
-alerts = ui.recent_alerts(20)
-if alerts is None:
+window = ui.alert_window(20)
+alerts = None if window is None else ui.alerts_on(window)
+if window is None:
+    st.warning("거래일 자료(index)가 없어 경보를 표시하지 않습니다.")
+elif alerts is None:
     st.info("최근 20거래일 경보가 없습니다.")
 else:
     triggers = ui.trigger_names()

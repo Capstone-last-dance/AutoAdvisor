@@ -101,11 +101,40 @@ def cooldown_days() -> int:
         return int(yaml.safe_load(f)["events"]["cooldown_trading_days"])
 
 
-def recent_alerts(count: int, until: str | None = None) -> pd.DataFrame | None:
-    """until까지의 최근 count개 경보 파일(파일 하나가 거래일 하나)을 합친다. 없으면 None."""
-    dates = [d for d in io.list_dates("alerts") if until is None or d <= until][-count:]
-    frames = [df for d in dates if (df := read("alerts", d)) is not None and not df.empty]
+@st.cache_data(show_spinner=False)
+def _signal_cutoff_time() -> str:
+    with open(REPO / "configs" / "prereg.yaml", encoding="utf-8") as f:
+        return yaml.safe_load(f)["calendar"]["signal_cutoff_time"]
+
+
+def alert_window(count: int, until: str | None = None) -> list[str] | None:
+    """until까지의 최근 count거래일. 거래일은 코스피 200 종가가 있는 날이다 (Q-14). index 파일이 없으면 None.
+
+    until을 주지 않으면 거래일 자료와 경보 파일 중 가장 늦은 날이 기준이다.
+    지수가 아직 갱신되지 않은 날의 경보 파일은 그날을 거래일로 본다.
+    """
+    index = read("index")
+    if index is None or index.empty:
+        return None
+    days = sorted(index["date"].dt.strftime("%Y-%m-%d").unique())
+    files = io.list_dates("alerts")
+    end = until or max([days[-1], *files[-1:]])
+    return ([d for d in days if d <= end] + [d for d in files if days[-1] < d <= end])[-count:]
+
+
+def alerts_on(days: list[str]) -> pd.DataFrame | None:
+    """days의 경보 파일을 합친다. 없으면 None."""
+    frames = [df for d in days if (df := read("alerts", d)) is not None and not df.empty]
     return pd.concat(frames, ignore_index=True) if frames else None
+
+
+def cooldown_tickers(days: list[str], signal_date: str) -> set[str]:
+    """days의 경보 중 신호일 컷오프 전에 이용 가능했던 경보의 종목 (available_at < cutoff_at, 6.10절)."""
+    alerts = alerts_on(days)
+    if alerts is None:
+        return set()
+    cutoff = pd.Timestamp(f"{signal_date} {_signal_cutoff_time()}", tz=KST)
+    return set(alerts.loc[alerts["available_at"] < cutoff, "ticker"])
 
 
 def entry_candidates(signals: pd.DataFrame, cooldown: set[str]) -> pd.DataFrame:

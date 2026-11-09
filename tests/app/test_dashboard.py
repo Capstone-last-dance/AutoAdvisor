@@ -16,13 +16,23 @@ from streamlit.testing.v1 import AppTest
 
 from src.common import io
 from src.pipeline.make_dashboard_sample import SIGNAL_DATES, write_sample
+from src.pipeline.make_dashboard_sample import main as sample_main
 from tests.common.test_io import sample
 
-APP = Path(__file__).resolve().parents[2] / "app"
+REPO_DIR = Path(__file__).resolve().parents[2]
+APP = REPO_DIR / "app"
 PAGES = [APP / "Home.py", *sorted((APP / "pages").glob("*.py"))]
 sys.path.insert(0, str(APP))
 
 import dashboard as ui  # noqa: E402
+
+
+def io_read(root, name, **kwargs):
+    saved, io.ROOT = io.ROOT, root
+    try:
+        return io.read_table(name, **kwargs)
+    finally:
+        io.ROOT = saved
 
 
 class RootTest(unittest.TestCase):
@@ -105,6 +115,104 @@ class EmptyPagesTest(RootTest):
     def test_performance_without_reports(self):
         at = self.open(APP / "pages" / "4_performance.py")
         self.assertEqual(at.info[0].value, "확정된 결과 없음")
+
+
+class AlertTimingTest(RootTest):
+    SIGNAL = SIGNAL_DATES[-1]
+
+    def setUp(self):
+        super().setUp()
+        write_sample(self.tmp)
+        (self.tmp / "alerts").joinpath("2026-11-11.parquet").unlink()
+        self.top = io_read(self.tmp, "signals", date=self.SIGNAL).sort_values("rank")["ticker"].iloc[0]
+
+    def alert(self, day, available, ticker=None):
+        ticker = ticker or self.top
+        saved, io.ROOT = io.ROOT, self.tmp
+        try:
+            io.write_table("alerts", pd.DataFrame({
+                "date": [pd.Timestamp(day)],
+                "ticker": [ticker],
+                "trigger_type": ["T1"],
+                "rcept_no": [f"{day.replace('-', '')}000001"],
+                "report_nm": ["샘플 공시"],
+                "rcept_dt": pd.to_datetime([pd.NaT]).tz_localize(ui.KST),
+                "available_at": pd.to_datetime([available]).tz_localize(ui.KST),
+            }), date=day)
+        finally:
+            io.ROOT = saved
+
+    def candidates(self):
+        return self.open(APP / "pages" / "1_weekly_signals.py").dataframe[1].value
+
+    def test_old_alert_outside_window_is_ignored(self):
+        self.alert("2026-09-01", "2026-09-01 10:00:00")
+        self.assertIn(self.top, set(self.candidates()["종목코드"]))
+        at = self.open(APP / "pages" / "2_alerts.py")
+        self.assertEqual(len(at.dataframe), 0)
+        self.assertEqual(at.info[0].value, "최근 20거래일 경보가 없습니다.")
+
+    def test_alert_inside_window_applies(self):
+        self.alert("2026-10-19", "2026-10-19 10:00:00")              # 11/13부터 세어 20번째 거래일
+        self.assertNotIn(self.top, set(self.candidates()["종목코드"]))
+        self.assertEqual(len(self.open(APP / "pages" / "2_alerts.py").dataframe[0].value), 1)
+
+    def test_window_uses_actual_trading_days(self):
+        saved, io.ROOT = io.ROOT, self.tmp
+        try:
+            index = io.read_table("index")
+            io.write_table("index", index[index["date"] != pd.Timestamp("2026-11-12")])
+            self.assertEqual(ui.alert_window(3, until=self.SIGNAL), ["2026-11-10", "2026-11-11", "2026-11-13"])
+        finally:
+            io.ROOT = saved
+
+    def test_alert_file_after_last_index_day_counts(self):
+        self.alert("2026-11-16", "2026-11-16 18:00:00")
+        at = self.open(APP / "pages" / "2_alerts.py")
+        self.assertEqual(len(at.dataframe[0].value), 1)
+
+    def test_cutoff_is_strict(self):
+        for when, excluded in [("15:29:59", True), ("15:30:00", False), ("16:00:00", False)]:
+            with self.subTest(when=when):
+                self.alert(self.SIGNAL, f"{self.SIGNAL} {when}")
+                self.assertEqual(self.top not in set(self.candidates()["종목코드"]), excluded)
+
+    def test_no_calendar_shows_no_candidates(self):
+        (self.tmp / "data" / "processed" / "index.parquet").unlink()
+        at = self.open(APP / "pages" / "1_weekly_signals.py")
+        self.assertIn("거래일 자료", at.warning[0].value)
+        self.assertEqual(len(at.dataframe), 2)                       # 경보 표와 포트폴리오 표만
+
+
+class SampleOutputTest(unittest.TestCase):
+    def setUp(self):
+        self.tmp = Path(tempfile.mkdtemp())
+
+    def tearDown(self):
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def test_refuses_repo_root(self):
+        before = (REPO_DIR / "forward_log.csv").read_bytes()
+        with self.assertRaises(ValueError):
+            write_sample(REPO_DIR)
+        self.assertEqual((REPO_DIR / "forward_log.csv").read_bytes(), before)
+
+    def test_refuses_folder_with_existing_outputs_and_keeps_them(self):
+        (self.tmp / "signals").mkdir()
+        signal = self.tmp / "signals" / f"{SIGNAL_DATES[-1]}.parquet"
+        log = self.tmp / "forward_log.csv"
+        signal.write_bytes(b"real signal")
+        log.write_bytes(b"real log")
+        self.assertEqual(sample_main(["--out", str(self.tmp)]), 1)
+        self.assertEqual(signal.read_bytes(), b"real signal")
+        self.assertEqual(log.read_bytes(), b"real log")
+        self.assertFalse((self.tmp / "data").exists())
+
+    def test_rewrites_own_sample_folder(self):
+        out = self.tmp / "sample"
+        write_sample(out)
+        write_sample(out)
+        self.assertTrue((out / "forward_log.csv").exists())
 
 
 class EntryCandidatesTest(unittest.TestCase):

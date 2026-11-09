@@ -25,15 +25,18 @@ else:
 
         st.subheader("진입 후보")
         days = ui.cooldown_days()
-        alerts = ui.recent_alerts(days, until=latest)
-        cooldown = set() if alerts is None else set(alerts["ticker"])
-        candidates = ui.entry_candidates(signals, cooldown)
-        st.caption(f"진입 금지 경보 종목과 최근 {days}거래일 주중 경보 종목을 뺀 상위 {ui.CANDIDATE_COUNT}종목입니다.")
-        st.dataframe(pd.DataFrame({
-            "rank": candidates["rank"],
-            "종목코드": candidates["ticker"],
-            "rank_score": candidates["rank_score"],
-        }), hide_index=True)
+        window = ui.alert_window(days, until=latest)
+        if window is None:
+            st.warning("거래일 자료(index)가 없어 진입 후보를 계산하지 않습니다.")
+        else:
+            candidates = ui.entry_candidates(signals, ui.cooldown_tickers(window, latest))
+            st.caption(f"진입 금지 경보 종목과, 신호 컷오프 전에 공개된 최근 {days}거래일 주중 경보 종목을 "
+                       f"뺀 상위 {ui.CANDIDATE_COUNT}종목입니다.")
+            st.dataframe(pd.DataFrame({
+                "rank": candidates["rank"],
+                "종목코드": candidates["ticker"],
+                "rank_score": candidates["rank_score"],
+            }), hide_index=True)
 
     st.subheader("모델 포트폴리오")
     positions = ui.read("positions", latest)
