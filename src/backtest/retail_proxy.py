@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Iterable
 from dataclasses import dataclass
+from datetime import date
 from math import isfinite
 
 import numpy as np
@@ -13,6 +14,7 @@ import statsmodels.api as sm
 from src.backtest.accounting import blocked_reason, execute_orders, portfolio_nav, trade_cost
 from src.backtest.engine import ExecutionEngine
 from src.backtest.metrics import cagr, max_drawdown
+from src.common.guards import DataAccessPolicy, assert_outcome_dates_allowed
 
 
 @dataclass(frozen=True)
@@ -23,39 +25,39 @@ class CohortSelection:
 
 
 def select_retail_cohort(
-    volumes: pd.DataFrame,
+    values: pd.DataFrame,
     eligible_tickers: Iterable[str],
     signal_date: str,
     *,
     top_n: int = 30,
 ) -> CohortSelection:
-    """U_t에서 5일 평균 거래량 / 직전 60일 평균 거래량 상위 종목을 고른다.
+    """U_t에서 5일 평균 거래대금 / 직전 60일 평균 거래대금 상위 종목을 고른다.
 
-    입력은 KRX 거래일 × 종목 거래량 표다. 분자는 t−4~t, 분모는
+    입력은 KRX 거래일 × 종목 거래대금(`prices.value`) 표다. 분자는 t−4~t, 분모는
     t−64~t−5이며, 후행 날짜를 읽지 않는다. 65일 중 결측이 있거나
     분모가 0인 종목은 순위를 만들지 않고 건수를 따로 돌려준다.
     """
     if type(top_n) is not int or top_n < 1:
         raise ValueError("top_n은 양의 정수여야 합니다")
-    if (volumes.empty or not isinstance(volumes.index, pd.DatetimeIndex)
-            or volumes.index.has_duplicates or not volumes.index.is_monotonic_increasing):
-        raise ValueError("거래량 표는 중복 없는 오름차순 거래일이어야 합니다")
-    if volumes.columns.has_duplicates:
-        raise ValueError("거래량 표의 종목코드는 고유해야 합니다")
+    if (values.empty or not isinstance(values.index, pd.DatetimeIndex)
+            or values.index.has_duplicates or not values.index.is_monotonic_increasing):
+        raise ValueError("거래대금 표는 중복 없는 오름차순 거래일이어야 합니다")
+    if values.columns.has_duplicates:
+        raise ValueError("거래대금 표의 종목코드는 고유해야 합니다")
     day = pd.Timestamp(signal_date)
-    if day not in volumes.index:
-        raise ValueError("신호일이 거래량 표에 없습니다")
-    end = volumes.index.get_loc(day)
+    if day not in values.index:
+        raise ValueError("신호일이 거래대금 표에 없습니다")
+    end = values.index.get_loc(day)
     if end < 64:
-        raise ValueError("신호일 이전 거래량 이력 64일이 필요합니다")
+        raise ValueError("신호일 이전 거래대금 이력 64일이 필요합니다")
     tickers = sorted(set(str(ticker) for ticker in eligible_tickers))
     if not tickers:
         raise ValueError("U_t가 비어 있습니다")
-    history = volumes.reindex(columns=tickers).iloc[end - 64 : end + 1].apply(
+    history = values.reindex(columns=tickers).iloc[end - 64 : end + 1].apply(
         pd.to_numeric, errors="coerce"
     )
     if (history < 0).any().any():
-        raise ValueError("거래량은 음수일 수 없습니다")
+        raise ValueError("거래대금은 음수일 수 없습니다")
     valid = history.notna().all(axis=0) & np.isfinite(history.to_numpy()).all(axis=0)
     baseline = history.iloc[:60].mean(axis=0)
     recent = history.iloc[60:].mean(axis=0)
@@ -75,6 +77,8 @@ class CohortEffect:
     hac_t_statistic: float | None
     signal_days_undefined: int
     missing_pairs: int
+    signal_days_no_flags: int = 0
+    signal_days_missing_group: int = 0
 
 
 def cohort_effect_hac(
@@ -84,11 +88,14 @@ def cohort_effect_hac(
     *,
     horizon: int = 20,
     maxlags: int = 4,
+    policy: DataAccessPolicy,
+    run_date: date,
+    allow_holdout: bool = False,
 ) -> CohortEffect:
     """코호트의 G2 d_t와 상수항 OLS·HAC t값을 계산한다.
 
-    호출자는 C 홀드아웃 가드를 통과한 라벨만 전달해야 한다. 결측 ER이나
-    crash_flag를 0으로 채우지 않고 제외 건수에 기록한다.
+    C 홀드아웃 가드를 직접 적용한다. 결측 ER이나 crash_flag를 0으로
+    채우지 않고 제외 건수에 기록한다.
     """
     if type(horizon) is not int or horizon < 1 or type(maxlags) is not int or maxlags < 0:
         raise ValueError("horizon은 양의 정수, maxlags는 0 이상의 정수여야 합니다")
@@ -99,6 +106,10 @@ def cohort_effect_hac(
     ):
         if required - set(frame):
             raise ValueError(f"{name} 필수 열이 없습니다: {sorted(required - set(frame))}")
+    assert_outcome_dates_allowed(
+        pd.to_datetime(cohorts["date"]).dt.date,
+        policy=policy, allow_holdout=allow_holdout, run_date=run_date,
+    )
     selected = labels.loc[labels["h"] == horizon, ["date", "ticker", "er"]]
     for name, frame in (("cohorts", cohorts), ("signals", signals), ("labels", selected)):
         if frame.duplicated(["date", "ticker"]).any():
@@ -114,17 +125,25 @@ def cohort_effect_hac(
     missing_pairs = int((~valid).sum())
     values: dict[object, float] = {}
     undefined = 0
+    no_flags = 0
+    missing_group = 0
     for day, group in joined.groupby("date", sort=True):
+        has_flagged = group["crash_flag"].eq(1).any()
+        has_unknown_flag = group["crash_flag"].isna().any()
         group = group.loc[valid.loc[group.index]]
         flagged = group.loc[group["crash_flag"] == 1, "er"]
         unflagged = group.loc[group["crash_flag"] == 0, "er"]
         if flagged.empty or unflagged.empty:
             undefined += 1
+            if not has_flagged and not has_unknown_flag:
+                no_flags += 1
+            else:
+                missing_group += 1
             continue
         values[day] = float(flagged.mean() - unflagged.mean())
     daily_d = pd.Series(values, dtype="float64", name="d_t")
     if daily_d.empty:
-        return CohortEffect(daily_d, None, None, undefined, missing_pairs)
+        return CohortEffect(daily_d, None, None, undefined, missing_pairs, no_flags, missing_group)
     t_stat = None
     if len(daily_d) >= 2:
         fit = sm.OLS(daily_d.to_numpy(), np.ones((len(daily_d), 1))).fit(
@@ -133,7 +152,8 @@ def cohort_effect_hac(
         candidate = float(fit.tvalues[0])
         if isfinite(candidate):
             t_stat = candidate
-    return CohortEffect(daily_d, float(daily_d.mean()), t_stat, undefined, missing_pairs)
+    return CohortEffect(daily_d, float(daily_d.mean()), t_stat, undefined, missing_pairs,
+                        no_flags, missing_group)
 
 
 @dataclass(frozen=True)
@@ -178,6 +198,9 @@ def simulate_retail_proxy(
     gate: bool,
     holding_days: int = 20,
     cohort_fraction: float = 0.25,
+    policy: DataAccessPolicy,
+    run_date: date,
+    allow_holdout: bool = False,
 ) -> ProxyRun:
     """겹치는 코호트를 20거래일 보유하며 공통 C 체결·비용 함수로 운용한다.
 
@@ -196,6 +219,10 @@ def simulate_retail_proxy(
         raise ValueError("코호트·신호 필수 열이 없습니다")
     selected = cohorts[["date", "ticker"]].copy()
     selected["date"] = pd.to_datetime(selected["date"]).dt.strftime("%Y-%m-%d")
+    assert_outcome_dates_allowed(
+        [*selected["date"], end_date], policy=policy,
+        allow_holdout=allow_holdout, run_date=run_date,
+    )
     flags = signals[["date", "ticker", "crash_flag"]].copy()
     flags["date"] = pd.to_datetime(flags["date"]).dt.strftime("%Y-%m-%d")
     if selected.empty or selected.duplicated(["date", "ticker"]).any() or flags.duplicated(["date", "ticker"]).any():

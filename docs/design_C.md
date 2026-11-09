@@ -53,7 +53,7 @@ PM이 만든 M9 경보·쿨다운을 입력받는다.
 | `alerts/{d}.parquet` | M9 청산·쿨다운 이벤트의 적용 시각 확인 |
 
 DEC-22에 따라 `investor_flows.parquet`은 만들지 않는다. 후속 C-04의
-개인 행동 프록시는 거래량 비율의 확정된 대체 정의를 사용하고,
+개인 행동 프록시는 거래대금 비율의 확정된 대체 정의를 사용하고,
 forward test 사후 성과는 `forward_log.csv`도 읽는다. C-02는
 `data/processed/labels.parquet`를 만들어 A·B에 제공한다. C-03은
 `reports/{run_id}/metrics.json`과 그림을 만들며, 확정한 결과만
@@ -269,7 +269,7 @@ B-01의 `IRFunction`은 `float`를 반환하고 검증 콜백은 비유한 IR을
 
 ### 개인 행동 프록시와 G2 — C-04 설계
 
-신호일 `t`마다 `U_t`에서 DEC-22의 거래량 비율
+신호일 `t`마다 `U_t`에서 DEC-22의 거래대금 비율
 `mean(V,t-4~t) / mean(V,t-64~t-5)` 상위 30종목을 코호트로 뽑는다.
 각 코호트는 `t+1` 종가에 당시 NAV의
 **1/4**을 종목별 동일가중으로 매수한다. 현금이 부족하면 가용 현금만
@@ -281,6 +281,8 @@ B-01의 `IRFunction`은 `float`를 반환하고 검증 콜백은 비유한 IR을
 `d_t = mean(ER(t,20) | flagged) - mean(ER(t,20) | unflagged)`를 만든다.
 `d_t` 평균의 t값은 rank IC와 같은 상수항 OLS·HAC(`maxlags=4`)로
 계산한다. DEC-22 대체 정의와 누락 표본을 실행 설정·리포트에 남긴다.
+코호트 운용과 `d_t` 계산은 C 홀드아웃 가드를 호출하며, 플래그가 없는
+신호일과 한쪽 집단의 유효 라벨이 없어 미산출된 신호일을 따로 센다.
 
 코호트 선정, `d_t`, 운용 NAV와 G2 판정은
 `src.backtest.retail_proxy`에 분리한다.
