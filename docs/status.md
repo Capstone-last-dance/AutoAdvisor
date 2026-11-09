@@ -45,7 +45,7 @@
 | B-09 | B 조윤상 | 12/7 | 대기 | | |
 | B-10 | B 조윤상 | 12/14 | 대기 | | |
 | C-01 | C 손석범 | 11/1 | 완료 | [PR #3](https://github.com/Capstone-last-dance/AutoAdvisor/pull/3); [설계](design_C.md) | 4.6·6.6절 라벨·평가·체결 설계 작성 및 병합. 후속 PM 결정은 PR #8에 반영 |
-| C-02 | C 손석범 | 11/6 | 진행 중 | [병합 PR #8](https://github.com/Capstone-last-dance/AutoAdvisor/pull/8), [PR #26](https://github.com/Capstone-last-dance/AutoAdvisor/pull/26) | 라벨·홀드아웃 가드는 병합됨. 구회사 폐지 이력 보완 PR #26은 B 승인. A 11/8 데이터의 2011~2025 라벨 생성·검증 진행 중이며 A 인계는 검증 후 가능 |
+| C-02 | C 손석범 | 11/6 | 진행 중 | [병합 PR #8](https://github.com/Capstone-last-dance/AutoAdvisor/pull/8), [PR #26](https://github.com/Capstone-last-dance/AutoAdvisor/pull/26) | 구회사 폐지 이력 보완 PR #26은 B 승인. A 11/8 데이터에서 2011~2025 라벨 978,983행과 종료일 표를 생성해 공용 스키마·키 대응·홀드아웃 경계를 검증함. A 인계와 공식 저장 경로 확정이 남음 |
 | C-03 | C 손석범 | 11/6 | 진행 중 | [병합 PR #8](https://github.com/Capstone-last-dance/AutoAdvisor/pull/8), [B-05 병합 PR #21](https://github.com/Capstone-last-dance/AutoAdvisor/pull/21) | 공통 체결·비용·NAV 엔진과 평가지표 구현 및 B 최종 리뷰 완료. B-05 연결 검증에서 같은 비중의 체결·비용·NAV 일치 확인. 실제 신호 기반 전체 평가가 남음 |
 | C-04 | C 손석범 | 11/16 | 진행 중 | [PR #22](https://github.com/Capstone-last-dance/AutoAdvisor/pull/22), [PR #23](https://github.com/Capstone-last-dance/AutoAdvisor/pull/23) | G0·G2 개인 행동 프록시, forward 실제 보유 재생·사후 성과 함수 구현. #22는 기록 없는 중간 주 보유 유지와 M9 청산 연동 후 B 승인, #23도 승인. 11/20 이후 실제 positions와 평가 검증이 남음 |
 | C-05 | C 손석범 | 11/23 | 대기 | | |
