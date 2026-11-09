@@ -181,3 +181,24 @@ def test_label_end_dates_takes_the_latest_end_per_signal_date():
         label_end_dates(frame, h=1)
     with pytest.raises(ValueError, match="없는 열"):
         label_end_dates(frame.drop(columns=["actual_end"]), h=20)
+
+
+def test_make_folds_and_final_split_use_actual_label_end_dates():
+    """C 리뷰 #35: 폴드의 학습↔검증·검증↔시험 경계도 실제 라벨 종료일로 봐야 한다."""
+    folds = make_folds(SIG, DAYS, h=20)
+    ends = {}
+    for f in folds:   # 각 폴드의 학습·검증 구간 끝 5일이 거래정지로 15거래일 늦게 끝난 경우
+        for seg in (f.train, f.val):
+            ends.update({t: DAYS[_pos(t) + 1 + 20 + 15] for t in pd.DatetimeIndex(seg)[-5:]})
+    slow = make_folds(SIG, DAYS, h=20, actual_end_dates=ends)
+    for base, late in zip(folds, slow):
+        assert late.test_year == base.test_year
+        assert len(late.train) < len(base.train) and len(late.val) < len(base.val)
+        assert list(late.test) == list(base.test)                      # 시험 구간은 purge하지 않는다
+        assert late.train[-1] < base.val[0] and late.val[-1] < base.test[0]
+    a = final_split(SIG, DAYS, h=20)
+    for seg in (a.train, a.val):   # 최종 분할도 자기 구간 끝이 밀리면 더 빠져야 한다
+        ends.update({t: DAYS[_pos(t) + 1 + 20 + 15] for t in pd.DatetimeIndex(seg)[-5:]})
+    b = final_split(SIG, DAYS, h=20, actual_end_dates=ends)
+    assert len(b.train) < len(a.train) and len(b.val) < len(a.val)
+    assert make_folds(SIG, DAYS, h=20, actual_end_dates=None)[0].train.equals(folds[0].train)   # 안 넘기면 그대로

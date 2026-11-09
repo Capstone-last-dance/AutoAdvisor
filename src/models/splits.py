@@ -137,8 +137,11 @@ def _need(name: str, idx: pd.DatetimeIndex, ctx: str):
 
 
 def make_folds(signal_dates, trading_days, h: int = 20, test_years=TEST_YEARS,
-               first_train_year: int = FIRST_TRAIN_YEAR) -> list:
-    """학습 끝과 검증 첫 신호일, 검증 끝과 테스트 첫 신호일 사이를 purge한다. 테스트는 purge하지 않는다."""
+               first_train_year: int = FIRST_TRAIN_YEAR, actual_end_dates=None) -> list:
+    """학습 끝과 검증 첫 신호일, 검증 끝과 테스트 첫 신호일 사이를 purge한다. 테스트는 purge하지 않는다.
+
+    actual_end_dates를 넘기면 명목 t+1+h 대신 C의 실제 라벨 종료일로 경계를 본다 (`label_end_dates`).
+    거래정지로 종료일이 밀린 신호일이 다음 구간에 닿으면 그 신호일도 뺀다 (C 리뷰 #35)."""
     sig = pd.DatetimeIndex(sorted(set(pd.DatetimeIndex(signal_dates))))
     days = pd.DatetimeIndex(trading_days)
     folds = []
@@ -147,13 +150,13 @@ def make_folds(signal_dates, trading_days, h: int = 20, test_years=TEST_YEARS,
         train, val, test = _years(sig, first_train_year, y - 3), _years(sig, y - 2, y - 1), _years(sig, y, y)
         for name, idx in (("학습", train), ("검증", val), ("테스트", test)):
             _need(name, idx, ctx)
-        train = purge(train, val[0], days, h)
-        val = purge(val, test[0], days, h)
+        train = purge(train, val[0], days, h, actual_end_dates)
+        val = purge(val, test[0], days, h, actual_end_dates)
         folds.append(Fold(y, train, val, test))
     return folds
 
 
-def final_split(signal_dates, trading_days, h: int = 20) -> Fold:
+def final_split(signal_dates, trading_days, h: int = 20, actual_end_dates=None) -> Fold:
     """최종 모델: 학습 2011~2023, 검증 2024~2025. 학습↔검증, 검증↔홀드아웃(2026-01-01 이후 첫 신호일)을 purge한다."""
     sig = pd.DatetimeIndex(sorted(set(pd.DatetimeIndex(signal_dates))))
     days = pd.DatetimeIndex(trading_days)
@@ -162,4 +165,5 @@ def final_split(signal_dates, trading_days, h: int = 20) -> Fold:
     holdout = sig[sig >= HOLDOUT_START]
     for name, idx in (("학습", train), ("검증", val), ("홀드아웃 경계", holdout)):
         _need(name, idx, "최종 분할")
-    return Fold(None, purge(train, val[0], days, h), purge(val, holdout[0], days, h), pd.DatetimeIndex([]))
+    return Fold(None, purge(train, val[0], days, h, actual_end_dates),
+                purge(val, holdout[0], days, h, actual_end_dates), pd.DatetimeIndex([]))
