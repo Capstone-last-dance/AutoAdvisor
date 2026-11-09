@@ -46,5 +46,6 @@ class ExecutionEngine(Protocol):
 # 6.6절 IR (M5, C): 주간 초과수익 a_k 배열 → mean(a) ÷ std(a, ddof=1) × √52
 IRFunction = Callable[[np.ndarray], float]
 
-# M9 쿨다운 (PM): 신호일 t → 체결일 t+1에 신규 진입이 금지된 종목코드
+# M9 쿨다운 (PM): 신호일 t → 체결일 t+1에 신규 진입이 금지된 종목코드.
+# available_at < cutoff_at(t)인 경보만 쓴다 (6.10절, R-03). 컷오프 뒤 경보는 엔진의 체결일 cooldowns가 막는다
 CooldownFunction = Callable[[str], Iterable[str]]

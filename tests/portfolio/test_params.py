@@ -72,7 +72,7 @@ def test_subset_matches_configs_prereg(cfg):
     if path.stat().st_size == 0:
         pytest.skip("configs/prereg.yaml이 아직 비어 있다 (작업 PM-07)")
     real = load_prereg(path)
-    for section in ("calendar", "data", "costs", "splits", "portfolio", "risk_layer"):
+    for section in ("calendar", "data", "costs", "execution", "splits", "portfolio", "risk_layer"):
         expected, actual = copy.deepcopy(cfg[section]), copy.deepcopy(real[section])
         if section == "risk_layer":  # B-02에서 채우는 값만 다를 수 있다
             expected.pop("vol_target_annual")
