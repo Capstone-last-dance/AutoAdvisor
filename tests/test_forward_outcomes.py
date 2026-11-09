@@ -60,6 +60,23 @@ def test_forward_outcome_replays_recorded_positions_and_rejects_missing_week():
         evaluate_forward_record(**kwargs, recorded_targets={})
 
 
+def test_end_date_rebalance_cost_is_excluded_from_forward_return():
+    d, _, signals, labels, record, log = fixture()
+    days = pd.to_datetime(d)
+    prices = pd.DataFrame({"000001": [100.0] * len(days)}, index=days)
+    bm = pd.Series([100.0] * len(days), index=days)
+    engine = ExecutionEngine(prices, bm, CostRates(0, 0.01, 0))
+    late = {"signal_date": days[20], "label_ready_date": days[21],
+            "has_positions": 1, "commit_hash": "later-hash", "signal_source": "baseline"}
+    log = pd.concat([log, pd.DataFrame([late])], ignore_index=True)
+    outcome = evaluate_forward_record(
+        engine=engine, record=record, signals=signals, labels=labels,
+        forward_log=log, recorded_targets={d[0]: {"000001": 0.5}, d[20]: {"000001": 1.0}},
+        policy=POLICY, run_at=pd.Timestamp(f"{d[21]} 16:00:00", tz="Asia/Seoul"),
+    )
+    assert outcome.portfolio_return == pytest.approx(-0.005)
+
+
 def test_forward_outcome_respects_holdout_open_guard():
     d, engine, signals, labels, record, log = fixture(start="2026-10-01", has_positions=0)
     with pytest.raises(GuardViolation):

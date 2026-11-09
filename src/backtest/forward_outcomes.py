@@ -112,10 +112,14 @@ def evaluate_forward_record(
     if record["has_positions"] == 0:
         return ForwardOutcome(mean_top20, mean_flagged, None, None, missing_top20, missing_flagged)
 
-    expected = sorted(log.loc[(log["has_positions"] == 1) & (log["signal_date"] <= end_date), "signal_date"])
+    # t+21 종가의 NAV는 그날 새 신호의 체결 *직전* 값이다. 종료일에
+    # 체결될 목표(전 신호일 기록)는 사후 수익에 포함하지 않는다.
+    known = set(log.loc[(log["has_positions"] == 1) & (log["signal_date"] <= end_date), "signal_date"])
+    expected = sorted(day for day in known if day in engine.day_index
+                      and engine.day_index[day] + 1 < end_i)
     if not expected or signal_date not in expected:
         raise ValueError("평가 대상의 positions 기록이 없습니다")
-    if set(recorded_targets) != set(expected):
+    if not set(expected).issubset(recorded_targets) or not set(recorded_targets).issubset(known):
         raise ValueError("기록된 positions와 제공된 목표 비중 날짜가 다릅니다")
     state = engine.initial_state()
     nav_start = None
