@@ -1,21 +1,21 @@
 # 전체 의존성 잠금 파일 (하위 의존성 포함, R-10 재현성)
-# requirements.txt를 Python 3.12.10 새 가상환경에 설치한 뒤 pip freeze로 만들었다 (2026-10-30, Windows).
+# requirements.txt를 Python 3.12.10 새 가상환경에 설치한 뒤 pip freeze로 만들었다 (2026-11-09, Windows).
 # 직접 고치지 않는다. requirements.txt를 바꾸면 새 가상환경에서 다시 만든다.
 
-# 2026-11-02: 기존 잠금 버전을 유지한 채 pytest와 그 의존성만 추가했다.
-# 2026-11-09: 같은 방식으로 lxml만 추가했다 (A-02 sector_kind.py의 pd.read_html, DEC-23).
-#             lxml 6.1.3은 하위 의존성이 없어 새 가상환경 pip freeze에서 이 한 줄만 늘어난다.
+# 이력: 2026-10-30 최초 생성 / 2026-11-02 pytest와 그 의존성만 추가 / 2026-11-09 전체 재생성.
+# 2026-11-09 재생성으로 바뀐 것: six 삭제, anyio·click·filelock·python-dateutil·python-multipart·
+#   threadpoolctl·websockets 버전 상승. python-dateutil은 3.0.0 -> 4.0.0 메이저 변경이다.
 
 altair==6.3.0
-anyio==4.15.1
+anyio==4.16.0
 attrs==26.1.0
 certifi==2026.10.23
 charset-normalizer==3.5.2
-click==8.5.0
+click==8.5.1
 cloudpickle==3.1.2
 colorama==0.4.6
 Farama-Notifications==0.0.6
-filelock==4.2.4
+filelock==4.2.9
 formulaic==1.2.2
 fsspec==2026.9.0
 gymnasium==1.4.0
@@ -45,9 +45,9 @@ pyarrow==26.0.0
 pydeck==0.9.3
 Pygments==2.21.0
 pytest==9.2.0
-python-dateutil==3.0.0
+python-dateutil==4.0.0
 python-dotenv==1.2.4
-python-multipart==0.0.32
+python-multipart==0.0.33
 PyYAML==6.0.3
 referencing==0.37.0
 requests==2.34.2
@@ -56,14 +56,13 @@ scikit-learn==1.9.1
 scipy==1.18.1
 setuptools==84.2.1
 shap==0.54.1
-six==1.17.0
 slicer==0.0.8
 stable_baselines3==2.9.2
 starlette==1.10.0
 statsmodels==0.15.0
 streamlit==1.66.1
 sympy==1.14.0
-threadpoolctl==3.7.0
+threadpoolctl==3.8.0
 torch==2.15.0
 tqdm==4.70.1
 typing_extensions==4.16.0
@@ -71,5 +70,5 @@ tzdata==2026.6
 urllib3==2.8.0
 uvicorn==0.54.0
 watchdog==6.0.0
-websockets==17.3
+websockets==17.4
 wrapt==2.5.2
