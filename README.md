@@ -474,7 +474,25 @@ python -m src.pipeline.forward_test --date YYYY-MM-DD --source-commit <신호를
 
 #### 일간 경보와 대시보드
 
-> **작성 예정** (D-06: 일간 경보 실행기, D-05: 대시보드)
+> 일간 경보 실행기는 **작성 예정** (D-06)
+
+대시보드는 저장소 루트에서 실행한다 (명세서 6.11절).
+
+```bash
+streamlit run app/Home.py
+```
+
+실제 신호가 없을 때는 샘플 데이터로 화면을 확인한다. 샘플은 `_sample/`에만 만들어지고 Git에 올라가지 않는다.
+
+```bash
+python -m src.pipeline.make_dashboard_sample --out _sample
+```
+
+```bash
+DASHBOARD_DATA_ROOT=_sample streamlit run app/Home.py
+```
+
+PowerShell에서는 `$env:DASHBOARD_DATA_ROOT="_sample"`을 먼저 실행한다.
 
 ```bash
 # 일간 경보 실행 (구현 예정, D-06)

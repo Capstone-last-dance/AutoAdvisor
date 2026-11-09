@@ -1,0 +1,56 @@
+"""이번 주 신호 페이지 (6.11절)."""
+
+import pandas as pd
+import streamlit as st
+
+import dashboard as ui
+
+latest = ui.start_page("이번 주 신호")
+
+if latest is None:
+    st.info("아직 신호 파일이 없습니다.")
+else:
+    names = ui.ticker_names()
+    signals = ui.read("signals", latest)
+
+    if signals is not None:
+        st.subheader("진입 금지 경보")
+        flagged = signals[signals["crash_flag"] == 1].sort_values("crash_prob", ascending=False)
+        if flagged.empty:
+            st.write("이번 신호일에는 진입 금지 경보가 없습니다.")
+        else:
+            st.dataframe(pd.DataFrame({
+                "종목코드": flagged["ticker"],
+                "종목명": flagged["ticker"].map(lambda t: names.get(t, t)),
+                "crash_prob": flagged["crash_prob"],
+            }), hide_index=True)
+
+        st.subheader("진입 후보")
+        days = ui.cooldown_days()
+        alerts = ui.recent_alerts(days, until=latest)
+        cooldown = set() if alerts is None else set(alerts["ticker"])
+        candidates = ui.entry_candidates(signals, cooldown)
+        st.caption(f"진입 금지 경보 종목과 최근 {days}거래일 주중 경보 종목을 뺀 상위 {ui.CANDIDATE_COUNT}종목입니다.")
+        st.dataframe(pd.DataFrame({
+            "rank": candidates["rank"],
+            "종목명": candidates["ticker"].map(lambda t: names.get(t, t)),
+            "rank_score": candidates["rank_score"],
+        }), hide_index=True)
+
+    st.subheader("모델 포트폴리오")
+    positions = ui.read("positions", latest)
+    if positions is None or positions.empty:
+        st.info("이번 신호일의 모델 포트폴리오는 아직 없습니다.")
+    else:
+        stocks = positions[positions["ticker"] != "CASH"].sort_values("target_weight", ascending=False)
+        col1, col2, col3 = st.columns(3)
+        col1.metric("현금 비중", f"{1 - stocks['target_weight'].sum():.1%}")
+        col2.metric("E_t", f"{positions['exposure'].iloc[0]:.2f}")
+        col3.metric("regime_mc", int(positions["regime_mc"].iloc[0]))
+        st.dataframe(pd.DataFrame({
+            "종목코드": stocks["ticker"],
+            "종목명": stocks["ticker"].map(lambda t: names.get(t, t)),
+            "목표 비중": stocks["target_weight"],
+        }), hide_index=True)
+
+ui.end_page()
