@@ -200,3 +200,49 @@ def make_market(
         }
     )
     return SyntheticMarket(closes, bm, signal_dates, signals, features, universe, sector, cooldown)
+
+
+def market_tables(
+    market: SyntheticMarket,
+    *,
+    seed: int = 1,
+    halt_share: float = 0.03,
+    delisted: str | None = "000007",
+    last_price_day: str = "2012-06-15",
+) -> tuple[dict[str, pd.DataFrame], SyntheticMarket]:
+    """합성 시장을 9.3절 형식의 prices, status, index, delisted 표로 바꾼다 (B-05 엔진 어댑터 입력).
+
+    - 2011년부터 칸의 halt_share만큼을 거래정지(volume = 0)로 표시한다. 정지일 종가는 무작위 경로 그대로라
+      원천 종가가 바뀐 정지일(DEC-25)도 들어 있다
+    - delisted 종목은 last_price_day 뒤 가격을 지우고, 그날 이후 신호일의 signals·features·universe 행을 뺀다.
+      None이면 폐지 종목이 없다
+    반환값의 두 번째는 그렇게 행을 뺀 시장이다.
+    """
+    rng = np.random.default_rng(seed)
+    closes = market.closes.copy()
+    last = pd.Timestamp(last_price_day)
+    if delisted is not None:
+        closes.loc[closes.index > last, delisted] = np.nan
+    halted = (rng.random(closes.shape) < halt_share) & (closes.index >= pd.Timestamp("2011-01-01"))[:, None]
+    halted &= closes.notna().to_numpy()
+
+    long = closes.stack().dropna().rename("close").reset_index()
+    long.columns = ["date", "ticker", "close"]
+    flag = pd.DataFrame(halted, index=closes.index, columns=closes.columns).stack()
+    long["is_halted"] = flag.reindex(pd.MultiIndex.from_frame(long[["date", "ticker"]])).to_numpy()
+    prices = long.assign(close_raw=long["close"], volume=np.where(long["is_halted"], 0, 1000).astype("int64"))
+    status = long[["date", "ticker", "is_halted"]].assign(is_admin=pd.NA)
+    index = pd.DataFrame({"date": market.bm_close.index, "index_code": "KOSPI200", "close": market.bm_close.to_numpy()})
+    rows = [] if delisted is None else [(delisted, closes.index[closes.index.get_loc(last) + 1], closes.at[last, delisted])]
+    delisted_rows = pd.DataFrame(rows, columns=["ticker", "delist_date", "last_price"]).astype({"last_price": "float64"})
+    tables = {"prices": prices, "status": status, "index": index, "delisted": delisted_rows}
+
+    def drop(df: pd.DataFrame) -> pd.DataFrame:
+        gone = (df["ticker"] == delisted) & (pd.to_datetime(df["date"]) >= last)
+        return df[~gone].reset_index(drop=True)
+
+    kept = SyntheticMarket(
+        closes, market.bm_close, market.signal_dates, drop(market.signals), drop(market.features),
+        drop(market.universe), market.sector, market.cooldown,
+    )
+    return tables, kept

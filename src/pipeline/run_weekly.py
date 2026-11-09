@@ -28,9 +28,10 @@ from pathlib import Path
 import pandas as pd
 
 from src.common import io
+from src.pipeline import forward_test
 
 PROCESSED_TABLES = (
-    "prices", "index", "tickers", "status", "universe", "delisted", "sector", "disclosures", "news",
+    "prices", "index", "tickers", "status", "universe", "delisted", "delisted_reused", "sector", "disclosures", "news",
 )
 
 
@@ -43,6 +44,7 @@ class StepContext:
     stub_tables: set[str] = field(default_factory=set)  # 이번 실행에서 _stub/에 쓴 테이블
     memory: dict = field(default_factory=dict)          # 저장하지 않는 중간값 (4단계 w_raw)
     log: logging.Logger = field(default_factory=lambda: logging.getLogger("run_weekly"))
+    source_commit: str | None = None                    # 신호를 만든 코드의 커밋 (DEC-04)
 
     @property
     def uses_stub(self) -> bool:
@@ -121,8 +123,10 @@ def forward_test_commit(ctx: StepContext) -> None:
         ctx.log.info("7단계: 스텁이 쓰인 실행이라 forward test 커밋을 하지 않는다 (스텁 단계: %s)",
                      ", ".join(ctx.stubbed))
         return
-    # 신호·비중 커밋과 해시 기록은 작업 D-04에서 구현한다. 조용히 건너뛰지 않도록 실패로 끝낸다.
-    raise NotImplementedError("forward test 커밋은 D-04에서 구현한다")
+    if ctx.source_commit is None:
+        raise forward_test.ForwardTestError("forward test 커밋에는 --source-commit이 필요하다 (DEC-04)")
+    commit_hash = forward_test.record(ctx.date, source_commit=ctx.source_commit)
+    ctx.log.info("7단계: 신호 커밋 %s를 forward_log.csv에 기록하고 push했다", commit_hash)
 
 
 def _no_stub(ctx: StepContext) -> None:
@@ -160,11 +164,11 @@ def resolve(entry: str | Callable | None) -> Callable[[StepContext], None] | Non
     return fn if callable(fn) else None
 
 
-def run(date: str, steps: Sequence[Step] = STEPS) -> int:
+def run(date: str, steps: Sequence[Step] = STEPS, source_commit: str | None = None) -> int:
     """주간 실행. 성공하면 0, 한 단계라도 실패하면 1."""
     io._check_date_arg(date)
     log = _setup_logger(date)
-    ctx = StepContext(date=date, log=log)
+    ctx = StepContext(date=date, log=log, source_commit=source_commit)
     log.info("주간 실행 시작: 신호일 %s", date)
 
     for step in steps:
@@ -213,13 +217,14 @@ def _close_logger(log: logging.Logger) -> None:
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="주간 실행기 (명세서 5.2절, 6.12절)")
     parser.add_argument("--date", required=True, help="신호일 YYYY-MM-DD")
+    parser.add_argument("--source-commit", help="신호를 만든 코드의 커밋 해시. forward test 커밋에 필요하다 (DEC-04)")
     args = parser.parse_args(argv)
     try:
         io._check_date_arg(args.date)
     except ValueError as exc:
         print(f"오류: {exc}", file=sys.stderr)
         return 1
-    return run(args.date)
+    return run(args.date, source_commit=args.source_commit)
 
 
 if __name__ == "__main__":
