@@ -11,6 +11,7 @@ A의 ``delisted.parquet``에 있는 ``delist_date``가 마지막 가격일의 �
 from __future__ import annotations
 
 from collections.abc import Mapping
+from copy import copy
 from dataclasses import dataclass
 from math import isfinite
 
@@ -119,6 +120,26 @@ class ExecutionEngine:
 
     def initial_state(self) -> EngineState:
         return EngineState({}, 1.0)
+
+    def with_alert_schedule(
+        self,
+        cooldowns: Mapping[str, frozenset[str]],
+        event_liquidations: Mapping[str, frozenset[str]],
+    ) -> ExecutionEngine:
+        """같은 가격·비용 엔진에 M9 일정을 붙인 독립 실행 인스턴스."""
+        schedules = (cooldowns, event_liquidations)
+        for schedule in schedules:
+            if any(day not in self.day_index for day in schedule):
+                raise ValueError("M9 일정에 거래일이 아닌 날짜가 있습니다")
+            if any(not set(names).issubset(self.col_index) for names in schedule.values()):
+                raise ValueError("M9 일정에 알 수 없는 종목코드가 있습니다")
+        result = copy(self)
+        result.cooldowns = {day: frozenset(names) for day, names in cooldowns.items()}
+        result.events = {day: frozenset(names) for day, names in event_liquidations.items()}
+        result.ledger = []
+        result.rebalance_count = 0
+        result.scaled_rebalance_count = 0
+        return result
 
     def _prices(self, day_index: int, holdings: Mapping[str, float]) -> dict[str, float]:
         out = {}

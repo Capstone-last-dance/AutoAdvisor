@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from datetime import datetime
 from math import isfinite
@@ -32,6 +32,7 @@ def evaluate_forward_record(
     labels: pd.DataFrame,
     forward_log: pd.DataFrame,
     recorded_targets: Mapping[str, Mapping[str, float]],
+    engine_alerts: Callable[[str, str], tuple[Mapping[str, frozenset[str]], Mapping[str, frozenset[str]]]] | None = None,
     run_at: datetime,
     policy: DataAccessPolicy,
     allow_holdout: bool = False,
@@ -41,8 +42,9 @@ def evaluate_forward_record(
 
     ``forward_log``는 모든 기록일과 ``has_positions``를 제공한다. D는
     각 날짜의 ``ft-{YYYYMMDD}`` 태그에 있는 원본 비중을
-    ``recorded_targets``로 전달한다. 비중 기록이 하나라도 누락되면
-    실제 NAV를 임의로 이어 붙이지 않고 오류를 낸다.
+    ``recorded_targets``로 전달한다. 태그가 없는 중간 주는 직전 보유를
+    유지한다. M9 적용 실행은 PM의 ``AlertBook.engine_alerts``를 넘겨
+    B와 같은 거래일별 쿨다운·청산 일정을 사용한다.
     """
     if (not isinstance(run_at, datetime) or run_at.tzinfo is None or run_at.utcoffset() is None
             or type(horizon) is not int or horizon < 1):
@@ -115,12 +117,15 @@ def evaluate_forward_record(
     # t+21 종가의 NAV는 그날 새 신호의 체결 *직전* 값이다. 종료일에
     # 체결될 목표(전 신호일 기록)는 사후 수익에 포함하지 않는다.
     known = set(log.loc[(log["has_positions"] == 1) & (log["signal_date"] <= end_date), "signal_date"])
-    expected = sorted(day for day in known if day in engine.day_index
-                      and engine.day_index[day] + 1 < end_i)
+    provided = set(recorded_targets)
+    if not provided.issubset(known) or not provided.issubset(engine.day_index):
+        raise ValueError("기록된 positions와 제공된 목표 비중 날짜가 다릅니다")
+    expected = sorted(day for day in provided if engine.day_index[day] + 1 < end_i)
     if not expected or signal_date not in expected:
         raise ValueError("평가 대상의 positions 기록이 없습니다")
-    if not set(expected).issubset(recorded_targets) or not set(recorded_targets).issubset(known):
-        raise ValueError("기록된 positions와 제공된 목표 비중 날짜가 다릅니다")
+    if engine_alerts is not None:
+        cooldowns, liquidations = engine_alerts(expected[0], end_date)
+        engine = engine.with_alert_schedule(cooldowns, liquidations)
     state = engine.initial_state()
     nav_start = None
     nav_end = None
