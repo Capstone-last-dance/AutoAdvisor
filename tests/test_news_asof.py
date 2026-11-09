@@ -9,7 +9,7 @@ from src.backtest.news_asof import load_news_windows, news_count_spike_at
 @pytest.fixture
 def windows(tmp_path):
     config = tmp_path / "prereg.yaml"
-    config.write_text("features:\n  news_window_offsets: [-5, -1]\n  news_baseline_offsets: [-65, -6]\n", encoding="utf-8")
+    config.write_text("calendar:\n  signal_cutoff_time: '15:30'\nfeatures:\n  news_window_offsets: [-5, -1]\n  news_baseline_offsets: [-65, -6]\n", encoding="utf-8")
     return load_news_windows(config)
 
 
@@ -72,6 +72,24 @@ def test_weekend_aggregate_must_be_available_before_signal(windows):
     assert news_count_spike_at(rows, days, str(days[-1].date()), "005930", windows=windows).spike is not None
     rows.loc[rows["date"] == prior, "available_at"] = pd.Timestamp(
         f"{days[-1]:%Y-%m-%d} 16:00:00", tz="Asia/Seoul"
+    )
+    result = news_count_spike_at(rows, days, str(days[-1].date()), "005930", windows=windows)
+    assert result.spike is None
+    assert result.late_days == (prior.strftime("%Y-%m-%d"),)
+
+
+def test_signal_cutoff_comes_from_preregistration(tmp_path):
+    config = tmp_path / "prereg.yaml"
+    config.write_text(
+        "calendar:\n  signal_cutoff_time: '09:00'\nfeatures:\n"
+        "  news_window_offsets: [-5, -1]\n"
+        "  news_baseline_offsets: [-65, -6]\n", encoding="utf-8",
+    )
+    windows = load_news_windows(config)
+    days, rows = table()
+    prior = days[-2]
+    rows.loc[rows["date"] == prior, "available_at"] = pd.Timestamp(
+        f"{days[-1]:%Y-%m-%d} 10:00:00", tz="Asia/Seoul"
     )
     result = news_count_spike_at(rows, days, str(days[-1].date()), "005930", windows=windows)
     assert result.spike is None

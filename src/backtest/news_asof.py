@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import timedelta
+from datetime import time, timedelta
 from math import isfinite
 from pathlib import Path
 
@@ -18,6 +18,7 @@ PREREG_PATH = Path(__file__).resolve().parents[2] / "configs" / "prereg.yaml"
 class NewsWindows:
     recent: tuple[int, int]
     baseline: tuple[int, int]
+    cutoff_time: time
 
     def __post_init__(self) -> None:
         a, b = self.baseline
@@ -31,13 +32,22 @@ def load_news_windows(config_path: str | Path = PREREG_PATH) -> NewsWindows:
     config = yaml.safe_load(Path(config_path).read_text(encoding="utf-8"))
     try:
         features = config["features"]
+        cutoff = config["calendar"]["signal_cutoff_time"]
         recent = features["news_window_offsets"]
         baseline = features["news_baseline_offsets"]
         if any(type(value) is not int for value in (*recent, *baseline)):
             raise ValueError("뉴스 창 오프셋은 정수여야 합니다")
         if len(recent) != 2 or len(baseline) != 2:
             raise ValueError("뉴스 창에는 시작·끝 오프셋이 필요합니다")
-        return NewsWindows(tuple(recent), tuple(baseline))
+        if not isinstance(cutoff, str):
+            raise ValueError("사전등록 신호 컷오프 시각은 문자열이어야 합니다")
+        try:
+            cutoff_time = time.fromisoformat(cutoff)
+        except ValueError as exc:
+            raise ValueError("사전등록 신호 컷오프 시각 형식이 잘못됐습니다") from exc
+        if cutoff_time.tzinfo is not None:
+            raise ValueError("사전등록 신호 컷오프 시각에는 시간대를 붙이지 않습니다")
+        return NewsWindows(tuple(recent), tuple(baseline), cutoff_time)
     except (KeyError, TypeError) as exc:
         raise ValueError("사전등록 뉴스 창 설정이 없습니다") from exc
 
@@ -78,7 +88,7 @@ def news_count_spike_at(
     if rows.duplicated("date").any():
         raise ValueError("news_daily에 중복 (date, ticker)가 있습니다")
     rows = rows.set_index("date")
-    cutoff = pd.Timestamp(f"{day:%Y-%m-%d} 15:30:00", tz="Asia/Seoul")
+    cutoff = pd.Timestamp(f"{day:%Y-%m-%d} {windows.cutoff_time.isoformat()}", tz="Asia/Seoul")
     late: list[str] = []
     missing: list[str] = []
     counts: list[int] = []
