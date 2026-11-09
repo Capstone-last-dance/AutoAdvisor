@@ -306,7 +306,24 @@ class PastPositionsTest(RepoTest):
 
     def test_ignores_other_tags(self):
         self.git("tag", "ft-rehearsal")
+        self.git("push", "-q", "origin", "ft-rehearsal")
         self.assertEqual(list(ft.past_positions("2026-11-27")), ["2026-11-20"])
+
+    def test_excludes_tag_left_by_failed_push(self):
+        date = "2026-12-04"
+        self.prepare(date, "lgbm_v1", positions=True)
+        url = self.git("remote", "get-url", "origin")
+        self.git("remote", "set-url", "origin", str(self.base / "no_such_remote.git"))
+        with self.assertRaises(ft.ForwardTestPartial):
+            self.record(date, now=lambda: pd.Timestamp(f"{date} 20:00", tz=ft.KST))
+        self.git("remote", "set-url", "origin", url)
+        self.assertTrue(self.git("tag", "--list", "ft-20261204"))        # 로컬에는 남아 있다
+        self.assertEqual(list(ft.past_positions("2026-12-11")), ["2026-11-20", "2026-11-27"])
+
+    def test_tag_removed_from_origin_is_dropped(self):
+        self.assertIn("2026-11-27", ft.past_positions("2026-12-04"))
+        subprocess.run(["git", "-C", str(self.remote), "tag", "-d", "ft-20261127"], check=True, capture_output=True)
+        self.assertEqual(list(ft.past_positions("2026-12-04")), ["2026-11-20"])
 
     def test_invalid_file_in_tag(self):
         bad = sample("positions"); bad["date"] = pd.Timestamp("2026-12-04")
@@ -315,6 +332,7 @@ class PastPositionsTest(RepoTest):
         self.git("add", "positions")
         self.git("commit", "-q", "-m", "bad")
         self.git("tag", "ft-20261204")
+        self.git("push", "-q", "origin", "ft-20261204")
         with self.assertRaises(io.SchemaError):
             ft.past_positions("2026-12-11")
 

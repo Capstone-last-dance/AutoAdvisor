@@ -41,6 +41,8 @@ CALENDAR_END = pd.Timestamp("2027-01-31")  # 위 휴장일 목록이 맞다고 �
 POSITIONS_FROM = pd.Timestamp("2026-11-20")
 ML_FROM = pd.Timestamp("2026-11-27")
 
+PUBLISHED_TAGS = "refs/forward-published"  # origin의 ft-* 태그를 받아 두는 곳
+
 log = logging.getLogger("forward_test")
 
 
@@ -192,16 +194,18 @@ def past_positions(t: str) -> dict[str, pd.DataFrame]:
     """t보다 앞선 기록의 positions를 태그 ft-*에서 읽어 {신호일 "YYYY-MM-DD": 표}로 날짜순으로 돌려준다.
 
     positions가 없는 기록(11/20 전)은 뺀다. 병합을 기다리지 않도록 작업 폴더가 아니라 태그에서 읽고,
-    누락을 막으려고 먼저 origin의 태그를 받아 온다. 태그의 파일이 스키마를 어기면 예외를 낸다.
+    origin에 게시된 태그만 전용 ref로 받아 읽는다. push에 실패해 로컬에만 남은 태그는 기록이 아니다.
+    태그의 파일이 스키마를 어기면 예외를 낸다.
     """
     io._check_date_arg(t)
-    _git("fetch", "-q", "origin", "--tags")
-    dates = sorted(f"{m[1]}-{m[2]}-{m[3]}" for tag in _git("tag", "--list", "ft-*").splitlines()
+    _git("fetch", "-q", "--prune", "--no-tags", "origin", f"+refs/tags/ft-*:{PUBLISHED_TAGS}/ft-*")
+    dates = sorted(f"{m[1]}-{m[2]}-{m[3]}"
+                   for tag in _git("for-each-ref", "--format=%(refname:strip=2)", PUBLISHED_TAGS).splitlines()
                    if (m := re.fullmatch(r"ft-(\d{4})(\d{2})(\d{2})", tag)))
     out: dict[str, pd.DataFrame] = {}
     for date in dates:
         path = f"positions/{date}.parquet"
-        tag = f"ft-{date.replace('-', '')}"
+        tag = f"{PUBLISHED_TAGS}/ft-{date.replace('-', '')}"
         if date >= t or not _git("ls-tree", "--name-only", tag, "--", path):
             continue
         result = subprocess.run(["git", "-C", str(io.ROOT), "cat-file", "blob", f"{tag}:{path}"], capture_output=True)
