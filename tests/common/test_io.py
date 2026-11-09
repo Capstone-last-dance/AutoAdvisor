@@ -56,6 +56,8 @@ def sample(name: str) -> pd.DataFrame:
         "news": dict(news_id=["n1", "n2"], published_at=rcept_partial, available_at=available,
                      ticker=tickers, title=["a", "b"],
                      url=["https://a", "https://b"], source=["bigkinds", "naver"], sentiment=[0.5, np.nan]),
+        "news_daily": dict(date=d, available_at=pd.to_datetime([f"{DAY} 23:59:59"] * 2).tz_localize(KST),
+                           ticker=tickers, news_count=np.array([0, 12], dtype="int64")),
         "labels": dict(date=pd.to_datetime([DAY] * 3), ticker=["005930", "005930", "000660"],
                        h=np.array([1, 20, 20], dtype="int8"), ret=[0.01, 0.02, -0.2],
                        er=[0.0, 0.01, -0.18], y_rank=[0.5, 0.6, 0.1],
@@ -296,6 +298,20 @@ class ValidateRejectsTest(unittest.TestCase):
         self.assertNotIn("investor_flows", io.SCHEMAS)
         df = sample("features"); df["retail_net_20"] = [0.1, 0.2]
         self.assertRejects("features", df)
+
+    def test_dec06_news(self):
+        df = sample("news"); df.loc[1, "url"] = None
+        io.validate("news", df)                                                     # url 결측 허용
+        df = sample("news_daily"); df["news_count"] = np.array([-1, 12], dtype="int64")
+        self.assertRejects("news_daily", df)                                        # 0 이상
+        df = sample("news_daily"); df["news_count"] = [0.0, np.nan]
+        self.assertRejects("news_daily", df)                                        # 못 구한 건수는 행을 두지 않는다
+        df = sample("news_daily"); df["date"] = pd.to_datetime(["2026-11-07", DAY])
+        self.assertRejects("news_daily", df)                                        # available_at >= date
+        df = sample("news_daily"); df["ticker"] = ["005930", "005930"]
+        self.assertRejects("news_daily", df)                                        # (date, ticker) 중복
+        df = sample("news_daily"); df["available_at"] = df["available_at"].dt.tz_convert("UTC")
+        self.assertRejects("news_daily", df)                                        # KST만
 
     def test_nulls(self):
         df = sample("signals"); df["crash_prob"] = [0.1, np.nan]
