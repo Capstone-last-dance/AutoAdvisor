@@ -9,6 +9,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 import pandas as pd
 
@@ -45,10 +46,10 @@ class EmptyFrameTest(unittest.TestCase):
 
 
 class AllStubRunTest(TempRootTest):
-    """지금처럼 연결된 모듈이 없으면 모든 단계를 스텁으로 대신하고 정상 종료한다."""
+    """연결된 모듈이 없으면 모든 단계를 스텁으로 대신하고 정상 종료한다."""
 
     def test_all_stub_run(self):
-        self.assertEqual(rw.run(DAY), 0)
+        self.assertEqual(rw.run(DAY, with_entries(s1=None, s2=None, s3=None, s4=None, s5=None, s6=None)), 0)
         stub = self.tmp / "_stub"
         for name in rw.PROCESSED_TABLES:
             self.assertTrue((stub / "data" / "processed" / f"{name}.parquet").exists(), name)
@@ -103,6 +104,30 @@ class FailureTest(TempRootTest):
         log = self.log_text()
         self.assertIn("7단계 M7 forward test 커밋: 실패", log)
         self.assertIn("--source-commit", log)
+
+
+class ForwardCommitMemoTest(unittest.TestCase):
+    def ctx(self, **memory):
+        return rw.StepContext(date=DAY, source_commit="abc", memory=memory)
+
+    def test_deviations_go_to_commit_memo(self):
+        with mock.patch.object(rw.forward_test, "record", return_value="h") as record:
+            rw.forward_test_commit(self.ctx(deviations=["M9 없음: 쿨다운 없이 기록", "경보 파일 없음"]))
+        self.assertEqual(record.call_args.kwargs["memo"],
+                         "기록 시 이탈 사항:\n- M9 없음: 쿨다운 없이 기록\n- 경보 파일 없음")
+
+    def test_no_memo_without_deviations(self):
+        for memory in ({}, {"deviations": []}):
+            with self.subTest(memory=memory), mock.patch.object(rw.forward_test, "record", return_value="h") as record:
+                rw.forward_test_commit(self.ctx(**memory))
+                self.assertIsNone(record.call_args.kwargs["memo"])
+
+
+class StepsTest(unittest.TestCase):
+    def test_b_entries(self):
+        entries = {s.no: s.entry for s in rw.STEPS}
+        self.assertEqual(entries[4], "src.portfolio.weekly:m4_step")
+        self.assertEqual(entries[5], "src.portfolio.weekly:m8_step")
 
 
 class StubPropagationTest(TempRootTest):

@@ -125,7 +125,9 @@ def forward_test_commit(ctx: StepContext) -> None:
         return
     if ctx.source_commit is None:
         raise forward_test.ForwardTestError("forward test 커밋에는 --source-commit이 필요하다 (DEC-04)")
-    commit_hash = forward_test.record(ctx.date, source_commit=ctx.source_commit)
+    deviations = ctx.memory.get("deviations") or []   # 예: M9가 없어 쿨다운 없이 기록한 주 (M4·M8)
+    memo = "\n".join(["기록 시 이탈 사항:", *(f"- {d}" for d in deviations)]) if deviations else None
+    commit_hash = forward_test.record(ctx.date, source_commit=ctx.source_commit, memo=memo)
     ctx.log.info("7단계: 신호 커밋 %s를 forward_log.csv에 기록하고 push했다", commit_hash)
 
 
@@ -138,8 +140,8 @@ STEPS: tuple[Step, ...] = (
     Step(1, "M1", "데이터 갱신", None, _stub_tables(*PROCESSED_TABLES, dated=False)),
     Step(2, "M2", "피처 계산", None, _stub_tables("features", dated=True)),
     Step(3, "M3a·M3b", "급락 확률·순위 점수", None, _stub_tables("signals", dated=True)),
-    Step(4, "M4", "원시 목표 비중 w_raw", None, _stub_w_raw),
-    Step(5, "M8", "리스크 레이어", None, _stub_tables("positions", dated=True)),
+    Step(4, "M4", "원시 목표 비중 w_raw", "src.portfolio.weekly:m4_step", _stub_w_raw),
+    Step(5, "M8", "리스크 레이어", "src.portfolio.weekly:m8_step", _stub_tables("positions", dated=True)),
     Step(6, "M6", "근거 요약", None, _stub_evidence),
     Step(7, "M7", "forward test 커밋", forward_test_commit, _no_stub),
 )
