@@ -31,7 +31,7 @@ from src.common import io
 from src.pipeline import forward_test
 
 PROCESSED_TABLES = (
-    "prices", "index", "tickers", "status", "universe", "delisted", "delisted_reused", "sector", "disclosures", "news",
+    "prices", "index", "tickers", "status", "universe", "delisted", "delisted_reused", "sector", "disclosures", "news_daily", "news",
 )
 
 

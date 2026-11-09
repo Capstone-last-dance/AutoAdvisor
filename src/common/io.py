@@ -140,9 +140,16 @@ SCHEMAS: dict[str, dict[str, Col]] = {
         "available_at": _c("datetime_kst"),
         "ticker": _c("ticker"),
         "title": _c("str"),
-        "url": _c("str"),
+        "url": _c("str", nullable=True),
         "source": _c("str", allowed={"bigkinds", "naver"}),
         "sentiment": _c("float64", nullable=True, bounds=(-1.0, 1.0)),
+    },
+    # DEC-06: 빅카인즈 일별 건수. 날짜만 아는 값이라 available_at은 그날 23:59:59 KST (DEC-09)
+    "news_daily": {
+        "date": _c("date"),
+        "available_at": _c("datetime_kst"),
+        "ticker": _c("ticker"),
+        "news_count": _c("int64", bounds=(0, float("inf"))),
     },
     "labels": {
         "date": _c("date"),
@@ -291,6 +298,9 @@ def validate(name: str, df: pd.DataFrame) -> None:
         errors.extend(_check_labels_rows(df))
     if name in RECEIVED_AT and not missing and not errors:
         errors.extend(_check_available_after_receipt(df, RECEIVED_AT[name]))
+    if name == "news_daily" and not missing and not errors:
+        errors.extend(_check_available_after_date(df, "date"))
+        errors.extend(_check_unique(df, ["date", "ticker"]))
 
     if errors:
         raise SchemaError(f"{name} 스키마 위반\n- " + "\n- ".join(errors))
@@ -519,11 +529,24 @@ def _check_available_after_receipt(df: pd.DataFrame, received: str) -> list[str]
     if early.any():
         errors.append(f"available_at이 {received}보다 빠른 행이 {int(early.sum())}건 있다 (DEC-09)")
     if "rcept_date" in df.columns:
-        day = df["available_at"].dt.tz_localize(None).dt.normalize()
-        early = day < df["rcept_date"]
-        if early.any():
-            errors.append(f"available_at이 rcept_date보다 빠른 행이 {int(early.sum())}건 있다 (DEC-09)")
+        errors.extend(_check_available_after_date(df, "rcept_date"))
     return errors
+
+
+def _check_available_after_date(df: pd.DataFrame, col: str) -> list[str]:
+    """이용 가능 시각의 KST 날짜는 기준 날짜보다 빠를 수 없다."""
+    day = df["available_at"].dt.tz_localize(None).dt.normalize()
+    early = day < df[col]
+    if early.any():
+        return [f"available_at이 {col}보다 빠른 행이 {int(early.sum())}건 있다 (DEC-09)"]
+    return []
+
+
+def _check_unique(df: pd.DataFrame, keys: list[str]) -> list[str]:
+    dup = df.duplicated(keys)
+    if dup.any():
+        return [f"{', '.join(keys)} 중복 행이 {int(dup.sum())}건 있다"]
+    return []
 
 
 def _check_rows_match_date(df: pd.DataFrame, date: str) -> None:
