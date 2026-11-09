@@ -43,6 +43,7 @@ CLAUDE.local.md
 !/data/processed/.gitkeep
 /logs/*
 !/logs/.gitkeep
+/_sample/
 _stub/*
 !_stub/.gitkeep
 
