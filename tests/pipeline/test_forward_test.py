@@ -279,6 +279,50 @@ class CommitDeadlineTest(unittest.TestCase):
         self.assertEqual(ft.commit_deadline("2026-12-24"), pd.Timestamp("2026-12-28 09:00", tz=ft.KST))   # 12/25 휴장
 
 
+class PastPositionsTest(RepoTest):
+    def setUp(self):
+        super().setUp()
+        io.write_table("signals", sample("signals"), date=DAY)
+        self.record()                                                    # 11/6: positions 없음
+        for date, version in [("2026-11-20", "baseline"), ("2026-11-27", "lgbm_v1")]:
+            self.prepare(date, version, positions=True)
+            self.record(date, now=lambda: pd.Timestamp(f"{date} 20:00", tz=ft.KST))
+
+    def test_only_earlier_records_with_positions(self):
+        self.assertEqual(ft.past_positions("2026-11-20"), {})            # 11/20은 빈 보유로 시작
+        self.assertEqual(list(ft.past_positions("2026-11-27")), ["2026-11-20"])
+        got = ft.past_positions("2026-12-04")
+        self.assertEqual(list(got), ["2026-11-20", "2026-11-27"])        # 날짜순
+        io.validate("positions", got["2026-11-27"])
+        self.assertTrue((got["2026-11-27"]["date"] == pd.Timestamp("2026-11-27")).all())
+
+    def test_reads_tag_not_working_tree(self):
+        self.git("switch", "-q", "main")                                 # main에는 기록 파일이 없다
+        self.assertEqual(list(ft.past_positions("2026-12-04")), ["2026-11-20", "2026-11-27"])
+
+    def test_fetches_tags_from_origin(self):
+        self.git("tag", "-d", "ft-20261120")
+        self.assertIn("2026-11-20", ft.past_positions("2026-12-04"))
+
+    def test_ignores_other_tags(self):
+        self.git("tag", "ft-rehearsal")
+        self.assertEqual(list(ft.past_positions("2026-11-27")), ["2026-11-20"])
+
+    def test_invalid_file_in_tag(self):
+        bad = sample("positions"); bad["date"] = pd.Timestamp("2026-12-04")
+        (self.tmp / "positions").mkdir(exist_ok=True)
+        bad.drop(columns="exposure").to_parquet(self.tmp / "positions" / "2026-12-04.parquet", index=False)
+        self.git("add", "positions")
+        self.git("commit", "-q", "-m", "bad")
+        self.git("tag", "ft-20261204")
+        with self.assertRaises(io.SchemaError):
+            ft.past_positions("2026-12-11")
+
+    def test_invalid_date(self):
+        with self.assertRaises(ValueError):
+            ft.past_positions("2026-13-01")
+
+
 class LabelReadyDateTest(unittest.TestCase):
     def test_dates(self):
         # t+1+20 거래일 (4.6절)
