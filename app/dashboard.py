@@ -108,10 +108,11 @@ def _signal_cutoff_time() -> str:
 
 
 def alert_window(count: int, until: str | None = None) -> list[str] | None:
-    """until까지의 최근 count거래일. 거래일은 코스피 200 종가가 있는 날이다 (Q-14). index 파일이 없으면 None.
+    """until까지 최근 count거래일 범위에 든 경보 파일의 날짜. 비거래일 파일도 포함한다. index 파일이 없으면 None.
 
+    거래일은 코스피 200 종가가 있는 날이다 (Q-14).
     until을 주지 않으면 거래일 자료와 경보 파일 중 가장 늦은 날이 기준이다.
-    지수가 아직 갱신되지 않은 날의 경보 파일은 그날을 거래일로 본다.
+    지수가 아직 갱신되지 않은 평일의 경보 파일은 그날을 거래일로 센다.
     """
     index = read("index")
     if index is None or index.empty:
@@ -119,7 +120,9 @@ def alert_window(count: int, until: str | None = None) -> list[str] | None:
     days = sorted(index["date"].dt.strftime("%Y-%m-%d").unique())
     files = io.list_dates("alerts")
     end = until or max([days[-1], *files[-1:]])
-    return ([d for d in days if d <= end] + [d for d in files if days[-1] < d <= end])[-count:]
+    counted = [d for d in days if d <= end]
+    counted += [d for d in files if days[-1] < d <= end and pd.Timestamp(d).day_of_week < 5]
+    return [d for d in files if counted[-count:][0] <= d <= end] if counted else []
 
 
 def alerts_on(days: list[str]) -> pd.DataFrame | None:

@@ -160,11 +160,24 @@ class AlertTimingTest(RootTest):
     def test_window_uses_actual_trading_days(self):
         saved, io.ROOT = io.ROOT, self.tmp
         try:
+            for day in ("2026-11-09", "2026-11-10", "2026-11-13"):
+                self.alert(day, f"{day} 10:00:00")
+            io.ROOT = self.tmp
             index = io.read_table("index")
             io.write_table("index", index[index["date"] != pd.Timestamp("2026-11-12")])
-            self.assertEqual(ui.alert_window(3, until=self.SIGNAL), ["2026-11-10", "2026-11-11", "2026-11-13"])
+            self.assertEqual(ui.alert_window(3, until=self.SIGNAL), ["2026-11-10", "2026-11-13"])
         finally:
             io.ROOT = saved
+
+    def test_weekend_alert_inside_window_applies(self):
+        self.alert("2026-11-07", "2026-11-07 10:00:00")              # 토요일
+        self.assertNotIn(self.top, set(self.candidates()["종목코드"]))
+        table = self.open(APP / "pages" / "2_alerts.py").dataframe[0].value
+        self.assertEqual(list(table["날짜"]), ["2026-11-07"])
+
+    def test_weekend_alert_after_cutoff_does_not_change_signal(self):
+        self.alert("2026-11-14", "2026-11-14 10:00:00")
+        self.assertIn(self.top, set(self.candidates()["종목코드"]))
 
     def test_alert_file_after_last_index_day_counts(self):
         self.alert("2026-11-16", "2026-11-16 18:00:00")
