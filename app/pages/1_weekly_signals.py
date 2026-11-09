@@ -26,10 +26,16 @@ else:
         st.subheader("진입 후보")
         days = ui.cooldown_days()
         window = ui.alert_window(days, until=latest)
+        cooldown = ui.cooldown_tickers(window.files, latest) if window is not None and window.complete else None
         if window is None:
-            st.warning("거래일 자료(index)가 없어 진입 후보를 계산하지 않습니다.")
+            st.warning("거래일 자료(index)가 없어 진입 후보 계산을 보류합니다.")
+        elif not window.complete:
+            st.warning(f"확정된 거래일 자료(기준일 {window.base})로는 {latest}까지 {days}거래일을 "
+                       "계산할 수 없어 진입 후보 계산을 보류합니다.")
+        elif cooldown is None:
+            st.warning("기간 안의 경보 파일을 읽지 못해 진입 후보 계산을 보류합니다.")
         else:
-            candidates = ui.entry_candidates(signals, ui.cooldown_tickers(window, latest))
+            candidates = ui.entry_candidates(signals, cooldown)
             st.caption(f"진입 금지 경보 종목과, 신호 컷오프 전에 공개된 최근 {days}거래일 주중 경보 종목을 "
                        f"뺀 상위 {ui.CANDIDATE_COUNT}종목입니다.")
             st.dataframe(pd.DataFrame({

@@ -23,11 +23,13 @@ else:
         st.subheader(SIGNAL_LABELS[rec["signal_type"]])
         st.write(rec["summary"])
         for src in rec["sources"]:
-            url = src["url"] or ""
+            url = src.get("url")
             label = f"[{src['n']}] {src['title']}"
-            if url.startswith(("http://", "https://")):
+            if isinstance(url, str) and url.startswith(("http://", "https://")):
                 st.link_button(label, url)
             else:
                 st.write(label)
+                if url not in (None, ""):
+                    st.error("이 출처의 링크 형식이 올바르지 않아 링크를 표시하지 않습니다.")
 
 ui.end_page()

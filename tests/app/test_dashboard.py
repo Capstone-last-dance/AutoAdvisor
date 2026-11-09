@@ -4,6 +4,7 @@
 """
 
 import ast
+import json
 import os
 import shutil
 import sys
@@ -165,7 +166,7 @@ class AlertTimingTest(RootTest):
             io.ROOT = self.tmp
             index = io.read_table("index")
             io.write_table("index", index[index["date"] != pd.Timestamp("2026-11-12")])
-            self.assertEqual(ui.alert_window(3, until=self.SIGNAL), ["2026-11-10", "2026-11-13"])
+            self.assertEqual(ui.alert_window(3, until=self.SIGNAL).files, ["2026-11-10", "2026-11-13"])
         finally:
             io.ROOT = saved
 
@@ -179,10 +180,70 @@ class AlertTimingTest(RootTest):
         self.alert("2026-11-14", "2026-11-14 10:00:00")
         self.assertIn(self.top, set(self.candidates()["종목코드"]))
 
-    def test_alert_file_after_last_index_day_counts(self):
+    def cut_index(self, last):
+        index = io_read(self.tmp, "index")
+        saved, io.ROOT = io.ROOT, self.tmp
+        try:
+            io.write_table("index", index[index["date"] <= pd.Timestamp(last)])
+        finally:
+            io.ROOT = saved
+
+    def garbage(self, relative):
+        path = self.tmp / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(b"not a complete file")
+
+    def test_alert_after_confirmed_calendar_is_not_counted(self):
         self.alert("2026-11-16", "2026-11-16 18:00:00")
         at = self.open(APP / "pages" / "2_alerts.py")
-        self.assertEqual(len(at.dataframe[0].value), 1)
+        self.assertEqual(len(at.dataframe), 0)
+        self.assertIn("경보 기준일: 2026-11-13", self.captions(at))
+        self.assertIn("2026-11-13까지만", at.warning[0].value)
+
+    def test_lagging_calendar_keeps_real_twenty_days(self):
+        first = pd.bdate_range(end="2026-10-08", periods=20)[0].strftime("%Y-%m-%d")
+        self.alert(first, f"{first} 10:00:00")
+        self.alert("2026-10-09", "2026-10-09 10:00:00")              # 지수 끝 뒤의 휴장일
+        self.cut_index("2026-10-08")
+        at = self.open(APP / "pages" / "2_alerts.py")
+        self.assertEqual(list(at.dataframe[0].value["날짜"]), [first])
+
+    def test_signal_after_calendar_holds_candidates(self):
+        self.cut_index("2026-11-06")
+        at = self.open(APP / "pages" / "1_weekly_signals.py")
+        self.assertIn("보류", at.warning[0].value)
+        self.assertIn("2026-11-06", at.warning[0].value)
+        self.assertEqual(len(at.dataframe), 2)
+
+    def test_unreadable_alert_holds_candidates(self):
+        self.garbage("alerts/2026-11-11.parquet")
+        at = self.open(APP / "pages" / "1_weekly_signals.py")
+        self.assertTrue(at.error)
+        self.assertIn("경보 파일을 읽지 못해", at.warning[0].value)
+        self.assertEqual(len(at.dataframe), 2)
+        self.assertIn(io.DISCLAIMER, self.captions(at))
+
+    def test_corrupt_files_keep_page_and_disclaimer(self):
+        cases = [("signals/2026-11-13.parquet", APP / "pages" / "1_weekly_signals.py"),
+                 ("evidence/2026-11-13.jsonl", APP / "pages" / "3_evidence.py"),
+                 ("forward_log.csv", APP / "pages" / "5_forward_test.py")]
+        for relative, page in cases:
+            with self.subTest(relative=relative):
+                original = (self.tmp / relative).read_bytes()
+                (self.tmp / relative).write_bytes(b'\xff{"partial": ')
+                at = self.open(page)
+                self.assertTrue(at.error)
+                self.assertIn(io.DISCLAIMER, self.captions(at))
+                (self.tmp / relative).write_bytes(original)
+
+    def test_numeric_source_url_shows_error(self):
+        path = self.tmp / "evidence" / f"{self.SIGNAL}.jsonl"
+        record = json.loads(path.read_text(encoding="utf-8").splitlines()[0])
+        record["sources"][0]["url"] = 123
+        path.write_text(json.dumps(record, ensure_ascii=False) + "\n", encoding="utf-8")
+        at = self.open(APP / "pages" / "3_evidence.py")
+        self.assertIn("링크 형식", at.error[0].value)
+        self.assertIn(io.DISCLAIMER, self.captions(at))
 
     def test_cutoff_is_strict(self):
         for when, excluded in [("15:29:59", True), ("15:30:00", False), ("16:00:00", False)]:
@@ -195,6 +256,25 @@ class AlertTimingTest(RootTest):
         at = self.open(APP / "pages" / "1_weekly_signals.py")
         self.assertIn("거래일 자료", at.warning[0].value)
         self.assertEqual(len(at.dataframe), 2)                       # 경보 표와 포트폴리오 표만
+
+
+class StubRootTest(RootTest):
+    def test_stub_root_is_refused(self):
+        for root in (self.tmp / "_stub", self.tmp / "_stub" / "inner"):
+            with self.subTest(root=root.name):
+                write_sample(root)
+                os.environ["DASHBOARD_DATA_ROOT"] = str(root)
+                at = self.open(APP / "Home.py")
+                self.assertIn("스텁", at.error[0].value)
+                self.assertNotIn("최신 신호일", self.captions(at))
+                self.assertIn(io.DISCLAIMER, self.captions(at))
+
+    def test_normal_root_is_allowed(self):
+        write_sample(self.tmp / "normal")
+        os.environ["DASHBOARD_DATA_ROOT"] = str(self.tmp / "normal")
+        at = self.open(APP / "Home.py")
+        self.assertFalse(at.error)
+        self.assertIn(f"최신 신호일: {SIGNAL_DATES[-1]}", self.captions(at))
 
 
 class SampleOutputTest(unittest.TestCase):

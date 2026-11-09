@@ -10,12 +10,13 @@ st.write("주간 신호, 주중 공시 경보, 근거 요약과 성과 기록을
 
 signals = ui.read("signals", latest) if latest else None
 window = ui.alert_window(20)
-alerts = None if window is None else ui.alerts_on(window)
+ready = window is not None and window.complete
+alerts = ui.alerts_on(window.files) if ready else None
 forward_log = ui.read("forward_log")
 
 col1, col2, col3 = st.columns(3)
 col1.metric("이번 신호일 진입 금지 경보", "-" if signals is None else f"{int((signals['crash_flag'] == 1).sum())}종목")
-col2.metric("최근 20거래일 주중 경보", "-" if window is None else f"{0 if alerts is None else len(alerts)}건")
+col2.metric("최근 20거래일 주중 경보", "-" if not ready else f"{0 if alerts is None else len(alerts)}건")
 col3.metric("forward test 기록", "0건" if forward_log is None else f"{len(forward_log)}건")
 
 if latest is None:

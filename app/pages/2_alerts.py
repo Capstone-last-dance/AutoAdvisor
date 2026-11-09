@@ -8,9 +8,14 @@ import dashboard as ui
 ui.start_page("주중 경보")
 
 window = ui.alert_window(20)
-alerts = None if window is None else ui.alerts_on(window)
-if window is None:
-    st.warning("거래일 자료(index)가 없어 경보를 표시하지 않습니다.")
+ready = window is not None and window.complete
+alerts = ui.alerts_on(window.files) if ready else None
+if window is not None:
+    st.caption(f"경보 기준일: {window.base} (확정된 거래일 기준)")
+    if window.later:
+        st.warning(f"거래일 자료가 {window.base}까지만 있어 이후 경보 파일 {window.later}개는 아직 표시하지 않습니다.")
+if not ready:
+    st.warning("확정된 거래일 자료(index)가 부족해 경보를 표시하지 않습니다.")
 elif alerts is None:
     st.info("최근 20거래일 경보가 없습니다.")
 else:
