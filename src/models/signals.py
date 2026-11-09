@@ -85,3 +85,76 @@ def generate_signals(date, features: pd.DataFrame, models: FinalModels, model_ve
     out = out.sort_values("rank").reset_index(drop=True)
     validate("signals", out)   # io.py(D-02)가 생기면 io.validate로 바꾼다 (R-18). 지금은 로컬 스키마 검증
     return out
+
+
+# ---------------------------------------------------------------------------
+# run_weekly 3단계 (5.2절 M3a·M3b). D가 STEPS에 "src.models.signals:m3_step"으로 등록한다.
+# ---------------------------------------------------------------------------
+
+FINAL_MODEL_DIR = Path(__file__).resolve().parents[2] / "models" / "final"   # save_final이 쓴 폴더 (A 소유)
+BASELINE_INPUTS = ("universe", "prices")    # 베이스라인이 읽는 표
+ML_INPUTS = ("universe", "features")        # 최종 모델이 읽는 표
+
+
+def ml_signals_from() -> pd.Timestamp:
+    """사전등록 `splits.forward_test.ml_signals_from`(2026-11-27). 그 전 신호일은 베이스라인이다 (6.8절)."""
+    from src.portfolio.params import load_prereg   # 설정만 읽는다. 함수 안에서 읽어 수집 환경(portfolio 없음)에서도 이 모듈을 쓴다
+
+    return pd.Timestamp(load_prereg()["splits"]["forward_test"]["ml_signals_from"])
+
+
+def m3_step(ctx) -> None:
+    """5.2절 3단계. 신호일 t의 `signals/{t}.parquet`을 쓴다.
+
+    - `ml_signals_from` 전 신호일은 베이스라인(6.3절 플래그 + 6.4절 B1, `model_version = "baseline"`)이다.
+      11/20 기록은 여기까지만 있으면 된다 (`forward_test.expected_input`).
+    - 그 날부터는 A-08 최종 모델(`FINAL_MODEL_DIR`)로 만든다. 모델이 없으면 단계가 실패한다 — 스텁으로 대신하지 않는다.
+    - 앞 단계가 스텁으로 쓴 표를 입력으로 받으면 계산하지 않고 0행 `signals`를 스텁으로 쓴다 (6.12절).
+      7단계가 그 실행을 forward 커밋에서 뺀다.
+    - 베이스라인은 U_t로 행을 만들고, ML 경로는 피처 행렬에서 만들기 때문에 쓰기 전에 U_t와 같은 종목 집합인지 본다.
+      다르면 D의 `forward_inputs`가 멈춘다 (B `weekly.py` 계약).
+    """
+    t = pd.Timestamp(ctx.date)
+    use_ml = t >= ml_signals_from()
+    stubbed = [name for name in (ML_INPUTS if use_ml else BASELINE_INPUTS) if name in getattr(ctx, "stub_tables", ())]
+    if stubbed:
+        from src.pipeline.run_weekly import empty_frame   # D의 스텁 형식 (9.3절 열, 0행)
+
+        ctx.write_table("signals", empty_frame("signals"), date=ctx.date)
+        ctx.log.warning("3단계 A: 입력 표가 스텁이라(%s) 0행 signals를 스텁으로 쓴다", ", ".join(stubbed))
+        return
+
+    if not use_ml:
+        from src.models import baseline
+
+        baseline.run_step(ctx)
+        ctx.log.info("3단계 A: %s는 ML 신호 시작일 전이라 베이스라인으로 만든다 (B1 mom_12_1, vol_60 상위 %.0f%%)",
+                     ctx.date, 100 * baseline.FLAG_FRACTION)
+        return
+
+    models = load_final(FINAL_MODEL_DIR)   # 없으면 FileNotFoundError로 단계가 멈춘다
+    version = str(models.meta.get("model_version") or FINAL_MODEL_DIR.name)
+    if version == "baseline":
+        raise ValueError(f"{FINAL_MODEL_DIR}의 model_version이 'baseline'이다. "
+                         "D의 forward_test가 신호 종류를 이 값으로 가르므로 ML 모델에는 다른 이름을 써야 한다")
+    signals = generate_signals(ctx.date, ctx.read_table("features", date=ctx.date), models, version)
+    _check_universe(signals, _universe_tickers(ctx, t), t)
+    ctx.write_table("signals", signals, date=ctx.date)
+    ctx.log.info("3단계 A: %s %d종목, 플래그 %d개, 모델 %s (학습 %s~%s)", ctx.date, len(signals),
+                 int(signals["crash_flag"].sum()), version, *models.meta.get("train_dates", ("?", "?")))
+
+
+def _universe_tickers(ctx, t: pd.Timestamp) -> list:
+    u = ctx.read_table("universe")
+    tickers = u.loc[(u["date"] == t) & u["in_universe"], "ticker"].tolist()
+    if not tickers:
+        raise ValueError(f"{t:%Y-%m-%d}: universe에 그 신호일이 없거나 U_t가 비어 있다")
+    return tickers
+
+
+def _check_universe(signals: pd.DataFrame, u_t: list, t: pd.Timestamp) -> None:
+    missing = sorted(set(u_t) - set(signals["ticker"]))
+    extra = sorted(set(signals["ticker"]) - set(u_t))
+    if missing or extra:
+        raise ValueError(f"{t:%Y-%m-%d}: signals 종목이 U_t와 다르다 (빠진 {len(missing)}개 {missing[:5]}, "
+                         f"U_t 밖 {len(extra)}개 {extra[:5]}). 이대로 쓰면 D의 forward_inputs가 멈춘다")
