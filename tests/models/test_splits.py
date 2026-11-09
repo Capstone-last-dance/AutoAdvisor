@@ -1,6 +1,7 @@
 import pandas as pd
 import pytest
 
+from src.common.guards import purge_signal_dates
 from src.data.calendar import signal_dates
 from src.models.splits import HOLDOUT_START, cross_fits, final_split, make_folds, purge, purge_after
 
@@ -117,13 +118,47 @@ def test_cross_fit_purges_both_sides_of_the_left_out_year(h):
 
 def test_purge_after_is_the_mirror_of_purge():
     e = SIG[100]
-    kept = purge_after(SIG, e, DAYS, h=20)
+    kept = purge_after(SIG, [e], DAYS, h=20)
     assert all(_pos(d) > _pos(e) + 21 for d in kept)
     assert all(_pos(d) <= _pos(e) + 21 for d in SIG.difference(kept))
-    assert len(purge_after(pd.DatetimeIndex([]), e, DAYS, h=20)) == 0
+    assert len(purge_after(pd.DatetimeIndex([]), [e], DAYS, h=20)) == 0
 
 
 def test_cross_fit_raises_when_nothing_is_left_after_purge():
     f = make_folds(SIG, DAYS, h=20)[0]        # 폴드 2016: 학습 2011~2013
     with pytest.raises(ValueError, match="남는 학습 신호일이 없다"):
         cross_fits(f, DAYS, h=10_000)
+
+
+def _d(index):
+    return [t.date() for t in pd.DatetimeIndex(index)]
+
+
+@pytest.mark.parametrize("delay", [0, 7])
+def test_purge_matches_c_guard_with_and_without_delayed_label_ends(delay):
+    """A의 purge와 C의 guards.purge_signal_dates는 같은 신호일 집합을 내야 한다 (DEC-09 (3) 규약)."""
+    for f in make_folds(SIG, DAYS, h=20):
+        train = SIG[(SIG.year >= 2011) & (SIG.year <= f.test_year - 3)]
+        ends = {}
+        if delay:   # 학습 구간 끝 10일의 라벨이 거래정지로 늦게 끝난 경우
+            ends = {t: DAYS[_pos(t) + 1 + 20 + delay] for t in train[-10:]}
+        mine = purge(train, f.val[0], DAYS, 20, ends)
+        theirs = purge_signal_dates(
+            _d(train), trading_days=_d(DAYS), h=20, next_segment_first_signal=f.val[0].date(),
+            actual_end_dates={k.date(): v.date() for k, v in ends.items()} or None)
+        assert _d(mine) == list(theirs)
+    assert delay == 0 or len(mine) < len(purge(train, f.val[0], DAYS, 20))   # 밀리면 더 빠진다
+
+
+def test_cross_fit_purges_more_when_label_ends_are_delayed():
+    f = make_folds(SIG, DAYS, h=20)[-1]                    # 폴드 2025, 학습 2011~2022
+    base = {c.year: c for c in cross_fits(f, DAYS, h=20)}
+    tr = pd.DatetimeIndex(f.train)
+    year = 2016
+    ends = {t: DAYS[_pos(t) + 1 + 20 + 15] for t in tr[tr.year.isin([year - 1, year])]}
+    slow = {c.year: c for c in cross_fits(f, DAYS, h=20, actual_end_dates=ends)}
+    assert len(slow[year].train) < len(base[year].train)   # 앞뒤 양쪽에서 더 빠진다
+    assert len(slow[year].predict) == len(base[year].predict)
+    before = lambda c: sum(d.year < year for d in c.train)
+    after = lambda c: sum(d.year > year for d in c.train)
+    assert before(slow[year]) < before(base[year]) and after(slow[year]) < after(base[year])

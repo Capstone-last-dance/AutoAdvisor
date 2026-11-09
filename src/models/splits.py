@@ -8,6 +8,7 @@ h는 라벨의 예측 기간이다. G6의 h = 1, 5 실험에서는 그 h로 부�
 """
 from dataclasses import dataclass
 
+import numpy as np
 import pandas as pd
 
 FIRST_TRAIN_YEAR = 2011
@@ -15,6 +16,7 @@ TEST_YEARS = tuple(range(2016, 2026))
 HOLDOUT_START = pd.Timestamp("2026-01-01")
 FINAL_TRAIN_LAST_YEAR = 2023
 FINAL_VAL_YEARS = (2024, 2025)
+FAR_FUTURE = pd.Timestamp.max.floor("D")   # 라벨 종료일이 거래일 달력을 넘어갈 때 쓰는 표시
 
 
 @dataclass(frozen=True)
@@ -42,33 +44,48 @@ def _positions(days: pd.DatetimeIndex, dates) -> pd.Index:
     return pos
 
 
-def purge(dates, next_start, trading_days, h: int) -> pd.DatetimeIndex:
-    """t+1+h 거래일이 next_start 이상인 t를 뺀다. dates와 next_start는 모두 거래일이어야 한다(아니면 ValueError)."""
+def _label_ends(dates: pd.DatetimeIndex, days: pd.DatetimeIndex, h: int, actual_end_dates=None) -> pd.DatetimeIndex:
+    """신호일별 라벨 종료일. 기본은 t+1+h 거래일이고, 거래정지로 늦어진 실제 종료일이 있으면 늦은 쪽을 쓴다.
+
+    actual_end_dates는 C의 end_dates에서 신호일별 최댓값을 만든 표다 (DEC-09 (3), `common.guards`와 같은 규약).
+    """
+    pos = _positions(days, dates) + 1 + h
+    beyond = pos >= len(days)                    # 달력 밖에서 끝나는 라벨. 어떤 경계도 넘는 것으로 본다
+    ends = np.where(beyond, FAR_FUTURE.to_datetime64(), days[np.where(beyond, len(days) - 1, pos)].to_numpy())
+    if not actual_end_dates:
+        return pd.DatetimeIndex(ends)
+    actual = pd.DatetimeIndex([pd.Timestamp(actual_end_dates.get(d, e)) for d, e in zip(dates, pd.DatetimeIndex(ends))])
+    _positions(days, actual[~beyond])            # 실제 종료일도 거래일이어야 한다
+    return pd.DatetimeIndex(np.maximum(ends, actual.to_numpy()))
+
+
+def purge(dates, next_start, trading_days, h: int, actual_end_dates=None) -> pd.DatetimeIndex:
+    """라벨 종료일이 next_start 이상인 t를 뺀다. dates와 next_start는 모두 거래일이어야 한다(아니면 ValueError)."""
     days = pd.DatetimeIndex(trading_days)
     dates = pd.DatetimeIndex(dates)
     if len(dates) == 0:
         return dates
-    s = _positions(days, [next_start])[0]
-    keep = _positions(days, dates) + 1 + h < s
-    return dates[keep]
+    start = days[_positions(days, [next_start])[0]]
+    return dates[_label_ends(dates, days, h, actual_end_dates) < start]
 
 
-def purge_after(dates, prev_end, trading_days, h: int) -> pd.DatetimeIndex:
-    """prev_end의 라벨이 끝나기 전에 시작하는 t를 뺀다. purge()의 반대 방향이다.
+def purge_after(dates, prev_segment, trading_days, h: int, actual_end_dates=None) -> pd.DatetimeIndex:
+    """앞 구간(prev_segment)의 라벨이 아직 끝나지 않은 t를 뺀다. purge()의 반대 방향이다.
 
     purge()는 t의 라벨이 뒤 구간을 넘보는 경우를 막고, 이 함수는 앞 구간의 라벨이 t를 넘보는 경우를 막는다.
-    가운데 구간을 빼고 적합하는 DEC-08 교차 적합에서는 두 방향이 모두 필요하다.
+    가운데 구간을 빼고 적합하는 DEC-08 교차 적합에서는 두 방향이 모두 필요하다. 기준은 앞 구간에서 가장
+    늦게 끝나는 라벨이며, 거래정지로 종료일이 밀린 행이 있으면 그 날짜를 쓴다.
     """
     days = pd.DatetimeIndex(trading_days)
-    dates = pd.DatetimeIndex(dates)
+    dates, prev = pd.DatetimeIndex(dates), pd.DatetimeIndex(prev_segment)
     if len(dates) == 0:
         return dates
-    e = _positions(days, [prev_end])[0]
-    keep = _positions(days, dates) > e + 1 + h
-    return dates[keep]
+    if len(prev) == 0:
+        raise ValueError("앞 구간에 신호일이 없다")
+    return dates[dates > _label_ends(prev, days, h, actual_end_dates).max()]
 
 
-def cross_fits(fold: Fold, trading_days, h: int = 20) -> list:
+def cross_fits(fold: Fold, trading_days, h: int = 20, actual_end_dates=None) -> list:
     """폴드 학습 구간을 연도로 나눠, 각 연도를 뺀 나머지로 적합할 분할을 만든다 (DEC-08).
 
     빠진 연도 y의 양쪽을 모두 purge한다. 앞쪽 학습 연도는 라벨이 y의 첫 신호일 전에 끝나야 하고(purge),
@@ -84,8 +101,8 @@ def cross_fits(fold: Fold, trading_days, h: int = 20) -> list:
     out = []
     for y in sorted(set(train.year)):
         predict = train[train.year == y]
-        before = purge(train[train.year < y], predict[0], days, h)
-        after = purge_after(train[train.year > y], predict[-1], days, h)
+        before = purge(train[train.year < y], predict[0], days, h, actual_end_dates)
+        after = purge_after(train[train.year > y], predict, days, h, actual_end_dates)
         rest = before.append(after)
         if len(rest) == 0:
             raise ValueError(f"폴드 {fold.test_year}의 {y}년: purge 뒤 남는 학습 신호일이 없다")
