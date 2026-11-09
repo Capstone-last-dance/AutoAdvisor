@@ -4,7 +4,8 @@ import pandas as pd
 import pytest
 
 from src.common import io
-from src.events.alerts import AlertBook, build_alerts, link_tickers, write_alert_files
+from src.events.alerts import (AlertBook, build_alerts, cooldown_at, engine_alerts, link_tickers, read_alerts,
+                               write_alert_files)
 
 KST = "Asia/Seoul"
 DAYS = pd.bdate_range("2026-01-05", periods=60)
@@ -208,3 +209,33 @@ def test_write_alert_files_by_date(tmp_path, monkeypatch):
     assert write_alert_files(result.alerts) == ["2026-01-06", "2026-01-07"]
     back = io.read_table("alerts", date="2026-01-06")
     assert list(back["rcept_no"]) == ["1"]
+    assert list(read_alerts()["rcept_no"]) == ["1", "2"]
+
+
+class TestNoAlertFiles:
+    """M9를 실행하지 않은 상태를 경보 0건으로 읽으면 쿨다운이 조용히 빠진다."""
+
+    @pytest.fixture(autouse=True)
+    def empty_root(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(io, "ROOT", tmp_path)
+
+    def test_read_alerts_without_folder(self):
+        with pytest.raises(FileNotFoundError, match="경보 파일이 없다"):
+            read_alerts()
+
+    def test_read_alerts_with_empty_folder(self):
+        (io.ROOT / "alerts").mkdir()
+        with pytest.raises(FileNotFoundError, match="경보 파일이 없다"):
+            read_alerts()
+
+    def test_backtest_file_does_not_count_for_forward(self):
+        io.write_table("alerts", alerts_frame([("000001", "2026-01-06 23:59:59")]), run_id="20260101_PM_m9")
+        with pytest.raises(FileNotFoundError, match="경보 파일이 없다"):
+            read_alerts()
+        assert len(read_alerts(run_id="20260101_PM_m9")) == 1
+
+    def test_public_functions_raise_instead_of_returning_nothing(self):
+        with pytest.raises(FileNotFoundError, match="경보 파일이 없다"):
+            cooldown_at("2026-01-09")
+        with pytest.raises(FileNotFoundError, match="경보 파일이 없다"):
+            engine_alerts("2026-01-05", "2026-01-09")

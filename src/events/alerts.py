@@ -185,13 +185,17 @@ def write_alert_files(alerts: pd.DataFrame, stub: bool = False) -> list[str]:
 
 
 def read_alerts(run_id: str | None = None) -> pd.DataFrame:
-    """백테스트는 `run_id` 파일을, forward는 날짜별 파일 전체를 읽는다. 파일이 없으면 빈 표다."""
+    """백테스트는 `run_id` 파일을, forward는 날짜별 파일 전체를 읽는다.
+
+    날짜별 파일이 하나도 없으면 FileNotFoundError를 낸다. M9를 실행하지 않은 상태를 경보 0건으로 읽지 않기 위해서다.
+    경보가 없는 날은 파일을 만들지 않으므로, 일부 날짜의 파일이 없는 것은 오류가 아니다.
+    """
     if run_id is not None:
         return io.read_table("alerts", run_id=run_id)
     folder = io.ROOT / "alerts"
     files = sorted(p.stem for p in folder.glob("*.parquet") if not p.stem.startswith("wf_")) if folder.exists() else []
     if not files:
-        return pd.DataFrame(columns=ALERT_COLUMNS)
+        raise FileNotFoundError(f"{folder}에 날짜별 경보 파일이 없다. M9 경보 생성을 먼저 실행한다")
     return pd.concat([io.read_table("alerts", date=day) for day in files], ignore_index=True)
 
 
@@ -213,12 +217,12 @@ def load_book(run_id: str | None = None) -> AlertBook:
 
 
 def cooldown_at(t: str) -> set[str]:
-    """B의 CooldownFunction. 신호일 t → t+1 신규 진입 금지 종목."""
+    """B의 CooldownFunction. 신호일 t → t+1 신규 진입 금지 종목. 경보 파일이 없으면 FileNotFoundError."""
     return load_book().cooldown_at(t)
 
 
 def engine_alerts(first_signal: str, t: str) -> tuple[dict[str, frozenset[str]], dict[str, frozenset[str]]]:
-    """B의 EngineAlertsFunction. (cooldowns, event_liquidations)."""
+    """B의 EngineAlertsFunction. (cooldowns, event_liquidations). 경보 파일이 없으면 FileNotFoundError."""
     return load_book().engine_alerts(first_signal, t)
 
 
