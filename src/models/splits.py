@@ -18,6 +18,16 @@ FINAL_VAL_YEARS = (2024, 2025)
 
 
 @dataclass(frozen=True)
+class CrossFit:
+    """DEC-08 연도별 교차 적합 한 건. `year`를 뺀 나머지 학습 연도로 적합한 모델로 `year`를 예측한다."""
+
+    test_year: int | None        # 폴드의 시험 연도. run_id에 들어간다 (DEC-08)
+    year: int                    # 예측할 연도 (폴드 학습 구간 안의 한 해)
+    train: pd.DatetimeIndex      # year를 빼고 양쪽을 purge한 학습 신호일
+    predict: pd.DatetimeIndex    # year의 신호일
+
+
+@dataclass(frozen=True)
 class Fold:
     test_year: int | None   # 최종 모델 분할은 None
     train: pd.DatetimeIndex
@@ -41,6 +51,46 @@ def purge(dates, next_start, trading_days, h: int) -> pd.DatetimeIndex:
     s = _positions(days, [next_start])[0]
     keep = _positions(days, dates) + 1 + h < s
     return dates[keep]
+
+
+def purge_after(dates, prev_end, trading_days, h: int) -> pd.DatetimeIndex:
+    """prev_end의 라벨이 끝나기 전에 시작하는 t를 뺀다. purge()의 반대 방향이다.
+
+    purge()는 t의 라벨이 뒤 구간을 넘보는 경우를 막고, 이 함수는 앞 구간의 라벨이 t를 넘보는 경우를 막는다.
+    가운데 구간을 빼고 적합하는 DEC-08 교차 적합에서는 두 방향이 모두 필요하다.
+    """
+    days = pd.DatetimeIndex(trading_days)
+    dates = pd.DatetimeIndex(dates)
+    if len(dates) == 0:
+        return dates
+    e = _positions(days, [prev_end])[0]
+    keep = _positions(days, dates) > e + 1 + h
+    return dates[keep]
+
+
+def cross_fits(fold: Fold, trading_days, h: int = 20) -> list:
+    """폴드 학습 구간을 연도로 나눠, 각 연도를 뺀 나머지로 적합할 분할을 만든다 (DEC-08).
+
+    빠진 연도 y의 양쪽을 모두 purge한다. 앞쪽 학습 연도는 라벨이 y의 첫 신호일 전에 끝나야 하고(purge),
+    뒤쪽 학습 연도는 y의 마지막 신호일 라벨이 끝난 뒤에 시작해야 한다(purge_after). 둘 다 실제 라벨
+    종료일(t+1+h 거래일) 기준이다.
+
+    하이퍼파라미터는 폴드에서 고른 값을 그대로 쓰므로 여기에는 검증 구간이 없다. 폴드 Y의 검증 연도와
+    시험 연도는 폴드 Y 모델의 예측을 쓴다 (DEC-08).
+    """
+    days = pd.DatetimeIndex(trading_days)
+    train = pd.DatetimeIndex(fold.train)
+    _need("학습", train, f"폴드 {fold.test_year} 교차 적합")
+    out = []
+    for y in sorted(set(train.year)):
+        predict = train[train.year == y]
+        before = purge(train[train.year < y], predict[0], days, h)
+        after = purge_after(train[train.year > y], predict[-1], days, h)
+        rest = before.append(after)
+        if len(rest) == 0:
+            raise ValueError(f"폴드 {fold.test_year}의 {y}년: purge 뒤 남는 학습 신호일이 없다")
+        out.append(CrossFit(fold.test_year, y, rest, predict))
+    return out
 
 
 def _years(sig: pd.DatetimeIndex, first: int, last: int) -> pd.DatetimeIndex:

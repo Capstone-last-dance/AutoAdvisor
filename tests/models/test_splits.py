@@ -2,7 +2,7 @@ import pandas as pd
 import pytest
 
 from src.data.calendar import signal_dates
-from src.models.splits import HOLDOUT_START, final_split, make_folds, purge
+from src.models.splits import HOLDOUT_START, cross_fits, final_split, make_folds, purge, purge_after
 
 DAYS = pd.bdate_range("2010-01-04", "2026-10-30")          # 휴장일 없이 평일 전부를 거래일로 본 합성 캘린더
 SIG = pd.DatetimeIndex(signal_dates(DAYS))
@@ -78,3 +78,52 @@ def test_h_5_and_20_signal_cadence_from_caller():
     sig20 = DAYS[DAYS >= "2011-01-03"][::20]                                    # G6: 20거래일 간격 신호일을 호출자가 만든다
     f = make_folds(sig20, DAYS, h=20)[0]
     assert all(_pos(t) + 21 < _pos(f.val.min()) for t in f.train)
+
+
+# DEC-08 연도별 교차 적합
+
+
+def test_cross_fits_cover_every_train_year_and_total_is_75():
+    total = 0
+    for f in make_folds(SIG, DAYS, h=20):
+        cfs = cross_fits(f, DAYS)
+        assert [c.year for c in cfs] == sorted(set(pd.DatetimeIndex(f.train).year))
+        assert all(c.test_year == f.test_year for c in cfs)
+        total += len(cfs)
+    assert total == 75                      # DEC-08 "추가 적합은 모델당 75회"
+
+
+def test_cross_fit_predicts_exactly_the_left_out_year():
+    for f in make_folds(SIG, DAYS, h=20):
+        tr = pd.DatetimeIndex(f.train)
+        for c in cross_fits(f, DAYS):
+            assert list(c.predict) == list(tr[tr.year == c.year])
+            assert c.year not in set(c.train.year)
+
+
+@pytest.mark.parametrize("h", [1, 20])
+def test_cross_fit_purges_both_sides_of_the_left_out_year(h):
+    for f in make_folds(SIG, DAYS, h=h):
+        tr = pd.DatetimeIndex(f.train)
+        for c in cross_fits(f, DAYS, h=h):
+            first, last = _pos(c.predict[0]), _pos(c.predict[-1])
+            before, after = tr[tr.year < c.year], tr[tr.year > c.year]
+            expected = (list(before[[_pos(d) + 1 + h < first for d in before]])
+                        + list(after[[_pos(d) > last + 1 + h for d in after]]))
+            assert list(c.train) == expected          # 양쪽 경계가 모두 빠진다
+            if h == 20 and len(after):            # 주 1회 신호일 + 라벨 20거래일이면 뒤쪽 4개가 겹친다
+                assert len(after) - len([d for d in after if _pos(d) > last + 1 + h]) == 4
+
+
+def test_purge_after_is_the_mirror_of_purge():
+    e = SIG[100]
+    kept = purge_after(SIG, e, DAYS, h=20)
+    assert all(_pos(d) > _pos(e) + 21 for d in kept)
+    assert all(_pos(d) <= _pos(e) + 21 for d in SIG.difference(kept))
+    assert len(purge_after(pd.DatetimeIndex([]), e, DAYS, h=20)) == 0
+
+
+def test_cross_fit_raises_when_nothing_is_left_after_purge():
+    f = make_folds(SIG, DAYS, h=20)[0]        # 폴드 2016: 학습 2011~2013
+    with pytest.raises(ValueError, match="남는 학습 신호일이 없다"):
+        cross_fits(f, DAYS, h=10_000)
