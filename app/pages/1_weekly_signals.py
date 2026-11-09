@@ -10,7 +10,6 @@ latest = ui.start_page("이번 주 신호")
 if latest is None:
     st.info("아직 신호 파일이 없습니다.")
 else:
-    names = ui.ticker_names()
     signals = ui.read("signals", latest)
 
     if signals is not None:
@@ -21,7 +20,6 @@ else:
         else:
             st.dataframe(pd.DataFrame({
                 "종목코드": flagged["ticker"],
-                "종목명": flagged["ticker"].map(lambda t: names.get(t, t)),
                 "crash_prob": flagged["crash_prob"],
             }), hide_index=True)
 
@@ -33,7 +31,7 @@ else:
         st.caption(f"진입 금지 경보 종목과 최근 {days}거래일 주중 경보 종목을 뺀 상위 {ui.CANDIDATE_COUNT}종목입니다.")
         st.dataframe(pd.DataFrame({
             "rank": candidates["rank"],
-            "종목명": candidates["ticker"].map(lambda t: names.get(t, t)),
+            "종목코드": candidates["ticker"],
             "rank_score": candidates["rank_score"],
         }), hide_index=True)
 
@@ -49,7 +47,6 @@ else:
         col3.metric("regime_mc", int(positions["regime_mc"].iloc[0]))
         st.dataframe(pd.DataFrame({
             "종목코드": stocks["ticker"],
-            "종목명": stocks["ticker"].map(lambda t: names.get(t, t)),
             "목표 비중": stocks["target_weight"],
         }), hide_index=True)
 

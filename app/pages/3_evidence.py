@@ -15,9 +15,8 @@ if not records:
     st.info("표시할 근거 요약이 없습니다.")
 else:
     st.caption(f"근거 기준일: {dates[-1]}")
-    names = ui.ticker_names()
     tickers = sorted({rec["ticker"] for rec in records})
-    ticker = st.selectbox("종목", tickers, format_func=lambda t: f"{t} {names.get(t, '')}".strip())
+    ticker = st.selectbox("종목코드", tickers)
     for rec in records:
         if rec["ticker"] != ticker:
             continue

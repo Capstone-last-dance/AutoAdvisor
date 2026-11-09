@@ -3,7 +3,7 @@
     python -m src.pipeline.make_dashboard_sample --out _sample
     DASHBOARD_DATA_ROOT=_sample streamlit run app/Home.py
 
-종목명과 수치는 모두 가짜다.
+종목코드와 수치는 모두 가짜다.
 """
 
 from __future__ import annotations
@@ -34,14 +34,6 @@ def write_sample(root: Path) -> None:
 
 def _write_all() -> None:
     n = len(TICKERS)
-    io.write_table("tickers", pd.DataFrame({
-        "ticker": TICKERS,
-        "name": [f"샘플종목{i + 1:02d}" for i in range(n)],
-        "market": ["KOSPI"] * n,
-        "listing_date": pd.to_datetime(["2000-01-04"] * n),
-        "delisting_date": pd.to_datetime([None] * n),
-        "security_type": ["common"] * n,
-    }))
 
     for shift, date in enumerate(SIGNAL_DATES):
         day = pd.Timestamp(date)

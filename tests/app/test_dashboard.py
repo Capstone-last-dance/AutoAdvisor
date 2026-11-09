@@ -67,7 +67,9 @@ class SamplePagesTest(RootTest):
         self.assertEqual(len(flagged), 4)
         self.assertEqual(len(candidates), 20)
         self.assertEqual(list(candidates["rank"]), sorted(candidates["rank"]))
-        self.assertTrue(candidates["종목명"].str.startswith("샘플종목").all())
+        self.assertTrue(candidates["종목코드"].str.fullmatch(r"\d{6}").all())
+        for table in (flagged, candidates, portfolio):
+            self.assertNotIn("종목명", table.columns)
         self.assertEqual(len(portfolio), 5)
 
     def test_alert_names_use_prereg(self):

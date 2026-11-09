@@ -101,12 +101,6 @@ def cooldown_days() -> int:
         return int(yaml.safe_load(f)["events"]["cooldown_trading_days"])
 
 
-def ticker_names() -> dict[str, str]:
-    """{종목코드: 종목명}. tickers 파일이 없으면 빈 dict."""
-    tickers = read("tickers")
-    return {} if tickers is None else dict(zip(tickers["ticker"], tickers["name"]))
-
-
 def recent_alerts(count: int, until: str | None = None) -> pd.DataFrame | None:
     """until까지의 최근 count개 경보 파일(파일 하나가 거래일 하나)을 합친다. 없으면 None."""
     dates = [d for d in io.list_dates("alerts") if until is None or d <= until][-count:]
