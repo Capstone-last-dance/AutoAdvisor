@@ -76,12 +76,19 @@ def overall_metrics(signals: pd.DataFrame, diagnostics: pd.DataFrame, labels: pd
     rm = signals.merge(ranker.rank_labels(labels, h)[key + ["er"]], on=key, how="inner")
     ic = m5.rank_ic_with_hac(rm[["date", "rank_score", "er"]]) if len(rm) else None
     base = diagnostics.merge(gate.crash_labels(labels)[key + ["y_crash"]], on=key, how="inner")
-    return {"rows": len(signals), "labelled_rows": len(gm),
-            "gate_roc_auc": m5.roc_auc(gm["y_crash"], gm["crash_prob"]) if len(gm) else None,
-            "gate_lift_at_10pct": m5.lift_at_10pct(gm["crash_flag"], gm["y_crash"]) if len(gm) else None,
-            "gate_baseline_roc_auc": m5.roc_auc(base["y_crash"], base["base_prob"]) if len(base) else None,
-            "ranker_mean_rank_ic": None if ic is None else ic.mean_ic,
-            "ranker_hac_t": None if ic is None else ic.hac_t_statistic}
+    out = {"rows": len(signals), "labelled_rows": len(gm),
+           "gate_roc_auc": m5.roc_auc(gm["y_crash"], gm["crash_prob"]) if len(gm) else None,
+           "gate_lift_at_10pct": m5.lift_at_10pct(gm["crash_flag"], gm["y_crash"]) if len(gm) else None,
+           "gate_baseline_roc_auc": m5.roc_auc(base["y_crash"], base["base_prob"]) if len(base) else None,
+           "gate_baseline_lift_at_10pct": m5.lift_at_10pct(base["base_flag"], base["y_crash"]) if len(base) else None,
+           "ranker_mean_rank_ic": None if ic is None else ic.mean_ic,
+           "ranker_hac_t": None if ic is None else ic.hac_t_statistic}
+    br = diagnostics.merge(ranker.rank_labels(labels, h)[key + ["er"]], on=key, how="inner")   # 6.4절 베이스라인 비교 (전체)
+    for name, col in (("B1", "b1_score"), ("B2", "b2_score"), ("B3", "b3_score")):
+        if len(br):
+            b = m5.rank_ic_with_hac(br[["date", col, "er"]].rename(columns={col: "rank_score"}))
+            out[f"{name}_mean_rank_ic"], out[f"{name}_hac_t"] = b.mean_ic, b.hac_t_statistic
+    return out
 
 
 def calibration_table(crash_prob, y_crash, bins: int = 10) -> pd.DataFrame:
