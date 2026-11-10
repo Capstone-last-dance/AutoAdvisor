@@ -45,10 +45,10 @@
 | B-09 | B 조윤상 | 12/7 | 대기 | | |
 | B-10 | B 조윤상 | 12/14 | 대기 | | |
 | C-01 | C 손석범 | 11/1 | 완료 | [PR #3](https://github.com/Capstone-last-dance/AutoAdvisor/pull/3); [설계](design_C.md) | 4.6·6.6절 라벨·평가·체결 설계 작성 및 병합. 후속 PM 결정은 PR #8에 반영 |
-| C-02 | C 손석범 | 11/6 | 진행 중 | [병합 PR #8](https://github.com/Capstone-last-dance/AutoAdvisor/pull/8), [PR #26](https://github.com/Capstone-last-dance/AutoAdvisor/pull/26) | 구회사 폐지 이력 보완 PR #26은 B 승인. A 11/8 데이터에서 라벨·종료일 각 978,983행을 생성해 스키마·키 대응·홀드아웃 경계를 검증함. A 잠정본의 추가 2,372행은 모두 2025년 신호의 2026년 종료 결과로 확인했으며 2025년 말 평가 컷오프에 따라 C 인계본에서 제외. 로컬 파일의 팀 전달은 남음 |
+| C-02 | C 손석범 | 11/6 | 진행 중 | [병합 PR #8](https://github.com/Capstone-last-dance/AutoAdvisor/pull/8), [PR #26](https://github.com/Capstone-last-dance/AutoAdvisor/pull/26) | 구회사 폐지 이력 보완 PR #26은 B 승인 후 병합 대기. A 11/8 데이터에서 라벨·종료일 각 978,983행을 생성해 스키마·키 대응·2025년 말 결과 컷오프를 검증함. C 공식 인계본을 받은 A가 자체 재현본과 전 행·전 열 값 일치를 확인함([이슈 #5](https://github.com/Capstone-last-dance/AutoAdvisor/issues/5)). |
 | C-03 | C 손석범 | 11/6 | 진행 중 | [병합 PR #8](https://github.com/Capstone-last-dance/AutoAdvisor/pull/8), [B-05 병합 PR #21](https://github.com/Capstone-last-dance/AutoAdvisor/pull/21) | 공통 체결·비용·NAV 엔진과 평가지표 구현 및 B 최종 리뷰 완료. B-05 연결 검증에서 같은 비중의 체결·비용·NAV 일치 확인. 실제 신호 기반 전체 평가가 남음 |
 | C-04 | C 손석범 | 11/16 | 진행 중 | [PR #22](https://github.com/Capstone-last-dance/AutoAdvisor/pull/22), [PR #23](https://github.com/Capstone-last-dance/AutoAdvisor/pull/23) | G0·G2 개인 행동 프록시, forward 실제 보유 재생·사후 성과 함수 구현. #22는 기록 없는 중간 주 보유 유지와 M9 청산 연동 후 B 승인, #23도 승인. 11/20 이후 실제 positions와 평가 검증이 남음 |
-| C-05 | C 손석범 | 11/23 | 진행 중 | [A 1차 결과](https://github.com/Capstone-last-dance/AutoAdvisor/issues/5#issuecomment-6735070939) | G1·G3 잠정 수치와 사전등록 기준을 대조함. G1 AUC 차이 −0.0010(기준 ≥ 0.03), G3 최선 베이스라인 대비 IC 차이 −0.0037(기준 ≥ 0.01)로 두 항목 모두 잠정 미달. PM 피처와 C 공식 라벨을 반영한 A 재실행 뒤 정식 판정 예정 |
+| C-05 | C 손석범 | 11/23 | 진행 중 | [A 판정용 재실행](https://github.com/Capstone-last-dance/AutoAdvisor/issues/5), [A PR #44](https://github.com/Capstone-last-dance/AutoAdvisor/pull/44) | C 공식 라벨과 PM `ev_*` 피처를 반영한 A의 10폴드 재실행(2016~2025년, 520 신호일, 228,422행)을 대조함. G1 ROC-AUC 0.6916 대 베이스라인 0.6975로 차이 −0.0058(기준 ≥ 0.03), G3 rank IC 0.0645 대 최선 베이스라인 0.0734로 차이 −0.0089(기준 ≥ 0.01): 둘 다 상대성과 조건 미달. 뉴스 피처 반영 재실행과 C-05 나머지 평가가 남음. |
 | C-06 | C 손석범 | 12/4 | 대기 | | |
 | C-07 | C 손석범 | 11/30 | 대기 | | |
 | C-08 | C 손석범 | 12/7 | 대기 | | |
