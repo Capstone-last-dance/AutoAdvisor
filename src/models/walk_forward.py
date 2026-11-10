@@ -17,6 +17,7 @@
 라벨은 2025-12-31까지만 쓴다. 홀드아웃(2026-01-01~)은 C의 가드가 막고 이 러너도 읽지 않는다 (R-04).
 """
 import argparse
+import hashlib
 import json
 from pathlib import Path
 
@@ -29,6 +30,16 @@ from src.models.splits import label_end_dates, make_folds
 
 SIGNAL_COLUMNS = ["date", "ticker", "rank_score", "rank", "crash_prob", "crash_flag", "model_version"]
 DIAGNOSTIC_COLUMNS = ["test_year", "date", "ticker", "raw_prob", "base_prob", "base_flag", "b1_score", "b2_score", "b3_score"]
+
+
+def model_hashes(directory: Path) -> dict:
+    """저장한 모델 파일의 SHA-256. 가중치는 커밋하지 않고 팀 드라이브에 두므로 해시를 여기 남긴다
+    (PM 2026-11-10 결정). 키는 directory 기준 상대 경로다."""
+    out = {}
+    for path in sorted(Path(directory).rglob("*")):
+        if path.is_file():
+            out[path.relative_to(directory).as_posix()] = hashlib.sha256(path.read_bytes()).hexdigest()
+    return out
 
 
 def fold_signals(g: gate.FoldResult, r: ranker.RankerResult, model_version: str) -> tuple:
@@ -146,6 +157,7 @@ def run(features: pd.DataFrame, labels: pd.DataFrame, trading_days, *, run_id: s
         gate.save_fold(g, reports / "models" / f"fold_{fold.test_year}" / "gate")
         ranker.save_fold(r, reports / "models" / f"fold_{fold.test_year}" / "ranker")
         fm = fold_metrics(g, r, labels, h)
+        fm["model_sha256"] = model_hashes(reports / "models" / f"fold_{fold.test_year}")
         per_fold.append(fm)
         log(f"  게이트 검증 AUC {g.val_auc:.4f} / 시험 AUC {fm['gate']['test_roc_auc']} "
             f"lift {fm['gate']['test_lift_at_10pct']} | 순위 검증 IC {r.val_ic:.4f} / 시험 IC {fm['ranker']['test_mean_rank_ic']}")

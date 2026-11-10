@@ -5,6 +5,7 @@
 generate_signals는 모델 파일만으로 돌아간다. 매주 실행(D의 run_weekly)은 load_final로 읽은 모델에 t의 피처를 넘기면 된다.
 model_version 값은 명세에 정의가 없어 호출자가 정한다 (baseline은 "baseline").
 """
+import hashlib
 import json
 from dataclasses import dataclass
 from pathlib import Path
@@ -50,6 +51,10 @@ def train_final(features: pd.DataFrame, labels: pd.DataFrame, signal_dates, trad
 
 
 def save_final(models: FinalModels, directory: Path):
+    """모델 파일과 meta를 쓰고, 가중치 파일의 SHA-256을 final_sha256.json에 남긴다.
+
+    가중치는 저장소에 커밋하지 않고 팀 드라이브 run_id 폴더에 두기로 했으므로(PM 2026-11-10),
+    해시 파일이 "어느 가중치로 만든 신호인가"를 가리키는 유일한 커밋 가능한 기록이다."""
     d = Path(directory)
     d.mkdir(parents=True, exist_ok=True)
     gate.save_booster(models.gate_booster, d / "final_gate.txt", models.gate_iteration)
@@ -57,6 +62,14 @@ def save_final(models: FinalModels, directory: Path):
     joblib.dump({"calibrator": models.calibrator, "gate_features": models.gate_features,
                  "ranker_features": models.ranker_features, "h": models.h}, d / "final_aux.joblib")
     (d / "final_meta.json").write_text(json.dumps(models.meta, ensure_ascii=False, indent=2), encoding="utf-8")
+    (d / "final_sha256.json").write_text(json.dumps(final_sha256(d), ensure_ascii=False, indent=2), encoding="utf-8")
+
+
+def final_sha256(directory: Path) -> dict:
+    """가중치 파일의 SHA-256 (해시 파일 자신과 meta는 뺀다)."""
+    skip = {"final_sha256.json", "final_meta.json"}
+    return {p.name: hashlib.sha256(p.read_bytes()).hexdigest()
+            for p in sorted(Path(directory).iterdir()) if p.is_file() and p.name not in skip}
 
 
 def load_final(directory: Path) -> FinalModels:

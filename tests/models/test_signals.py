@@ -1,3 +1,4 @@
+import json
 import math
 
 import numpy as np
@@ -95,3 +96,16 @@ def test_missing_date_and_missing_feature_raise(trained):
         generate_signals("2026-10-31", feat, models, "v")
     with pytest.raises(ValueError, match="피처가 입력에 없다"):
         generate_signals("2026-10-30", feat.drop(columns=["noise"]), models, "v")
+
+
+def test_save_final_records_weight_hashes(trained, tmp_path):
+    import hashlib
+    from src.models.signals import final_sha256
+    _, _, models = trained
+    d = tmp_path / "final"
+    save_final(models, d)
+    recorded = json.loads((d / "final_sha256.json").read_text(encoding="utf-8"))
+    assert set(recorded) == {"final_gate.txt", "final_ranker.txt", "final_aux.joblib"}   # meta와 해시 파일은 뺀다
+    for name, digest in recorded.items():
+        assert hashlib.sha256((d / name).read_bytes()).hexdigest() == digest
+    assert recorded == final_sha256(d)
