@@ -472,17 +472,32 @@ python -m src.pipeline.forward_test --date YYYY-MM-DD --source-commit <신호를
 - `--source-commit`의 커밋은 로컬에 있어야 한다 (없으면 `git fetch`). 두 커밋 메시지에 적힌다.
 - 리허설은 `--no-push`로 커밋·태그까지만 한다. push만 실패하면 안내된 `git push` 명령을 직접 실행한다.
 
-#### 일간 경보와 대시보드
+#### 일간 경보
 
-> 일간 경보 실행기는 **작성 예정** (D-06)
+> **작성 예정** (D-06). M9 입력(공시 수집·종목 연결)을 PM과 맞추는 중이다.
 
-대시보드는 저장소 루트에서 실행한다 (명세서 6.11절).
+```bash
+python -m src.pipeline.run_daily_alerts --date YYYY-MM-DD
+```
+
+#### 대시보드
+
+저장소 루트에서 실행한다 (명세서 6.11절).
 
 ```bash
 streamlit run app/Home.py
 ```
 
-실제 신호가 없을 때는 샘플 데이터로 화면을 확인한다. 샘플은 `_sample/`에만 만들어지고 Git에 올라가지 않는다.
+페이지는 개요, 이번 주 신호, 주중 경보, 근거, 성과, forward test 여섯 개다. 모든 페이지 상단에 최신 신호일과 파일 생성 시각, 하단에 고지 문구가 나온다.
+
+- 파일은 `src/common/io.py`로만 읽고, 쓰지 않는다. 파일이 바뀌면 새로고침만으로 반영된다.
+- 종목은 종목코드만 표시한다. 종목명은 `tickers` 공개 범위를 확인한 뒤 넣는다 (Q-16).
+- 진입 후보는 진입 금지 경보 종목과 쿨다운 종목을 뺀 상위 20종목이다. 경보 파일을 읽지 못하면 후보 계산을 보류한다.
+- 거래일은 `index`(코스피 200 종가가 있는 날)에 확정된 날만 쓴다. 지수 갱신이 늦으면 기준일과 지연을 표시하고, 신호일이 달력보다 뒤면 후보 계산을 보류한다.
+- 파일을 읽지 못하면 그 부분에 오류를 표시하고 나머지 화면과 고지 문구는 그대로 보여 준다.
+- 배포는 Streamlit Community Cloud에 팀원 이메일로 접속을 제한한다 (Q-16). 설정은 D-08에서 한다.
+
+실제 신호가 없을 때는 샘플 데이터로 화면을 확인한다. 샘플은 `_sample/`에만 만들어지고 Git에 올라가지 않는다. 생성기는 저장소 루트와 샘플이 아닌 기존 폴더에는 쓰지 않는다. 예전에 만든 `_sample/`이 거부되면 지우고 다시 만든다.
 
 ```bash
 python -m src.pipeline.make_dashboard_sample --out _sample
@@ -492,15 +507,7 @@ python -m src.pipeline.make_dashboard_sample --out _sample
 DASHBOARD_DATA_ROOT=_sample streamlit run app/Home.py
 ```
 
-PowerShell에서는 `$env:DASHBOARD_DATA_ROOT="_sample"`을 먼저 실행한다.
-
-```bash
-# 일간 경보 실행 (구현 예정, D-06)
-python -m src.pipeline.run_daily_alerts --date YYYY-MM-DD
-
-# 대시보드 실행 (구현 예정, D-05)
-streamlit run app/Home.py
-```
+PowerShell에서는 `$env:DASHBOARD_DATA_ROOT="_sample"`을 먼저 실행한다. `DASHBOARD_DATA_ROOT`가 `_stub/`이나 그 하위 폴더면 스텁 데이터를 표시하지 않고 거부한다.
 
 (명세서 6.11절, 6.12절)
 
