@@ -19,7 +19,7 @@
 | `src/portfolio/buffer_rule.py` | 버퍼 규칙 단계 1~5와 엔진 위 실행 (`run_buffer_rule`) | 구현 (B-03). C 엔진 연결은 `engine_adapter.py` |
 | `src/portfolio/engine_adapter.py` | 9.3절 `prices`·`status`·`index`·`delisted`(+ DEC-28 `delisted_reused`)와 부록 1 `costs`·`execution` → C의 `ExecutionEngine` (`engine_inputs`, `load_engine_inputs`, `build_engine`, `cost_rates`) | 구현 (B-05). 규칙은 5.1절 |
 | `src/portfolio/env_check.py` | B-05 완료 기준 확인: `run_full_episode`(끝까지 실행), `compare_buffer_and_env`(같은 비중이면 같은 체결·비용), `BufferWeightsEnv`, `ledger_counts` | 구현 (B-05) |
-| `src/portfolio/env_check_report.py` | B-05 결과 리포트: `python -m src.portfolio.env_check_report --run-id {YYYYMMDD}_B_{설명}` → `reports/{run_id}/`에 config.yaml, git_commit.txt, metrics.json(완료 기준 (1)·(2), 입력 파일 SHA-256) | 구현 (B-05). 공식 실행은 A PR #35 병합 뒤 (5.1절) |
+| `src/portfolio/env_check_report.py` | B-05 결과 리포트: `python -m src.portfolio.env_check_report --run-id {YYYYMMDD}_B_{설명}` → `reports/{run_id}/`에 config.yaml, git_commit.txt, metrics.json(완료 기준 (1)·(2), 입력 파일 SHA-256) | 구현 (B-05). 결과 `reports/20261110_B_env_check/` (5.1절) |
 | `src/portfolio/interfaces.py` | B가 C(M5)와 PM(M9)에 기대하는 호출 형태 | 초안. C·PM 확인 필요 (5절) |
 | `src/portfolio/weekly.py` | run_weekly 4단계 `m4_step`(w_raw), 5단계 `m8_step`(positions). forward 지난 보유 재생 `replay_holdings` | 구현. PM(M9)·D(지난 기록) 함수 연결 대기 (5.4절) |
 | `src/portfolio/rl_data.py` | 9.3절 표 → 신호일별 스냅샷 | 구현 |
@@ -243,7 +243,11 @@ B-05 완료 기준 확인 (`env_check.py`):
   - 781개 신호일(2011-01-07 ~ 2025-12-26, U_t 평균 419, 321~494종목)이 행동 0과 무작위 행동 모두 끝까지 돌았다.
   - (2)의 차이는 모두 0이다. 체결 12,277건, 정지 거부 71번, 하한가 근접 5번, 상한가 근접 2번이다. 보유 중 폐지는 없었다. 11/4 미리보기와 같다.
   - 전체 73.6초 걸렸다 (베이스라인 신호 37초, 스냅샷 5초).
-- 남은 것: A PR #35가 병합되면 같은 명령을 커밋된 상태에서 돌려 `reports/{run_id}/`를 남긴다.
+- **공식 결과 `reports/20261110_B_env_check/`** (코드 커밋 5b2f1b3, 미커밋 파일 없음. A PR #35 병합 뒤 main, A 11/8 데이터, `configs/prereg.yaml`과 같은 설정):
+  - (1) 781개 신호일(2011-01-07 ~ 2025-12-26, U_t 평균 419, 321~494종목)을 행동 0과 무작위 행동(시드 0) 모두 끝까지 돌았다. 끝 NAV는 행동 0이 1.6557, 무작위가 0.7552다.
+  - (2) 목표 비중, 체결, NAV, 초과수익, 회전율 차이가 모두 0이다 (허용 오차 1e-12). 체결 12,277건, 정지 거부 71번, 하한가 근접 5번, 상한가 근접 2번, 보유 중 폐지 0번이다.
+  - 입력 7개 표의 파일 SHA-256과 만든 신호·피처의 지문이 리허설과 같다.
+  - 첫 실행(be43ba1)은 리포트 코드가 아직 git에 없던 상태라 `git_commit.txt`에 빠졌다. `_git_commit`이 새 파일도 적게 고친 뒤 커밋한 상태에서 같은 run_id로 다시 만들었다. 숫자는 실행 시간만 다르다.
 
 ### 5.2 M9 쿨다운 (PM 장지원)
 
@@ -479,5 +483,5 @@ rebound_t = 1인데 bear_t를 계산할 수 없으면 결측이다 (Insufficient
 | B-02 | 11/8 | 완료: 0.157263을 부록 1에 기입, PR #11 병합. Q-12 결과 칸은 PM이 기입했고 D4는 DEC-19로 기록됐다 |
 | B-03 | 11/13 | 단계 1~5와 엔진 위 실행을 구현했다 (2절). C의 M5(PR #8 헤드)를 합친 상태에서 합성 시장 실행을 확인했다: 목표 비중이 FakeEngine과 같고, 초과수익은 목표 합이 1인 체결(현금 부족 배율)에서만 최대 7e-5 다르다. PR #8 병합(b2b32a6) 뒤 main에서 `test_runs_on_c_execution_engine`이 건너뛰지 않고 통과한다 (전체 336 통과). 남은 것: A 코드 리뷰 승인. 실제 신호(A-04) 실행은 완료 기준 밖이라 B-05 완료 기준 (베이스라인 신호로 에피소드 끝까지)에서 확인한다 |
 | B-04 | 11/16 | 완료: 완료 기준 (1)·(2) 테스트 통과, (3) 그림 `reports/20261104_B_m8_states/` (4절, prereg.yaml 초안 기준), A 승인 (PR #13). 11/9 공식 사전등록에서 쓰는 키가 바뀌면 새 run_id로 다시 만든다 |
-| B-05 | 11/16 | 엔진 어댑터와 완료 기준 확인 함수 구현 (5.1절). 합성 시장에서 (1) 끝까지 실행, (2) 버퍼 규칙과 차이 0. 실제 A 베이스라인 신호 미리보기도 781개 신호일 끝까지, 차이 0. A 승인 (PR #21, 11/6). `delisted_reused`를 io로 읽고 가격 공백 검사를 더했다 (11/8). 리포트 `env_check_report.py`를 만들었고, A PR #35를 합친 리허설에서 두 기준을 통과했다 (11/9). 남은 것: #35 병합 뒤 공식 실행(`reports/{run_id}/`, 입력 파일 SHA-256 포함) |
+| B-05 | 11/16 | 엔진 어댑터와 완료 기준 확인 함수 구현 (5.1절). 합성 시장에서 (1) 끝까지 실행, (2) 버퍼 규칙과 차이 0. 실제 A 베이스라인 신호 미리보기도 781개 신호일 끝까지, 차이 0. A 승인 (PR #21, 11/6). `delisted_reused`를 io로 읽고 가격 공백 검사를 더했다 (11/8). 리포트 `env_check_report.py`로 실제 A 베이스라인 신호의 공식 결과 `reports/20261110_B_env_check/`를 남겼다 (11/10, 코드 커밋 5b2f1b3): 781개 신호일 끝까지, 버퍼 규칙과 차이 0, 입력 파일 SHA-256 포함. 남은 것: 리포트 코드와 결과의 A 리뷰 승인 (PR #36) |
 | B-06 | 11/23 | 폴드별 스냅샷 구성(D1, D5), R-10 기록(`reports/{run_id}/`), 베이스라인 신호 리허설 |
