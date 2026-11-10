@@ -32,13 +32,17 @@ class FinalModels:
     ranker_iteration: int | None = None
 
 
-def train_final(features: pd.DataFrame, labels: pd.DataFrame, signal_dates, trading_days, h: int = 20, **kw) -> FinalModels:
+def train_final(features: pd.DataFrame, labels: pd.DataFrame, signal_dates, trading_days, h: int = 20,
+                actual_end_dates=None, **kw) -> FinalModels:
     """features·labels는 2025-12-31 이하 신호일만 쓰인다(그 이후 행이 있어도 final_split이 구간에 넣지 않는다).
+    actual_end_dates를 넘기면 학습↔검증·검증↔홀드아웃 경계를 C의 실제 라벨 종료일로 purge한다 (C 리뷰 #35).
     kw는 grid, fixed, seed, n_jobs를 gate·ranker 양쪽에 넘긴다."""
-    fold = final_split(signal_dates, trading_days, h=h)
+    fold = final_split(signal_dates, trading_days, h=h, actual_end_dates=actual_end_dates)
     g = gate.fit_fold(features, labels, fold, require_test=False, **kw)
     r = ranker.fit_fold(features, labels, fold, h=h, require_test=False, **kw)
-    meta = {"h": h, "train_dates": [f"{fold.train.min():%Y-%m-%d}", f"{fold.train.max():%Y-%m-%d}"],
+    meta = {"h": h, "actual_end_dates_used": actual_end_dates is not None,
+            "train_signal_dates": int(len(fold.train)), "val_signal_dates": int(len(fold.val)),
+            "train_dates": [f"{fold.train.min():%Y-%m-%d}", f"{fold.train.max():%Y-%m-%d}"],
             "val_dates": [f"{fold.val.min():%Y-%m-%d}", f"{fold.val.max():%Y-%m-%d}"],
             "gate_params": g.params, "gate_val_auc": g.val_auc, "ranker_params": r.params, "ranker_val_mean_rank_ic": r.val_ic}
     return FinalModels(g.model.booster_, g.features, g.calibrator, r.model.booster_, r.features, h, meta,
