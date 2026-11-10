@@ -38,7 +38,7 @@ def classify(title_norm: str, events: Mapping[str, Any]) -> list[Decision]:
     """보고서명 하나의 유형별 판정. 키워드가 없는 유형은 결과에 넣지 않는다."""
     filters = events["title_filters"]
     title = strip_prefixes(title_norm, filters["strip_prefixes"])
-    common = _common_exclusion(title, filters)
+    common = common_exclusion(title, filters)
     decisions = []
     for trigger_type, rule in events["triggers"].items():
         if not any(keyword in title for keyword in rule["keywords"]):
@@ -50,7 +50,7 @@ def classify(title_norm: str, events: Mapping[str, Any]) -> list[Decision]:
     return decisions
 
 
-def _common_exclusion(title: str, filters: Mapping[str, Any]) -> str:
+def common_exclusion(title: str, filters: Mapping[str, Any]) -> str:
     for prefix in filters["exclude_prefixes"]:
         if title.startswith(prefix):
             return f"후속 정정 {prefix}"

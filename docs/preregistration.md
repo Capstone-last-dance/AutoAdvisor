@@ -2,7 +2,7 @@
 
 명세서 8장. PM이 부록 1을 `configs/prereg.yaml`로 저장하고 `FILL_` 값을 모두 채운 뒤 2026-11-09에 커밋한다 (작업 PM-07). 커밋한 뒤에는 값을 바꾸지 않는다 (R-02). 바꿔야 하면 `docs/deviation_log.md` 절차를 따른다.
 
-2026-11-03부터 main의 `configs/prereg.yaml`에 초안이 있다. 내용은 명세서 부록 1과 같고, `vol_target_annual`을 채워 `FILL_`은 1개(`news_sentiment_model`)가 남았다. 11/9 공식 커밋 전까지는 초안이므로 아래 표의 값과 결정을 반영해 고칠 수 있다. 커밋 해시·시각은 11/9 공식 확정 커밋에 대해서만 기입한다.
+2026-11-03부터 main의 `configs/prereg.yaml`에 초안이 있다. 내용은 명세서 부록 1과 같고, `vol_target_annual`과 `news_sentiment_model`(Q-09, 11/8)을 채워 남은 `FILL_`은 없다. 11/9 공식 커밋 전까지는 초안이므로 아래 표의 값과 결정을 반영해 고칠 수 있다. 커밋 해시·시각은 11/9 공식 확정 커밋에 대해서만 기입한다.
 
 ## 커밋 정보
 
@@ -10,26 +10,37 @@
 |---|---|
 | 커밋 예정일 | 2026-11-09 |
 | 대상 파일 | `configs/prereg.yaml` |
-| 커밋 해시 | (커밋 후 기입) |
-| 커밋 시각 (KST) | (커밋 후 기입) |
+| 커밋 해시 | `89074af0227f8d33f213fa712ca4eab79e0f6da3` ([PR #29](https://github.com/Capstone-last-dance/AutoAdvisor/pull/29)의 merge commit). 내용 커밋 `0359ca2bf19b1c41f5c8a36c7c2e840d67ecd6b4` |
+| 커밋 시각 (KST) | 2026-11-09 18:02:27 (병합). 내용 커밋 2026-11-09 15:15:02 |
+
+### 병합과 결과 공유의 순서
+
+| 시각 (KST, 2026-11-09) | 내용 |
+|---|---|
+| 15:15:02 | [PR #29](https://github.com/Capstone-last-dance/AutoAdvisor/pull/29)의 마지막 내용 커밋 `0359ca2` |
+| 16:56:36 | 김윤하(A)가 walk-forward 1차 잠정 결과를 [이슈 #5](https://github.com/Capstone-last-dance/AutoAdvisor/issues/5#issuecomment-6735070939)에 공유 |
+| 18:02:27 | PR #29 병합 `89074af` |
+
+결과가 공유된 뒤에 병합했지만 `0359ca2` 이후 PR #29의 내용은 바뀌지 않았다. 순서는 팀에 공유된 시각 기준이다. A 보고에 따르면 이 잠정 결과에는 PM 공시·뉴스 피처와 C 공식 라벨이 빠져 있고 `ss_regime` 미확정 구간은 0으로 가정했다.
 
 ## 전원 확인
 
 | 역할 | 담당자 | 확인일 |
 |---|---|---|
-| PM | 장지원 | |
-| A | 김윤하 | |
-| B | 조윤상 | |
-| C | 손석범 | |
-| D | 임소현 | |
+| PM | 장지원 | 2026-11-09 (병합 지시) |
+| A | 김윤하 | 2026-11-09 설정 변경 이견 없음 (PR 코멘트). 요청 문구는 `0359ca2`에 반영. 병합 시점에 GitHub 승인은 없음 |
+| B | 조윤상 | 2026-11-09 RL env 항목 확인 (PR 코멘트) |
+| C | 손석범 | 2026-11-09 승인 (PR 리뷰) |
+| D | 임소현 | 병합 시점에 GitHub 확인 기록 없음 |
 
 ## 커밋 전에 채울 값
 
 | 키 | 담당 | 확인 항목 | 기한 | 상태 |
 |---|---|---|---|---|
-| `features.news_sentiment_model` | PM | Q-09 | 11/8 | 대기. 뉴스 피처를 빼면(사전 허용 변경 3번) 해당 없음으로 바꾼다 |
-| `risk_layer.vol_target_annual` | B | Q-12 | 11/8 | 기입: 0.157263 (`reports/20261103_B_vol_target/`). B-02 [PR #11](https://github.com/Capstone-last-dance/AutoAdvisor/pull/11) 리뷰 중이며, 값이 바뀌면 갱신 |
-| `features.event_keywords`, `events.triggers` 확정안 | PM | Q-13 | 11/8 | 초안 반영. PR #16 C 변경 요청과 B·C 쿨다운 의견을 아래에 반영했다. T3 답변 원문 검증, T1 출처·식별자 및 팀 재검토 대기 |
+| `features.news_sentiment_model` | PM | Q-09 | 11/8 | 기입: `snunlp/KR-FinBert-SC@f8586286cc3161fb648e9fee09a456069fd846d0` (표본 평가 11/8). 이용 조건은 PM이 위험을 수용했다(decisions.md Q-09). `news_sent_5`를 빼는 사전 허용 변경을 적용하면 해당 없음으로 바꾼다(DEC-06) |
+| `risk_layer.vol_target_annual` | B | Q-12 | 11/8 | 기입: 0.157263 (`reports/20261103_B_vol_target/`). B-02 [PR #11](https://github.com/Capstone-last-dance/AutoAdvisor/pull/11) 병합 확인 |
+| `features.event_keywords`, `events.triggers` | PM | Q-13 | 11/8 | [PR #16](https://github.com/Capstone-last-dance/AutoAdvisor/pull/16)의 규칙 반영과 C 문서 리뷰 완료. [PR #20](https://github.com/Capstone-last-dance/AutoAdvisor/pull/20) 공용 경보 스키마 병합. 실제 T3 답변 원문, T1 종목 연결과 거래일 경계는 PM-10에서 검증 |
+| `portfolio.rl.env` | PM·B | DEC-21 설정과 B 시작 시 검사 일치 | 11/9 전 | 8개 값을 부록 1·YAML에 반영했다. B 시작 검사와 테스트 입력 동기화는 B 커밋에서 확인한다 |
 
 ## 커밋 전 선행 작업 (PM-07)
 
@@ -40,7 +51,7 @@
 | D-01 | D | 10/30 | 저장소 골격, 라이브러리 버전(Q-18) | 완료 |
 | PM-06 | PM | 11/8 | 키워드 검증 (Q-13) | 2015~2025년 제목 588,868건, T1 원문 9건, T2 심사 개시 안내 원문 5건 검증. T1~T6·`ev_*` 규칙안 초안 반영. 출처·경보 식별자·같은 사건 처리의 팀 확인 대기 |
 | PM-17 | PM | 11/8 | Q-07, Q-09, Q-10, Q-11 조사 | 진행 중 |
-| B-02 | B | 11/8 | `vol_target_annual` 계산 (Q-12) | PR #11 리뷰 중 |
+| B-02 | B | 11/8 | `vol_target_annual` 계산 (Q-12) | PR #11 병합 확인 |
 
 ## T1 출처와 경보 식별자 검토
 
@@ -54,7 +65,7 @@ KIND 신규 지정 공시 7건은 기존 OpenDART 보관본에서 같은 지정 
 
 11/4 손석범(C)의 변경 요청을 반영해 자회사·종속회사 제외를 모회사 T4·T5 자동 경보에 한정했다. 해당 원 공시는 보존하고 다른 경보와 `ev_*`는 각 유형의 조건으로 판정한다. T3은 풍문·조회공시·답변이 제목에 있으면 회사의 답변 원문으로 확인한다. 조회 요청·미확정·부인 답변은 경보 없이 보존한다. 회사가 횡령·배임 혐의 발생이나 관련 피소·고소 사실을 확인하면 그 확인 공시의 `available_at`부터 적용한다. [PR #16](https://github.com/Capstone-last-dance/AutoAdvisor/pull/16)
 
-11/5 C 재검토를 반영해 제목에 횡령·배임이 없는 답변도 원 조회공시를 명시적으로 연결할 수 있으면 후보에 넣는다. 명세 9.3절의 경보 스키마에 DEC-09의 필수 `available_at`과 결측 허용 `rcept_dt`를 명시하고, 6.10절의 청산·진입 금지 시작일을 같은 기준으로 맞췄다. 임소현(D)의 공용 I/O 반영과 실제 원문·거래일 검증은 후속이다.
+11/5 C 재검토를 반영해 제목에 횡령·배임이 없는 답변도 원 조회공시를 명시적으로 연결할 수 있으면 후보에 넣는다. 명세 9.3절의 경보 스키마에 DEC-09의 필수 `available_at`과 결측 허용 `rcept_dt`를 명시하고, 6.10절의 청산·진입 금지 시작일을 같은 기준으로 맞췄다. 임소현(D)의 공용 I/O는 [PR #20](https://github.com/Capstone-last-dance/AutoAdvisor/pull/20)에서 병합됐다. 실제 원문·거래일 검증은 PM-10에서 진행한다.
 
 11/4 손석범(C)·조윤상(B)은 동일 사건의 후속 공시에는 쿨다운을 연장하지 않고, 별개의 신규 사건에는 새 20거래일을 적용하는 데 의견을 모았다. 사건을 연결할 때는 그 시점에 공개된 원 공시 참조나 사건·절차 식별자, 원문 근거를 쓴다. 같은 종목·유형 안에서 구분이 불명확하면 추가 근거가 공개될 때까지 보류한다. 새 경보가 겹치면 각 경보의 20거래일 중 하나라도 유효한 동안 신규 매수를 막는다.
 
@@ -79,24 +90,20 @@ T2의 `기타시장안내(상장적격성 실질심사관련)` 계열은 거래�
 | 김윤하(A) | 종목 연결에 `tickers` 상장 구간만 쓰고 OpenDART 목록의 수집 시점 `corp_cls`·`stock_code`로 상장 여부를 정하지 않는 것 |
 | 장지원(PM) | 6.10절 완료 기준 (2)의 유형별 무작위 10건 점검(PM-10). T6 금액 조건은 DEC-10을 따른다 |
 
-`features.news_sentiment_model`의 `FILL_`은 Q-09에 남아 있고, 뉴스 피처를 빼면(DEC-06, 사전 허용 변경 3번) 해당 없음으로 바꾼다. T6 금액 의미는 DEC-10이 11/8까지 정한다.
+`features.news_sentiment_model`은 Q-09(11/8)로 기입했다. `news_sent_5`를 빼는 사전 허용 변경을 적용하면 해당 없음으로 바꾼다(DEC-06). T6 금액은 DEC-10을 따른다.
 
 ## 커밋 전에 닫을 결정
 
 `docs/decisions.md`의 결정 대기 안건 중 기한이 11/9 전인 것은 커밋 전에 결정해 반영한다.
 
-| ID | 안건 | 기한 | 사전등록에 미치는 영향 |
-|---|---|---|---|
-| DEC-05 | 과제 원안 필수 항목 대응 (교수 의견 반영) | 11/9 전 | 비교 기준·보상·지표가 바뀌면 부록 1 수정 |
-| DEC-06 | 범위 예산 (뉴스 피처 유지 여부, RL 폴드·시드·스텝) | 11/9 전 | `features`, `portfolio.rl` |
-| DEC-07 | 판정 규칙 (G2 지표, 성공 조건, G6 누수 규칙) | 11/9 전 | `kpi` |
-| DEC-08 | RL 학습 구간에 공급할 신호 규칙 | 11/9 전 | `portfolio.rl`, 4.7절 |
-| DEC-10 | T6 발행금액 의미와 정정 시점 | 11/8 | `events.triggers.T6` |
-| DEC-20 | RL 보상의 DD 측정 기준 | 11/9 전 | 6.5절 보상 |
-| DEC-21 | RL 환경 세부값 8개 | 11/9 전 | `portfolio.rl`에 추가 |
+11/8 PM 결정으로 DEC-05·07·08·10을 [결정 기록](decisions.md)의 결정 완료로 옮겼다. 부록 1 값은 바꾸지 않았고 G2는 현행 세 조건을 유지한다. DEC-08은 김윤하(A) 일정 확인이 남았고, 팀 확인은 위 전원 확인 표에서 추적한다.
 
 이미 반영한 결정: DEC-19(`regime_mc` 이력 부족 처리, 식과 값 변경 없음), DEC-22(수급 피처 제외와 개인 행동 프록시 대체 정의, [deviation log](deviation_log.md)). DEC-22는 부록 1 값을 바꾸지 않는다. 대체 정의는 `retail_proxy.fallback_if_flows_unavailable`에 이미 있다.
 
 11/4 PM 결정은 [DEC-25~29](decisions.md)에 기록했다. 정지 중 평가·재개일 처리, 거래량 0 대체, 공용 지수 분리, 재사용 두 건의 보완 데이터 기준을 v1 설계에 반영한다. `features.model_input_exclusions`에 `ss_allowed`를 넣고 `ss_regime`은 모델 입력으로 유지한다. 확인 불가한 `ss_allowed`는 피처 파일에 결측으로 저장한다. 담당 파트의 코드·데이터 반영과 검증 결과는 별도로 확인한다.
 
-DEC-04(forward test 신호 전용 기록과 기록 커밋 보존)와 DEC-30(라벨 확정일 10.1절 정정)은 11/4에 결정했다. 부록 1 값은 바뀌지 않는다.
+DEC-04(forward test 신호 전용 기록과 기록 커밋 보존)와 DEC-30(라벨 확정일 10.1절 정정)은 11/4에 결정했다. 11/8에는 DEC-04의 기록 마감을 **다음 거래일 09:00 KST 전**으로 변경하고 11/6분부터 적용했다([PR #19](https://github.com/Capstone-last-dance/AutoAdvisor/pull/19), [PR #28](https://github.com/Capstone-last-dance/AutoAdvisor/pull/28)). 부록 1 값은 바뀌지 않는다.
+
+11/7 조윤상(B)의 확정 반영 보고에 따라 DEC-20·21의 규칙을 명세 6.5절에, DEC-21 설정 8개를 부록 1·YAML에 반영했다. B 시작 검사는 위 작업표에서 추적한다. DEC-06(RL)은 B의 20,000스텝 실측을 근거로 B PC에서 10폴드 × 5시드 × 시드당 300,000스텝을 수행하는 계획을 기록했다. λ 탐색을 포함한 총 19,000,000스텝은 1.16 ms/스텝에서 약 6.1시간으로 추정한다.
+
+DEC-06 (뉴스)와 Q-09는 결정 기록과 같이 반영했다. 모델 이용 조건은 PM이 위험을 수용했고, 제작자 문의는 PM이 직접 한다.

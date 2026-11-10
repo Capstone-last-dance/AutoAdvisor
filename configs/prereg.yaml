@@ -65,8 +65,8 @@ features:
   add_missing_flag: true
   model_input_exclusions: ["ss_allowed"]  # DEC-29. v1에서 ss_regime은 유지
   event_window_days: 20
-  news_window_days: 5
-  news_baseline_offsets: [-64, -5]
+  news_window_offsets: [-5, -1]    # DEC-06. 날짜 단위 자료라 t일을 쓰지 않는다
+  news_baseline_offsets: [-65, -6]
   event_keywords:                  # 후보 검색용. events.title_filters를 함께 적용 (Q-13)
     ev_earnings: ["영업(잠정)실적", "매출액또는손익구조"]
     ev_buyback: ["자기주식취득결정"]
@@ -74,7 +74,7 @@ features:
     ev_dividend: ["현금현물배당결정"]
     ev_rights: ["유상증자결정"]
     ev_cbbw: ["전환사채권발행결정", "신주인수권부사채권발행결정"]
-  news_sentiment_model: "FILL_PM_BY_2026-11-08"   # Q-09
+  news_sentiment_model: "snunlp/KR-FinBert-SC@f8586286cc3161fb648e9fee09a456069fd846d0"   # Q-09. 제목 입력, 점수 = P(positive) − P(negative)
 
 models:
   seed: 42
@@ -129,6 +129,15 @@ portfolio:
     seeds: [0, 1, 2, 3, 4]
     test_action: "deterministic_mean"
     other_hyperparameters: "sb3_defaults"
+    env:                                   # DEC-21 (design_B.md 8절 D3)
+      action_bound: 10.0                   # (a) 행동 = 로짓, 범위 [−10, 10]
+      out_of_universe_fill: 0.0            # (b) U_t 밖 보유 슬롯의 rank_score 백분위·crash_prob·vol_20
+      candidate_overflow: "drop_nonheld_worst_rank"   # (c)
+      top_k_tie_break: "better_rank_first"            # (d)
+      episode_end: "truncated"                        # (e)
+      lambda_score: "max_checkpoint_val_ir_then_smaller_lambda"  # (f)
+      signal_dates: "purged_h20_no_step_over_gaps"    # (g)
+      current_weight: "signal_date_close"             # (h)
 
 risk_layer:
   stock_cap: 0.10
@@ -224,3 +233,4 @@ allowed_deviations:                  # 사전 허용 변경. 적용해도 deviat
   - "M6 LLM 요약 -> 템플릿 요약 (LLM 자원 부족 시)"
   - "뉴스 피처 제외 (뉴스 수집 실패 시, 공시 피처는 유지)"
   - "개인 행동 프록시 정렬 기준 -> retail_proxy.fallback_if_flows_unavailable (Q-01 실패 시)"
+  - "news_sent_5 제외 (제목 수집 또는 감성 모델 이용 조건이 2026-11-16까지 해결되지 않을 때, news_cnt_spike는 유지)"

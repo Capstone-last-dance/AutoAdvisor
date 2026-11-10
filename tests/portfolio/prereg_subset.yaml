@@ -58,6 +58,15 @@ portfolio:
     seeds: [0, 1, 2, 3, 4]
     test_action: "deterministic_mean"
     other_hyperparameters: "sb3_defaults"
+    env:                                   # DEC-21 (design_B.md 8절 D3)
+      action_bound: 10.0                   # (a) 행동 = 로짓, 범위 [−10, 10]
+      out_of_universe_fill: 0.0            # (b) U_t 밖 보유 슬롯의 rank_score 백분위·crash_prob·vol_20
+      candidate_overflow: "drop_nonheld_worst_rank"   # (c)
+      top_k_tie_break: "better_rank_first"            # (d)
+      episode_end: "truncated"                        # (e)
+      lambda_score: "max_checkpoint_val_ir_then_smaller_lambda"  # (f)
+      signal_dates: "purged_h20_no_step_over_gaps"    # (g)
+      current_weight: "signal_date_close"             # (h)
 
 risk_layer:
   stock_cap: 0.10
