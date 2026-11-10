@@ -1,0 +1,128 @@
+{
+  "run_id": "20261110_A_dq_v1",
+  "source_commit": "f0e029abdc5277bb6a0a3b96eca448d5dd7f2f7d",
+  "c1_calendar": {
+    "n_days": 4146,
+    "first": "2010-01-04",
+    "last": "2026-11-06",
+    "duplicates": 0,
+    "close_nonpositive_or_nan": 0
+  },
+  "c2_delisted": {
+    "delisted_since_2010_total": 932,
+    "in_prices": 932,
+    "by_type": {
+      "common": {
+        "n": 759,
+        "in_prices": 759
+      },
+      "dr": {
+        "n": 4,
+        "in_prices": 4
+      },
+      "foreign_stock": {
+        "n": 12,
+        "in_prices": 12
+      },
+      "investment_company": {
+        "n": 11,
+        "in_prices": 11
+      },
+      "other": {
+        "n": 2,
+        "in_prices": 2
+      },
+      "preferred": {
+        "n": 84,
+        "in_prices": 84
+      },
+      "reit": {
+        "n": 11,
+        "in_prices": 11
+      },
+      "ship_fund": {
+        "n": 49,
+        "in_prices": 49
+      }
+    },
+    "common_delisted": 759,
+    "common_delisted_in_prices": 759,
+    "common_delisted_with_last_price": 759
+  },
+  "c3_ticker_format": {
+    "prices": true,
+    "tickers": true,
+    "status": true,
+    "universe": true,
+    "delisted": true
+  },
+  "c4_splits": [
+    {
+      "ticker": "005930",
+      "name": "삼성전자",
+      "date": "2018-05-04",
+      "ratio": "50:1",
+      "max_abs_daily_change_adjusted": 0.03231939163498099,
+      "max_abs_daily_change_raw": 0.9804150943396226,
+      "status": "연속"
+    },
+    {
+      "ticker": "035420",
+      "name": "NAVER",
+      "date": "2018-10-12",
+      "ratio": "5:1",
+      "max_abs_daily_change_adjusted": 0.04225352112676062,
+      "max_abs_daily_change_raw": 0.7982954545454546,
+      "status": "연속"
+    },
+    {
+      "ticker": "035720",
+      "name": "카카오",
+      "date": "2021-04-15",
+      "ratio": "5:1",
+      "max_abs_daily_change_adjusted": 0.07590000000000008,
+      "max_abs_daily_change_raw": 0.7840501792114696,
+      "status": "연속"
+    }
+  ],
+  "c5_nt": {
+    "n_signal_days": 826,
+    "min": 321,
+    "median": 426.0,
+    "max": 498,
+    "admin_step_applied": false,
+    "universe_note": "DEC-24 (4) v1: 4.4절 3단계(관리종목 제외) 미적용 — is_admin 원천 미확정(Q-06)"
+  },
+  "extra_security_types": {
+    "common": 3369,
+    "preferred": 195,
+    "ship_fund": 49,
+    "reit": 34,
+    "foreign_stock": 24,
+    "dr": 14,
+    "investment_company": 12,
+    "infra_fund": 2,
+    "other": 2
+  },
+  "extra_listing_vs_first_price": {
+    "compared": 1738,
+    "first_price_more_than_7d_after_listing": 0,
+    "first_price_before_listing": 5,
+    "listing_date_missing": 0
+  },
+  "extra_investor_flows": {
+    "applicable": false,
+    "reason": "investor_flows를 만들지 않는다 (DEC-22, 원천 없음)"
+  },
+  "extra_cash_dividend_q05": {
+    "events_total": 5369,
+    "rows_total": 9345272,
+    "event_rate_all_days": 0.0005745151130967616,
+    "events_dec24_30": 806,
+    "rows_dec24_30": 144574,
+    "event_rate_dec24_30": 0.005574999654156349,
+    "ratio_year_end_to_all": 9.703834637362082,
+    "reading": "비율이 1에 가까우면 배당락 조정이 없고, 수 배 이상이면 현금배당이 반영된 것"
+  },
+  "figure_written": true
+}

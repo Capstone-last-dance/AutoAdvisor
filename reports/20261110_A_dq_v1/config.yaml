@@ -1,0 +1,2 @@
+run_id: 20261110_A_dq_v1
+command: /home/sogang007@SGVDI.local/AutoAdvisor/src/data/quality_report.py --run-id 20261110_A_dq_v1
