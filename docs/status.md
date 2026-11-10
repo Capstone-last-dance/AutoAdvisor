@@ -23,13 +23,13 @@
 | PM-15 | PM 장지원 | 12/14 | 대기 | | |
 | PM-16 | PM 장지원 | 매주 | 대기 | | |
 | PM-17 | PM 장지원 | 11/8 | 진행 중 | docs/프로젝트_구조_및_역할분담_v0.3.md 부록 3 Q-07·Q-09·Q-10·Q-11, 4.9절; docs/decisions.md DEC-10 | 원문 4건·상세 API 2회에서 후속 정정값 소급 위험 확인, 최초 ZIP 2건 확보/수치 대조, 원저자 코드와 가중치 이용 조건 구분, MIT 기반 후보 검토. Q-10 검증 모델/환경 실측·Q-11 날짜표 보완 유지. T6 금액 계약·감성 모델 이용 조건/학습 시점·실제 추론과 D/A/C 접점은 미완료. FILL_ 유지 |
-| A-01 | A 김윤하 | 10/30 | 대기 | | |
-| A-02 | A 김윤하 | 11/2 | 진행 중 | 11/3 A·C 인계 (`processed_20261103.zip`) | A 보고: 2010-01-04~2026-10-30 핵심 4표 공유. C 실측 보고: 주간 `status`의 관리종목·지수 편입 3열 전부 결측으로 공용 I/O 검증 실패. 일별 `is_halted`와 평가 가격 공백 규칙 확인 필요. `universe` 스텁, `sector`·`investor_flows` 미포함. 11/3 PM 결정: `investor_flows`는 만들지 않음(DEC-22), `sector` v1은 KIND 현재 분류와 상폐 '미분류'(DEC-23), `status`는 일별로 하고 지수 편입 2열 삭제, `is_admin`은 v2까지 결측 허용, `universe` v1은 관리종목 단계 미적용(DEC-24). 정지일 평가 가격은 DEC-25 대기 |
-| A-03 | A 김윤하 | 11/2 | 대기 | | |
-| A-04 | A 김윤하 | 11/6 | 대기 | | |
-| A-05 | A 김윤하 | 11/16 | 대기 | | |
-| A-06 | A 김윤하 | 11/22 | 대기 | | |
-| A-07 | A 김윤하 | 11/22 | 대기 | | |
+| A-01 | A 김윤하 | 10/30 | 완료 | docs/프로젝트_구조_및_역할분담_v0.3.md 부록 3 Q-01~Q-05·Q-14·Q-15 | KRX Open API 원문으로 확인하고 근거 링크 기입. Q-06(관리종목 이력)은 원천을 못 찾아 PM 공동 조사로 남고, DEC-24 (4)가 universe v1을 관리종목 단계 미적용으로 확정 |
+| A-02 | A 김윤하 | 11/2 | 완료 | src/data/ (collect_openapi, build_openapi, adjust, universe, sector_kind 등); tests/data/; [PR #27](https://github.com/Capstone-last-dance/AutoAdvisor/pull/27) | KRX Open API 수집·정제. prices·index·tickers·status·universe·delisted·delisted_reused·sector 생성(2010-01-04~2026-11-06, prices 9,345,272행). investor_flows는 만들지 않음(DEC-22), sector v1은 KIND 현재 분류(DEC-23), status 일별·is_admin 결측 허용, universe v1은 관리종목 단계 미적용(DEC-24 (4)). 처리 데이터는 팀 드라이브 폴더로 파일 단위 공유(11/8판). pykrx 경로는 약관 문제로 폐기 |
+| A-03 | A 김윤하 | 11/2 | 리뷰 중 | src/data/quality_report.py; tests/data/test_quality_report.py; reports/20261110_A_dq_v1/; [PR #45](https://github.com/Capstone-last-dance/AutoAdvisor/pull/45) | 6.1절 완료 기준 (1)~(5) 전부 통과 — 거래일 4,146일(중복·비정상 종가 0), 2010년 이후 폐지 932종목 전부 prices 잔존, 종목코드 형식 5개 표 통과, 액면분할 3건 수정종가 연속(일변화 3.2~7.6%), N_t 826일(321/426/498). 관리종목 단계 미적용 사실을 is_admin 실제 값으로 판정해 기록(DEC-24 (4)). 기한 초과 사유: PR #1 분할 때 A-02·A-04만 올림 |
+| A-04 | A 김윤하 | 11/6 | 완료 | src/models/baseline.py; src/models/{gate,ranker,splits,signals}.py; src/features/; [PR #35](https://github.com/Capstone-last-dance/AutoAdvisor/pull/35) | 베이스라인 신호(B1 순위 + vol_60 상위 10% 플래그)와 M3a·M3b 모델. C 리뷰 2건(실제 라벨 종료일 purge, 한글 경로 모델 저장) 반영 후 11/10 병합. DEC-04 forward 1차(11/6) 신호 443행을 이 코드로 만들어 기록함 |
+| A-05 | A 김윤하 | 11/16 | 리뷰 중 | src/features/build_features.py; [PR #44](https://github.com/Capstone-last-dance/AutoAdvisor/pull/44) | 정제 테이블 → 신호일 × U_t 피처 행렬 348,678행(826 신호일, 1,512 종목). regime_mc는 B 함수, ss_regime은 4.9절 표(미확정 구간은 DEC-31로 0 확정). PM 공시·뉴스 피처는 merge_features로 합침 — ev_* 수령(11/10), 병합 검증 진행 중 |
+| A-06 | A 김윤하 | 11/22 | 진행 중 | src/models/walk_forward.py; reports/20261110_A_wf/; [PR #44](https://github.com/Capstone-last-dance/AutoAdvisor/pull/44) | 10폴드 walk-forward 1차 실행 완료(시험 2016~2025, 228,422행). 게이트 ROC-AUC 0.6942 / lift@10% 2.691, vol_60 로지스틱 베이스라인은 0.6975 / 2.643. 라벨은 C 인계 기준(결과 컷오프 2025-12-31)으로 재현해 978,983행 일치. **DEC-08 RL 학습 구간 교차 적합 신호는 미착수** |
+| A-07 | A 김윤하 | 11/22 | 진행 중 | src/models/walk_forward.py; reports/20261110_A_wf/; [PR #44](https://github.com/Capstone-last-dance/AutoAdvisor/pull/44) | 순위 모델 1차 rank IC +0.0694(HAC t +7.18), 베이스라인 B1 −0.0171 / B2 +0.0450 / B3 +0.0738. 연도별 표는 metrics.json. **DEC-08 교차 적합 신호 미착수**, PM 피처·공식 라벨 반영 재실행 예정 |
 | A-08 | A 김윤하 | 11/27 | 대기 | | |
 | A-09 | A 김윤하 | 11/30 | 완료 | src/models/ranker.py(train_ranker); tests/models/test_ranker.py | `train_ranker(h, exclude_features)`는 h=1·5·20, exclude_features 옵션 모두 이미 공개돼 있었음. 실데이터(C 공식 라벨·실제 종료일 purge, 폴드 2016)로 셋 다 오류 없이 실행됨을 확인(검증 rank IC: h=1 0.0545 / h=5 0.0517 / h=20 0.0814; exclude_features로 mom_12_1 제외 시 0.0814→0.0768로 하락해 옵션이 실제 반영됨을 확인). 합성 데이터 기반 회귀 테스트 4개 추가(파라미터화 h=1·5·20 + exclude_features), `pytest tests` 744 passed |
 | A-10 | A 김윤하 | 12/7 | 대기 | | |
