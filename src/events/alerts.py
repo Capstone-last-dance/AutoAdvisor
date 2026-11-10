@@ -36,6 +36,8 @@ FINAL_ALERT = "alert"
 SAME_EVENT = "same_event"
 UNLINKED = "unlinked"
 DISCLOSURE_TYPES = ("B", "I")
+# 달력일 d 00:00부터 잰다. OpenDART 목록은 접수일만 줘서 d 다음 날 08:00 KST 전의 결과는 확정이 아니다 (DEC-33)
+CONFIRM_AFTER = pd.Timedelta(days=1, hours=8)
 
 
 class AlertsNotCollected(FileNotFoundError):
@@ -322,14 +324,14 @@ def daily_alerts(d: str) -> pd.DataFrame:
     """D-06 일간 실행기의 입력. 달력일 d에 이용 가능해진 공시의 경보를 9.3절 형식으로 돌려준다 (DEC-33).
 
     OpenDART에서 d의 공시를 받고, 앞선 쿨다운 기간의 경보 파일로 같은 사건을 판정한다. 파일은 쓰지 않는다.
-    정상 수집 0건이면 0행이다. d가 끝나지 않았거나 수집이 끝나지 않았거나 앞선 기간의 파일이 없으면
+    정상 수집 0건이면 0행이다. d 다음 날 08:00 KST 전이거나 수집이 끝나지 않았거나 앞선 기간의 파일이 없으면
     `AlertsNotCollected`를 낸다. 같은 날짜를 다시 만들면 이미 있던 경보는 처음 만든 시각을 유지한다.
     """
     from src.portfolio.params import load_prereg
 
     day = pd.Timestamp(d).normalize()
     now = _now_kst()
-    _require_day_over(day, now)
+    _require_confirmable(day, now)
     events = load_prereg()["events"]
     days = load_trading_days()
     history = _history_before(day, days, int(events["cooldown_trading_days"]))
@@ -342,7 +344,8 @@ def backfill_alert_files(first: str, last: str, *, data_raw: Path | None = None)
     """D-06 시작 전 달력일의 `alerts/{d}.parquet`를 보관된 공시 원본으로 채운다 (PM 운영용).
 
     공시 전체 이력으로 판정하므로 같은 사건 처리가 백테스트와 같다. 경보가 없는 날은 0행 파일을 쓰고,
-    `generated_at`은 실제 실행 시각이다. 수집이 끝나지 않은 날짜가 있으면 파일을 하나도 쓰지 않는다.
+    `generated_at`은 실제 실행 시각이다. 수집이 끝나지 않은 날짜가 있거나 `last` 다음 날 08:00 KST 전이면
+    파일을 하나도 쓰지 않는다.
     """
     from src.data.disclosures import build_disclosures
     from src.portfolio.params import load_prereg
@@ -351,7 +354,7 @@ def backfill_alert_files(first: str, last: str, *, data_raw: Path | None = None)
     if start > end:
         raise ValueError(f"시작일 {first}이 종료일 {last}보다 늦다")
     now = _now_kst()
-    _require_day_over(end, now)
+    _require_confirmable(end, now)
     raw = Path(data_raw) if data_raw is not None else io.ROOT / "data" / "raw"
     tickers = io.read_table("tickers")
     built = build_disclosures([p.parent for p in raw.glob("*/*_PM_disclosures_*/opendart_list/manifest.json")],
@@ -373,9 +376,9 @@ def _now_kst() -> pd.Timestamp:
     return pd.Timestamp.now(tz=KST)
 
 
-def _require_day_over(day: pd.Timestamp, now: pd.Timestamp) -> None:
-    if now < day.tz_localize(KST) + pd.Timedelta(hours=23, minutes=59, seconds=59):
-        raise AlertsNotCollected(f"{day:%Y-%m-%d}이 아직 끝나지 않아 경보를 확정할 수 없다")
+def _require_confirmable(day: pd.Timestamp, now: pd.Timestamp) -> None:
+    if now < day.tz_localize(KST) + CONFIRM_AFTER:
+        raise AlertsNotCollected(f"{day:%Y-%m-%d} 경보는 다음 날 08:00 KST부터 확정할 수 있다")
 
 
 def _history_before(day: pd.Timestamp, days: pd.DatetimeIndex, cooldown: int) -> pd.DataFrame | None:

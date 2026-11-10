@@ -207,17 +207,17 @@ class TestDailyAlerts:
         assert out.loc[0, "generated_at"] == NOW
         io.write_table("alerts", out, date=self.DAY)
 
-    def test_unfinished_day_is_not_collected(self, forward, monkeypatch):
+    def test_before_eight_next_day_is_not_collected(self, forward, monkeypatch):
         calls = collected(monkeypatch, [])
-        monkeypatch.setattr(m9, "_now_kst", lambda: at("2026-02-20 23:59:58"))
-        with pytest.raises(AlertsNotCollected, match="끝나지 않아"):
+        monkeypatch.setattr(m9, "_now_kst", lambda: at("2026-02-21 07:59:59"))
+        with pytest.raises(AlertsNotCollected, match="08:00"):
             daily_alerts(self.DAY)
         assert calls == []
 
-    def test_day_end_is_finished(self, forward, monkeypatch):
+    def test_ready_at_eight_next_day(self, forward, monkeypatch):
         self.history()
         collected(monkeypatch, [("1", self.DAY, "C1", "000001", TITLE)])
-        monkeypatch.setattr(m9, "_now_kst", lambda: at("2026-02-20 23:59:59"))
+        monkeypatch.setattr(m9, "_now_kst", lambda: at("2026-02-21 08:00:00"))
         io.validate("alerts", daily_alerts(self.DAY))
 
     def test_missing_history_stops_before_calling_opendart(self, forward, monkeypatch):
@@ -301,6 +301,14 @@ class TestDailyRunner:
         assert rda.run(self.DAY) == 1
         assert not (forward / "alerts" / f"{self.DAY}.parquet").exists()
         assert "미수집" in (forward / "logs" / f"alerts_{self.DAY}.log").read_text(encoding="utf-8")
+
+    def test_run_after_midnight_writes_nothing(self, forward, monkeypatch):
+        self.prepare()
+        calls = collected(monkeypatch, [])
+        monkeypatch.setattr(m9, "_now_kst", lambda: at("2026-02-21 00:30:00"))
+        assert rda.run(self.DAY) == 1
+        assert calls == []
+        assert not (forward / "alerts" / f"{self.DAY}.parquet").exists()
 
 
 class TestCollectedDisclosures:
@@ -407,10 +415,10 @@ class TestBackfill:
         with pytest.raises(AlertsNotCollected):
             backfill_alert_files(self.FIRST, self.LAST)
 
-    def test_unfinished_last_day_refused(self, forward, monkeypatch):
+    def test_before_eight_after_last_day_refused(self, forward, monkeypatch):
         self.built(monkeypatch, [], self.complete())
-        monkeypatch.setattr(m9, "_now_kst", lambda: at("2026-01-16 12:00:00"))
-        with pytest.raises(AlertsNotCollected, match="끝나지 않아"):
+        monkeypatch.setattr(m9, "_now_kst", lambda: at("2026-01-17 07:59:59"))
+        with pytest.raises(AlertsNotCollected, match="08:00"):
             backfill_alert_files(self.FIRST, self.LAST)
 
     def test_rerun_keeps_first_generated_time(self, forward, monkeypatch):
