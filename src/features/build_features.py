@@ -6,11 +6,11 @@
 `compute_regime_mc`(6.9절 Step 5), `ss_regime`은 4.9절 날짜표를 쓴다. PM 피처(공시·뉴스)는
 `store.merge_features`로 나중에 합친다 — 이 모듈은 A 피처까지만 만든다.
 
-[결정 필요] 4.9절 공매도 레짐 표에서 **2009-06-01~2011-08-09, 2011-11-10~2013-11-13 두 구간이
-"미확정"**이다(비금융주 허용·금융주 금지). 학습 구간 신호일의 약 3년이 여기 걸리는데 시장 공통
-피처라 결측이면 `compute_feature_matrix`가 멈춘다. 그래서 `UNDECIDED_REGIME`로 값을 모아 두고
-기본값을 0(전 종목 허용에 가장 가까움)으로 둔다. PM 확정 전까지는 가정이며, 산출물의 meta에
-그 사실과 영향 받은 신호일 수를 적는다. 1(코스피200·코스닥150만 허용)은 훨씬 좁은 구간이라 쓰지 않는다.
+4.9절 표가 "미확정"으로 둔 두 구간(2009-06-01~2011-08-09, 2011-11-10~2013-11-13: 비금융주 허용·
+금융주 금지)의 `ss_regime`은 **DEC-31로 0으로 확정됐다**. 비금융주는 실제로 허용이라 0과 같고,
+1(코스피200·코스닥150만 허용)은 훨씬 좁은 규제다. 한계로 남는 것: 이 구간 금융주의 공매도 금지는
+피처에 표현되지 않고 `ss_allowed`도 1이 된다(모델 입력에서는 제외된다, DEC-29). 영향 받은 신호일
+수는 산출물 meta에 남긴다.
 """
 import argparse
 import json
@@ -22,7 +22,7 @@ from src.common import io
 from src.features.store import compute_feature_matrix
 from src.portfolio.risk_layer import compute_regime_mc
 
-UNDECIDED_REGIME = 0   # [결정 필요] 금융주만 금지된 구간의 ss_regime (PM 확정 대기)
+UNDECIDED_REGIME = 0   # DEC-31: 금융주만 금지된 구간의 ss_regime (4.9절 "미확정" 구간)
 
 # 4.9절 표. (시작일, 끝일, ss_regime). None은 표가 "미확정"으로 둔 구간이다.
 SS_REGIME_TABLE = (
@@ -74,7 +74,7 @@ def build(prices: pd.DataFrame, index: pd.DataFrame, universe: pd.DataFrame) -> 
     assumed_signals = sum(1 for t in u if _is_undecided(t))
     meta = {"signal_dates": len(u), "rows": len(features),
             "ss_regime_assumed_trading_days": assumed_days, "ss_regime_assumed_signal_dates": assumed_signals,
-            "ss_regime_assumption": f"4.9절 미확정 구간을 {UNDECIDED_REGIME}으로 두었다 (PM 확정 대기)"}
+            "ss_regime_assumption": f"4.9절 미확정 구간을 {UNDECIDED_REGIME}으로 둔다 (DEC-31 확정)"}
     return features, meta
 
 
