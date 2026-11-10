@@ -20,6 +20,7 @@ if str(REPO) not in sys.path:
     sys.path.insert(0, str(REPO))
 
 from src.common import io  # noqa: E402
+from src.events import alerts as m9  # noqa: E402
 
 KST = "Asia/Seoul"
 CANDIDATE_COUNT = 20
@@ -117,12 +118,6 @@ def cooldown_days() -> int:
         return int(yaml.safe_load(f)["events"]["cooldown_trading_days"])
 
 
-@st.cache_data(show_spinner=False)
-def _signal_cutoff_time() -> str:
-    with open(REPO / "configs" / "prereg.yaml", encoding="utf-8") as f:
-        return yaml.safe_load(f)["calendar"]["signal_cutoff_time"]
-
-
 def alert_window(count: int, until: str | None = None) -> AlertWindow | None:
     """until까지 최근 count거래일 범위에 든 경보 파일을 찾는다. index를 읽지 못하면 None.
 
@@ -145,28 +140,22 @@ def alert_window(count: int, until: str | None = None) -> AlertWindow | None:
 
 def alerts_on(days: list[str]) -> pd.DataFrame | None:
     """days의 경보 파일을 합친다. 없으면 None."""
-    return _load_alerts(days)[0]
+    frames = [df for d in days if (df := read("alerts", d)) is not None and not df.empty]
+    return pd.concat(frames, ignore_index=True) if frames else None
 
 
-def _load_alerts(days: list[str]) -> tuple[pd.DataFrame | None, bool]:
-    """(합친 경보, 모든 파일을 읽었는지)."""
-    loaded = [read("alerts", d) for d in days]
-    frames = [df for df in loaded if df is not None and not df.empty]
-    return (pd.concat(frames, ignore_index=True) if frames else None), all(df is not None for df in loaded)
+def m9_cooldown(signal_date: str) -> set[str] | None:
+    """M9 `cooldown_at`: 신호일 t의 다음 거래일에 신규 진입이 금지된 종목 (6.10절).
 
-
-def cooldown_tickers(days: list[str], signal_date: str) -> set[str] | None:
-    """days의 경보 중 신호일 컷오프 전에 이용 가능했던 경보의 종목 (available_at < cutoff_at, 6.10절).
-
-    경보 파일을 하나라도 읽지 못하면 None이다.
+    경보 파일이 없거나(M9 미실행) 읽지 못하면 오류를 표시하고 None을 돌려준다.
     """
-    alerts, complete = _load_alerts(days)
-    if not complete:
-        return None
-    if alerts is None:
-        return set()
-    cutoff = pd.Timestamp(f"{signal_date} {_signal_cutoff_time()}", tz=KST)
-    return set(alerts.loc[alerts["available_at"] < cutoff, "ticker"])
+    try:
+        return m9.cooldown_at(signal_date)
+    except FileNotFoundError:
+        st.error("경보 파일이 아직 없습니다. M9 경보 생성을 먼저 실행해야 합니다.")
+    except Exception as exc:  # 부분 파일 등 어떤 오류든 페이지를 멈추지 않는다
+        st.error(f"M9 쿨다운을 계산하지 못했습니다.\n\n{exc}")
+    return None
 
 
 def entry_candidates(signals: pd.DataFrame, cooldown: set[str]) -> pd.DataFrame:

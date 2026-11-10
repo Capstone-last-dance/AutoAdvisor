@@ -16,7 +16,8 @@ import pandas as pd
 from streamlit.testing.v1 import AppTest
 
 from src.common import io
-from src.pipeline.make_dashboard_sample import SIGNAL_DATES, write_sample
+from src.events import alerts as m9
+from src.pipeline.make_dashboard_sample import SIGNAL_DATES, TICKERS, write_sample
 from src.pipeline.make_dashboard_sample import main as sample_main
 from tests.common.test_io import sample
 
@@ -215,11 +216,27 @@ class AlertTimingTest(RootTest):
         self.assertIn("2026-11-06", at.warning[0].value)
         self.assertEqual(len(at.dataframe), 2)
 
+    def test_no_alert_files_holds_candidates(self):
+        at = self.open(APP / "pages" / "1_weekly_signals.py")          # setUp이 유일한 경보 파일을 지웠다
+        self.assertIn("경보 파일이 아직 없습니다", at.error[0].value)
+        self.assertEqual(len(at.dataframe), 2)
+
+    def test_candidates_match_m9_cooldown(self):
+        self.alert("2026-10-19", "2026-10-19 10:00:00")
+        self.alert("2026-11-12", "2026-11-12 10:00:00", ticker=TICKERS[10])
+        saved, io.ROOT = io.ROOT, self.tmp
+        try:
+            expected = m9.cooldown_at(self.SIGNAL)
+        finally:
+            io.ROOT = saved
+        self.assertEqual(expected, {self.top, TICKERS[10]})
+        self.assertFalse(expected & set(self.candidates()["종목코드"]))
+
     def test_unreadable_alert_holds_candidates(self):
         self.garbage("alerts/2026-11-11.parquet")
         at = self.open(APP / "pages" / "1_weekly_signals.py")
         self.assertTrue(at.error)
-        self.assertIn("경보 파일을 읽지 못해", at.warning[0].value)
+        self.assertIn("M9 쿨다운을 계산하지 못해", at.warning[0].value)
         self.assertEqual(len(at.dataframe), 2)
         self.assertIn(io.DISCLAIMER, self.captions(at))
 
