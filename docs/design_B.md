@@ -18,7 +18,8 @@
 | `src/portfolio/market_state_report.py` | B-04 결과 리포트: `python -m src.portfolio.market_state_report --run-id {YYYYMMDD}_B_{설명}` → 위 세 파일과 `figures/e_t_regime_mc.svg`(2011~2025년 일별 E_t·regime_mc 그림), 그 원자료 `figures/e_t_regime_mc.csv` | 구현 (B-04). 실제 실행은 4절 |
 | `src/portfolio/buffer_rule.py` | 버퍼 규칙 단계 1~5와 엔진 위 실행 (`run_buffer_rule`) | 구현 (B-03). C 엔진 연결은 `engine_adapter.py` |
 | `src/portfolio/engine_adapter.py` | 9.3절 `prices`·`status`·`index`·`delisted`(+ DEC-28 `delisted_reused`)와 부록 1 `costs`·`execution` → C의 `ExecutionEngine` (`engine_inputs`, `load_engine_inputs`, `build_engine`, `cost_rates`) | 구현 (B-05). 규칙은 5.1절 |
-| `src/portfolio/env_check.py` | B-05 완료 기준 확인: `run_full_episode`(끝까지 실행), `compare_buffer_and_env`(같은 비중이면 같은 체결·비용), `BufferWeightsEnv`, `ledger_counts` | 구현 (B-05). 실제 신호 리포트는 A PR #1 병합 뒤 |
+| `src/portfolio/env_check.py` | B-05 완료 기준 확인: `run_full_episode`(끝까지 실행), `compare_buffer_and_env`(같은 비중이면 같은 체결·비용), `BufferWeightsEnv`, `ledger_counts` | 구현 (B-05) |
+| `src/portfolio/env_check_report.py` | B-05 결과 리포트: `python -m src.portfolio.env_check_report --run-id {YYYYMMDD}_B_{설명}` → `reports/{run_id}/`에 config.yaml, git_commit.txt, metrics.json(완료 기준 (1)·(2), 입력 파일 SHA-256) | 구현 (B-05). 공식 실행은 A PR #35 병합 뒤 (5.1절) |
 | `src/portfolio/interfaces.py` | B가 C(M5)와 PM(M9)에 기대하는 호출 형태 | 초안. C·PM 확인 필요 (5절) |
 | `src/portfolio/weekly.py` | run_weekly 4단계 `m4_step`(w_raw), 5단계 `m8_step`(positions). forward 지난 보유 재생 `replay_holdings` | 구현. PM(M9)·D(지난 기록) 함수 연결 대기 (5.4절) |
 | `src/portfolio/rl_data.py` | 9.3절 표 → 신호일별 스냅샷 | 구현 |
@@ -232,7 +233,17 @@ B-05 완료 기준 확인 (`env_check.py`):
   - 조건: B main과 A PR #1(154b089)을 임시로 합친 폴더에서 돌렸다. 신호는 A의 `baseline_signals`, vol_20은 A의 정의대로 B가 계산했다. 쿨다운은 비어 있다.
   - 2011-01-07 ~ 2025-12-26의 781개 신호일(U_t 평균 419종목)이 행동 0과 무작위 행동 모두 끝까지 돌았다. 스텝당 0.55 ms다.
   - (2)의 차이는 모두 0이다. 체결 12,277건이 있었고, 거부는 정지 71번, 하한가 근접 5번, 상한가 근접 2번이었다. 보유 중 폐지는 없었다.
-- 남은 것: A PR #1 병합 뒤 A의 signals·features로 같은 실행을 `reports/{run_id}/`에 남긴다.
+- 리포트 (`env_check_report.py`, 11/9):
+  - 표는 io로 읽는다 (prices, status, index, delisted, delisted_reused, universe, sector).
+  - 신호일은 universe의 2011-01-01 ~ 2025-12-31 날짜다. 주마다 마지막 거래일과 같은지 확인한다. 끝날이 휴장일이어도(2025-12-31) 그 주를 잘못 세지 않는다.
+  - 신호는 A의 `baseline_signals`를 신호일마다 U_t로 부른다. vol_20은 A의 `compute_stock_features`·`rank_and_fill`, mkt_vol_20·mkt_ret_20은 A의 `compute_market_features`, regime_mc는 B의 `market_state_table`로 만든다.
+  - M9 쿨다운·청산은 비운다 (M9 백테스트 경보 전). 무작위 행동 시드는 0이다.
+  - 입력 파일 SHA-256과, 만든 신호·피처의 내용 지문을 남긴다.
+- 리허설 (11/9, 스크래치. B main 6506579 + A PR #35, A 11/8 데이터, 공식 결과 아님):
+  - 781개 신호일(2011-01-07 ~ 2025-12-26, U_t 평균 419, 321~494종목)이 행동 0과 무작위 행동 모두 끝까지 돌았다.
+  - (2)의 차이는 모두 0이다. 체결 12,277건, 정지 거부 71번, 하한가 근접 5번, 상한가 근접 2번이다. 보유 중 폐지는 없었다. 11/4 미리보기와 같다.
+  - 전체 73.6초 걸렸다 (베이스라인 신호 37초, 스냅샷 5초).
+- 남은 것: A PR #35가 병합되면 같은 명령을 커밋된 상태에서 돌려 `reports/{run_id}/`를 남긴다.
 
 ### 5.2 M9 쿨다운 (PM 장지원)
 
@@ -326,6 +337,7 @@ PPO를 실제로 학습하는 테스트 2개는 `slow`로 표시했다. `-m "not
 | `test_params.py` | 부록 1 값과 키 이름 (R-14), FILL_ 값을 쓰면 멈춤 (R-08), 구현하지 않은 설정값 거부, `configs/prereg.yaml` 커밋 뒤 테스트 입력과 같은지 (커밋 전에는 건너뜀) |
 | `test_engine_adapter.py` | B-05 어댑터: 표 → 종가·정지 행렬(상장 전 결측, KOSPI200 행만), status 행이나 지수 거래일이 빠지면 멈춤, 폐지일을 전 거래일로 옮기고 원종가를 수정종가 단위로 바꿔 청산, 가격 없는 폐지는 0, 잘못된 delist_date 거부, DEC-28 옛 회사 청산과 새 회사 매수, 가격 공백에 폐지 기록이 없거나 공백이 둘이면 멈춤, `load_engine_inputs`가 `delisted_reused`를 io로 읽고 파일이 없으면 FileNotFoundError, 엔진이 모르는 재상장은 멈춤, 정지일 평가(DEC-25), 비용 배율, 엔진이 구현하지 않은 부록 1 값 거부 |
 | `test_env_check.py` | **B-05 완료 기준 (1)·(2)** (합성 신호): 9.3절 형식 합성 표(정지 칸, 보유 중 폐지 1건)를 어댑터로 C 엔진에 넣는다. RL 환경이 행동 0·무작위 행동으로 끝까지 돌고, 버퍼 비중을 넣은 RL 환경과 버퍼 규칙의 체결·비용·NAV 차이가 0이며 정지 거부와 폐지 청산이 실제로 일어난다. 비용 배율을 다르게 하면 차이가 잡힌다 |
+| `test_env_check_report.py` | B-05 리포트: 신호일이 달력과 같음(끝날이 휴장일인 주 포함), universe 날짜가 다르면 멈춤, 합성 시장에서 두 기준 통과, 차이가 있으면 기준 (2) 실패, vol_20·시장 피처가 6.2절 정의와 같고 종목을 나눠 계산해도 같음(A PR #35 병합 전에는 건너뜀), 입력 파일 SHA-256, run 폴더를 한 번만 씀 |
 | `test_market_state_report.py` | **B-04 완료 기준 (3)**: 그림 기간의 매 거래일이 결측 없이 계산되고 M8 표와 같다. 기간 뒤 종가를 바꿔도 결과와 데이터 지문이 같다. 이력 부족·해가 끝나지 않음·FILL_이면 멈춘다. metrics와 일별 표가 일치하고, SVG가 올바른 XML이며 같은 입력이면 같다. 리포트 폴더 구성과 덮어쓰기 거부 (R-11) |
 | `test_risk_layer.py` | **B-04 완료 기준 (1)·(2)**. (2) 경계 사례는 손으로 계산할 수 있는 결정적 코스피 200 경로로 확인한다: 한 업종 20종목(업종 있음·'미분류', 한 종목 쏠림), 보유 5종목(한도 0.10, 업종 합이 정확히 0.30), regime_mc = 1(상한 0.70이 걸릴 때와 안 걸릴 때), sigma_t = 3배(E_t = 1/3)와 4배(하한 0.30), 네 경계가 겹칠 때. 그 밖에 Step 4~5를 6.9절 식 그대로의 느린 구현과 비교, regime_mc = 1일 때 E_t 상한, t 이후 코스피 200 미사용 (R-03), Step 1~3·6 손계산, '미분류' 한 그룹, mode off, 무작위 입력 200건의 불변식, 위반 시 예외, positions를 io.py로 쓰고 읽기 (io.py가 있을 때) |
 | `test_rl_env.py` | SB3·gymnasium 환경 검사, 관측 배치, 보유·U_t 밖 슬롯, 마스킹, 상위 20개와 min_weight, 전액 현금, 보상 식, 52스텝과 구간 경계, purge로 빠진 신호일을 건너뛰지 않음(DEC-21 (g)), 슬롯 초과, 9.3절 표 → 스냅샷 |
@@ -466,5 +478,5 @@ rebound_t = 1인데 bear_t를 계산할 수 없으면 결측이다 (Insufficient
 | B-02 | 11/8 | 완료: 0.157263을 부록 1에 기입, PR #11 병합. Q-12 결과 칸은 PM이 기입했고 D4는 DEC-19로 기록됐다 |
 | B-03 | 11/13 | 단계 1~5와 엔진 위 실행을 구현했다 (2절). C의 M5(PR #8 헤드)를 합친 상태에서 합성 시장 실행을 확인했다: 목표 비중이 FakeEngine과 같고, 초과수익은 목표 합이 1인 체결(현금 부족 배율)에서만 최대 7e-5 다르다. PR #8 병합(b2b32a6) 뒤 main에서 `test_runs_on_c_execution_engine`이 건너뛰지 않고 통과한다 (전체 336 통과). 남은 것: A 코드 리뷰 승인. 실제 신호(A-04) 실행은 완료 기준 밖이라 B-05 완료 기준 (베이스라인 신호로 에피소드 끝까지)에서 확인한다 |
 | B-04 | 11/16 | 완료: 완료 기준 (1)·(2) 테스트 통과, (3) 그림 `reports/20261104_B_m8_states/` (4절, prereg.yaml 초안 기준), A 승인 (PR #13). 11/9 공식 사전등록에서 쓰는 키가 바뀌면 새 run_id로 다시 만든다 |
-| B-05 | 11/16 | 엔진 어댑터와 완료 기준 확인 함수 구현 (5.1절). 합성 시장에서 (1) 끝까지 실행, (2) 버퍼 규칙과 차이 0. 실제 A 베이스라인 신호 미리보기도 781개 신호일 끝까지, 차이 0. A 승인 (PR #21, 11/6). `delisted_reused`를 io로 읽고 가격 공백 검사를 더했다 (11/8). 남은 것: A PR #1 병합 뒤 리포트(`reports/{run_id}/`). 수정종가가 소급해서 바뀔 수 있으므로(A 11/8 공지) 리포트에 입력 파일의 SHA-256을 남긴다 |
+| B-05 | 11/16 | 엔진 어댑터와 완료 기준 확인 함수 구현 (5.1절). 합성 시장에서 (1) 끝까지 실행, (2) 버퍼 규칙과 차이 0. 실제 A 베이스라인 신호 미리보기도 781개 신호일 끝까지, 차이 0. A 승인 (PR #21, 11/6). `delisted_reused`를 io로 읽고 가격 공백 검사를 더했다 (11/8). 리포트 `env_check_report.py`를 만들었고, A PR #35를 합친 리허설에서 두 기준을 통과했다 (11/9). 남은 것: #35 병합 뒤 공식 실행(`reports/{run_id}/`, 입력 파일 SHA-256 포함) |
 | B-06 | 11/23 | 폴드별 스냅샷 구성(D1, D5), R-10 기록(`reports/{run_id}/`), 베이스라인 신호 리허설 |
