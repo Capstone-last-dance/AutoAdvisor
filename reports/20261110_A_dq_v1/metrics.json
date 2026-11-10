@@ -1,6 +1,6 @@
 {
   "run_id": "20261110_A_dq_v1",
-  "source_commit": "f0e029abdc5277bb6a0a3b96eca448d5dd7f2f7d",
+  "source_commit": "d6e635527566f848e7e9e5a6648c8c747d0369e9",
   "c1_calendar": {
     "n_days": 4146,
     "first": "2010-01-04",
@@ -9,6 +9,7 @@
     "close_nonpositive_or_nan": 0
   },
   "c2_delisted": {
+    "scope": "tickers.delisting_date 기준 (종목코드별 최근 회사). 재사용 코드의 구회사는 reused 항목에서 따로 본다",
     "delisted_since_2010_total": 932,
     "in_prices": 932,
     "by_type": {
@@ -47,7 +48,34 @@
     },
     "common_delisted": 759,
     "common_delisted_in_prices": 759,
-    "common_delisted_with_last_price": 759
+    "common_delisted_with_last_price": 759,
+    "reused": {
+      "checked": true,
+      "n": 2,
+      "all_old_company_rows_present": true,
+      "all_last_price_matches": true,
+      "detail": [
+        {
+          "ticker": "101970",
+          "delist_date": "2015-03-17",
+          "rows_before_delist": 648,
+          "rows_after_delist": 393,
+          "last_close_raw_before_delist": 830.0,
+          "last_price": 830.0,
+          "last_price_matches_close_raw": true
+        },
+        {
+          "ticker": "036220",
+          "delist_date": "2016-05-09",
+          "rows_before_delist": 1570,
+          "rows_after_delist": 645,
+          "last_close_raw_before_delist": 3500.0,
+          "last_price": 3500.0,
+          "last_price_matches_close_raw": true
+        }
+      ]
+    },
+    "complete": true
   },
   "c3_ticker_format": {
     "prices": true,
@@ -115,13 +143,13 @@
     "reason": "investor_flows를 만들지 않는다 (DEC-22, 원천 없음)"
   },
   "extra_cash_dividend_q05": {
-    "events_total": 5369,
+    "events_total": 5370,
     "rows_total": 9345272,
-    "event_rate_all_days": 0.0005745151130967616,
+    "event_rate_all_days": 0.000574622119077968,
     "events_dec24_30": 806,
     "rows_dec24_30": 144574,
     "event_rate_dec24_30": 0.005574999654156349,
-    "ratio_year_end_to_all": 9.703834637362082,
+    "ratio_year_end_to_all": 9.702027591805775,
     "reading": "비율이 1에 가까우면 배당락 조정이 없고, 수 배 이상이면 현금배당이 반영된 것"
   },
   "figure_written": true

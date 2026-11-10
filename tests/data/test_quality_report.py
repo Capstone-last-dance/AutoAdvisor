@@ -3,9 +3,9 @@ import json
 import pandas as pd
 import pytest
 
-from src.data.quality_report import (SPLIT_CASES, build, check_calendar, check_delisted, check_splits,
-                                     check_ticker_format, check_universe_size, dividend_check,
-                                     listing_vs_first_price)
+from src.data.quality_report import (SPLIT_CASES, build, check_calendar, check_delisted,
+                                     check_reused_delisted, check_splits, check_ticker_format,
+                                     check_universe_size, dividend_check, listing_vs_first_price)
 
 DAYS = pd.bdate_range("2010-01-04", "2010-03-31")
 
@@ -42,6 +42,8 @@ def test_delisted_counts_rows_that_survive_in_prices():
     assert r["in_prices"] == 2 and r["common_delisted"] == 1
     assert r["common_delisted_with_last_price"] == 1
     assert r["by_type"]["preferred"] == {"n": 1, "in_prices": 1}
+    # delisted_reused가 없으면 "전부 확인"으로 보고하지 않는다 (C 리뷰 #45)
+    assert r["complete"] is False and r["reused"]["checked"] is False
 
 
 def test_ticker_format_catches_bad_codes():
@@ -101,3 +103,21 @@ def test_build_rejects_bad_run_id_and_existing_folder(tmp_path):
     (tmp_path / "20261110_A_dq_v1").mkdir()
     with pytest.raises(FileExistsError):           # R-11: 덮어쓰지 않는다
         build("20261110_A_dq_v1", out_root=tmp_path)
+
+
+def test_reused_ticker_old_company_is_checked_separately():
+    """재사용 코드의 구회사 폐지는 tickers가 아니라 delisted_reused에만 있다 (DEC-28, C 리뷰 #45)."""
+    prices = pd.DataFrame({
+        "ticker": ["036220"] * 4,
+        "date": pd.to_datetime(["2016-05-03", "2016-05-04", "2024-03-13", "2024-03-14"]),  # 구회사 2일 + 신회사 2일
+        "close_raw": [3400.0, 3500.0, 20000.0, 20500.0]})
+    reused = pd.DataFrame({"ticker": ["036220"], "delist_date": pd.to_datetime(["2016-05-09"]),
+                           "last_price": [3500.0]})
+    r = check_reused_delisted(prices, reused)
+    assert r["checked"] is True and r["n"] == 1
+    row = r["detail"][0]
+    assert row["rows_before_delist"] == 2 and row["rows_after_delist"] == 2   # 구회사·신회사 구간이 나뉜다
+    assert row["last_close_raw_before_delist"] == 3500.0 and row["last_price_matches_close_raw"] is True
+    assert r["all_old_company_rows_present"] and r["all_last_price_matches"]
+    assert check_reused_delisted(prices, None)["checked"] is False            # 입력이 없으면 미점검
+    assert check_reused_delisted(prices, reused.iloc[:0])["checked"] is False

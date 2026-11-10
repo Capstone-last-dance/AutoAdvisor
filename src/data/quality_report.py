@@ -37,19 +37,49 @@ def check_calendar(index: pd.DataFrame) -> dict:
             "close_nonpositive_or_nan": int((~(kospi200["close"] > 0)).sum())}
 
 
-def check_delisted(tickers: pd.DataFrame, prices: pd.DataFrame, delisted: pd.DataFrame) -> dict:
-    """완료 기준 (2): 2010년 이후 폐지 종목이 시세에 남아 있는지 (생존 편향 점검)."""
+def check_delisted(tickers: pd.DataFrame, prices: pd.DataFrame, delisted: pd.DataFrame,
+                   delisted_reused: pd.DataFrame | None = None) -> dict:
+    """완료 기준 (2): 2010년 이후 폐지 종목이 시세에 남아 있는지 (생존 편향 점검).
+
+    `tickers.delisting_date`는 **그 종목코드의 가장 최근 회사** 기준이다. 폐지된 코드를 몇 년 뒤 다른
+    회사가 다시 쓴 경우(DEC-28: 101970·036220) `tickers`에는 신회사 상장 정보만 남고 구회사 폐지는
+    `delisted_reused`에만 있다. 그래서 두 집계를 분리하고, `delisted_reused`가 없으면 "전부 확인"으로
+    보고하지 않는다 (C 리뷰 #45)."""
     t = tickers[tickers["delisting_date"].notna() & (tickers["delisting_date"] >= "2010-01-04")]
     in_prices = set(prices["ticker"].unique())
     by_type = t.assign(present=t["ticker"].isin(in_prices)).groupby("security_type")["present"].agg(["size", "sum"])
-    out = {"delisted_since_2010_total": int(len(t)), "in_prices": int(t["ticker"].isin(in_prices).sum()),
+    out = {"scope": "tickers.delisting_date 기준 (종목코드별 최근 회사). 재사용 코드의 구회사는 reused 항목에서 따로 본다",
+           "delisted_since_2010_total": int(len(t)), "in_prices": int(t["ticker"].isin(in_prices).sum()),
            "by_type": {k: {"n": int(v["size"]), "in_prices": int(v["sum"])} for k, v in by_type.iterrows()}}
     common = t[t["security_type"] == "common"]
     out["common_delisted"] = int(len(common))
     out["common_delisted_in_prices"] = int(common["ticker"].isin(in_prices).sum())
     out["common_delisted_with_last_price"] = int(
         delisted.set_index("ticker").reindex(common["ticker"])["last_price"].notna().sum())
+    out["reused"] = check_reused_delisted(prices, delisted_reused)
+    out["complete"] = bool(out["reused"]["checked"])
     return out
+
+
+def check_reused_delisted(prices: pd.DataFrame, delisted_reused: pd.DataFrame | None) -> dict:
+    """재사용 종목코드의 **구회사** 폐지 이력이 시세에 남아 있는지 (DEC-28, C 리뷰 #45).
+
+    구회사 구간은 폐지일 이전 시세다. 같은 코드에 신회사 시세가 이어 붙어 있으므로 날짜로 나눠 본다."""
+    if delisted_reused is None or not len(delisted_reused):
+        return {"checked": False,
+                "reason": "delisted_reused 입력이 없다 — 재사용 코드의 구회사 폐지 이력은 점검하지 못했다 (DEC-28)"}
+    rows = []
+    for r in delisted_reused.itertuples():
+        before = prices[(prices["ticker"] == r.ticker) & (prices["date"] < r.delist_date)].sort_values("date")
+        after = prices[(prices["ticker"] == r.ticker) & (prices["date"] >= r.delist_date)]
+        last_raw = float(before["close_raw"].iloc[-1]) if len(before) else None
+        rows.append({"ticker": r.ticker, "delist_date": str(pd.Timestamp(r.delist_date).date()),
+                     "rows_before_delist": int(len(before)), "rows_after_delist": int(len(after)),
+                     "last_close_raw_before_delist": last_raw, "last_price": float(r.last_price),
+                     "last_price_matches_close_raw": last_raw is not None and abs(last_raw - float(r.last_price)) < 1e-9})
+    return {"checked": True, "n": len(rows),
+            "all_old_company_rows_present": all(x["rows_before_delist"] > 0 for x in rows),
+            "all_last_price_matches": all(x["last_price_matches_close_raw"] for x in rows), "detail": rows}
 
 
 def check_ticker_format(tables: dict) -> dict:
@@ -159,10 +189,14 @@ def build(run_id: str, out_root: Path | None = None) -> dict:
 
     index, tickers, prices = io.read_table("index"), io.read_table("tickers"), io.read_table("prices")
     delisted, universe, status = io.read_table("delisted"), io.read_table("universe"), io.read_table("status")
+    try:
+        reused = io.read_table("delisted_reused")       # DEC-28. 없으면 (2)를 "전부 확인"으로 보고하지 않는다
+    except FileNotFoundError:
+        reused = None
 
     metrics = {"run_id": run_id, "source_commit": _git_commit()}
     metrics["c1_calendar"] = check_calendar(index)
-    metrics["c2_delisted"] = check_delisted(tickers, prices, delisted)
+    metrics["c2_delisted"] = check_delisted(tickers, prices, delisted, reused)
     metrics["c3_ticker_format"] = check_ticker_format(
         {"prices": prices, "tickers": tickers, "status": status, "universe": universe, "delisted": delisted})
     splits, split_rows = check_splits(prices)
