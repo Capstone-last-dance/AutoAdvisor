@@ -1,0 +1,116 @@
+"""일간 경보 실행기 (M11, 작업 D-06, 명세서 6.10절). D 소유.
+
+    python -m src.pipeline.run_daily_alerts [--date YYYY-MM-DD]
+
+달력일 d 하루의 M9 경보를 만들어 alerts/{d}.parquet에 저장한다 (PM 11/10 합의).
+- d는 거래일이 아니라 달력일이다. 토요일 공시는 토요일 파일에만 들어간다.
+- d가 끝난 다음 날 오전 08:00 KST쯤 돌린다. OpenDART는 접수일만 줘서 장 마감 직후의 0건은 확정이 아니다.
+  --date를 빼면 어제(KST)를 쓴다.
+- 공시 수집·종목 연결·거래일 달력·같은 사건의 기존 이력은 PM의 daily_alerts(d)가 처리한다.
+  D는 날짜로 그 함수를 부르고 결과를 공용 I/O로 저장만 한다.
+- 정상 수집 0건이면 0행 파일을 저장한다. 미수집·실패(AlertsNotCollected 등)면 파일을 쓰지 않고 종료 코드 1이다.
+  그래서 "파일 없음 = 미수집"이다.
+- 같은 날짜를 다시 돌리면 성공한 결과로만 교체한다. 저장 중 실패하면 기존 파일은 그대로다 (io.write_table).
+- 주간 실행(run_weekly)은 신호일 t의 경보 파일까지 읽는다. "일간 경보(t일까지) → 주간" 순서로 돌린다.
+"""
+
+from __future__ import annotations
+
+import argparse
+import datetime as dt
+import importlib
+import logging
+import sys
+import traceback
+from collections.abc import Callable, Sequence
+from zoneinfo import ZoneInfo
+
+import pandas as pd
+
+from src.common import io
+
+KST = ZoneInfo("Asia/Seoul")
+M9_MODULE = "src.events.alerts"
+M9_FUNCTION = "daily_alerts"
+NOT_COLLECTED = "AlertsNotCollected"
+
+
+class DailyAlertsUnavailable(RuntimeError):
+    """PM M9의 daily_alerts가 아직 없다 (PR 미병합)."""
+
+
+def default_date(now: dt.datetime | None = None) -> str:
+    """--date를 빼면 쓰는 날짜: 어제(KST)."""
+    now = now or dt.datetime.now(KST)
+    return (now.astimezone(KST).date() - dt.timedelta(days=1)).isoformat()
+
+
+def load_daily_alerts() -> Callable[[str], pd.DataFrame]:
+    try:
+        module = importlib.import_module(M9_MODULE)
+    except ModuleNotFoundError as exc:
+        if exc.name and M9_MODULE.startswith(exc.name):
+            raise DailyAlertsUnavailable(f"{M9_MODULE} 모듈이 없다") from exc
+        raise
+    fn = getattr(module, M9_FUNCTION, None)
+    if not callable(fn):
+        raise DailyAlertsUnavailable(f"{M9_MODULE}.{M9_FUNCTION}이 아직 없다 (PM M9 PR 병합 전)")
+    return fn
+
+
+def run(date: str, daily_alerts: Callable[[str], pd.DataFrame] | None = None) -> int:
+    """d 하루의 경보를 저장한다. 성공하면 0, 미수집·실패면 1 (파일을 쓰지 않는다)."""
+    io._check_date_arg(date)
+    log = _setup_logger(date)
+    try:
+        log.info("일간 경보 시작: %s (달력일)", date)
+        fn = daily_alerts or load_daily_alerts()
+        alerts = fn(date)
+        path = io.write_table("alerts", alerts, date=date)
+        log.info("확정 경보 %d건을 %s에 저장했다", len(alerts), path.relative_to(io.ROOT).as_posix())
+        return 0
+    except Exception as exc:
+        if type(exc).__name__ == NOT_COLLECTED:
+            log.error("미수집: %s 경보를 만들지 못했다 (%s). 파일을 쓰지 않았다", date, exc)
+        else:
+            log.error("실패 (%s: %s). 파일을 쓰지 않았다\n%s", type(exc).__name__, exc, traceback.format_exc())
+        return 1
+    finally:
+        _close_logger(log)
+
+
+def _setup_logger(date: str) -> logging.Logger:
+    log_path = io.ROOT / "logs" / f"alerts_{date}.log"
+    log_path.parent.mkdir(parents=True, exist_ok=True)
+    log = logging.getLogger(f"run_daily_alerts.{date}")
+    log.setLevel(logging.INFO)
+    log.propagate = False
+    _close_logger(log)
+    fmt = logging.Formatter("%(asctime)s %(levelname)s %(message)s")
+    for handler in (logging.FileHandler(log_path, encoding="utf-8"), logging.StreamHandler(sys.stderr)):
+        handler.setFormatter(fmt)
+        log.addHandler(handler)
+    return log
+
+
+def _close_logger(log: logging.Logger) -> None:
+    for handler in list(log.handlers):
+        handler.close()
+        log.removeHandler(handler)
+
+
+def main(argv: Sequence[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(description="일간 경보 실행기 (명세서 6.10절, 작업 D-06)")
+    parser.add_argument("--date", help="경보를 만들 달력일 YYYY-MM-DD. 빼면 어제(KST)")
+    args = parser.parse_args(argv)
+    date = args.date or default_date()
+    try:
+        io._check_date_arg(date)
+    except ValueError as exc:
+        print(f"오류: {exc}", file=sys.stderr)
+        return 1
+    return run(date)
+
+
+if __name__ == "__main__":
+    sys.exit(main())

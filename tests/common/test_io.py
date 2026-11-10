@@ -9,6 +9,7 @@ import shutil
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 import numpy as np
 import pandas as pd
@@ -72,7 +73,7 @@ def sample(name: str) -> pd.DataFrame:
                           exposure=[0.9] * 3, regime_mc=np.array([0, 0, 0], dtype="int8")),
         "alerts": dict(date=d, ticker=tickers, trigger_type=["T1", "T6"], rcept_no=["1", "2"],
                        report_nm=["관리종목지정", "유상증자결정"], rcept_dt=rcept_partial,
-                       available_at=available),
+                       available_at=available, generated_at=available),
         "forward_log": dict(signal_date=pd.to_datetime([DAY]), commit_hash=["abc1234"],
                             signal_source=["baseline"], has_positions=np.array([0], dtype="int8"),
                             label_ready_date=pd.to_datetime(["2026-12-04"]),
@@ -143,6 +144,26 @@ class RoundTripTest(TempRootTest):
                 back = io.read_table(name, date=date)
                 pd.testing.assert_frame_equal(back, df, check_dtype=False, check_index_type=False)
                 io.validate(name, back)
+
+    def test_failed_write_keeps_old_file(self):
+        # 저장 중 실패하면 기존 파일과 폴더는 그대로다 (D-06, 같은 날짜 재실행)
+        path = io.write_table("alerts", sample("alerts"), date=DAY)
+        before = path.read_bytes()
+        with mock.patch.object(pd.DataFrame, "to_parquet", side_effect=OSError("디스크 오류")):
+            with self.assertRaises(OSError):
+                io.write_table("alerts", sample("alerts").iloc[:1], date=DAY)
+        self.assertEqual(path.read_bytes(), before)
+        self.assertEqual(sorted(p.name for p in path.parent.iterdir()), [path.name])
+        io.write_table("alerts", sample("alerts").iloc[:1], date=DAY)             # 성공하면 교체
+        self.assertEqual(len(io.read_table("alerts", date=DAY)), 1)
+
+    def test_failed_evidence_write_keeps_old_file(self):
+        path = io.write_evidence(DAY, [])
+        with mock.patch.object(io.json, "dumps", side_effect=ValueError("직렬화 실패")):
+            with self.assertRaises(ValueError):
+                io.write_evidence(DAY, [evidence_record()])
+        self.assertEqual(path.read_text(encoding="utf-8"), "")
+        self.assertEqual(sorted(p.name for p in path.parent.iterdir()), [path.name])
 
     def test_ticker_keeps_leading_zero(self):
         io.write_table("signals", sample("signals"), date=DAY)
@@ -270,6 +291,18 @@ class ValidateRejectsTest(unittest.TestCase):
                 self.assertRejects(name, df)                                        # 접수보다 빠름
                 df = sample(name); df[received] = pd.Series([pd.NaT, pd.NaT], dtype=df[received].dtype)
                 io.validate(name, df)                                               # 접수 시각 전부 결측 허용
+
+    def test_alert_generated_at(self):
+        # 지난 체결 재생 1안 (PM 11/10): 첫 생성 시각. 필수, KST, available_at보다 빠를 수 없다
+        self.assertRejects("alerts", sample("alerts").drop(columns="generated_at"))
+        df = sample("alerts"); df.loc[1, "generated_at"] = pd.NaT
+        self.assertRejects("alerts", df)
+        df = sample("alerts"); df["generated_at"] = df["generated_at"].dt.tz_convert("UTC")
+        self.assertRejects("alerts", df)
+        df = sample("alerts"); df.loc[0, "generated_at"] = df.loc[0, "available_at"] - pd.Timedelta(seconds=1)
+        self.assertRejects("alerts", df)
+        df = sample("alerts"); df.loc[1, "generated_at"] = df.loc[1, "available_at"] + pd.Timedelta(days=2)
+        io.validate("alerts", df)                                           # 늦게 만든 경보
 
     def test_dec09_kind_alert(self):
         # KIND 공시는 접수번호에 출처를 붙이고, 공개 시각을 모르면 rcept_dt 결측 (PR #16)

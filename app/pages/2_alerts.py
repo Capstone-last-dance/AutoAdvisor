@@ -17,7 +17,7 @@ if window is not None:
 if not ready:
     st.warning("확정된 거래일 자료(index)가 부족해 경보를 표시하지 않습니다.")
 elif alerts is None:
-    st.info("최근 20거래일 경보가 없습니다.")
+    st.info("최근 20거래일 확정 경보 0건입니다.")
 else:
     triggers = ui.trigger_names()
     alerts = alerts.sort_values(["date", "available_at"], ascending=False)
@@ -28,6 +28,7 @@ else:
         "공시명": alerts["report_nm"],
         "접수번호": alerts["rcept_no"],
         "이용 가능 시각": alerts["available_at"].dt.strftime("%Y-%m-%d %H:%M"),
+        "생성 시각": alerts["generated_at"].dt.strftime("%Y-%m-%d %H:%M"),
     }), hide_index=True)
 
 ui.end_page()

@@ -89,6 +89,7 @@ def _write_all() -> None:
         "report_nm": ["샘플 공시 A", "샘플 공시 B"],
         "rcept_dt": rcept,
         "available_at": pd.to_datetime([f"{alert_day} 16:20:00", f"{alert_day} 23:59:59"]).tz_localize(KST),
+        "generated_at": pd.to_datetime([f"{alert_day} 16:20:00", f"{alert_day} 23:59:59"]).tz_localize(KST),
     }), date=alert_day)
 
     io.write_evidence(date, [{

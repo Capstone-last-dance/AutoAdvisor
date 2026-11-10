@@ -14,7 +14,9 @@ from __future__ import annotations
 
 import datetime as dt
 import json
+import os
 import re
+import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -190,6 +192,9 @@ SCHEMAS: dict[str, dict[str, Col]] = {
         "report_nm": _c("str"),
         "rcept_dt": _c("datetime_kst", nullable=True),
         "available_at": _c("datetime_kst"),
+        # 지난 체결 재생 1안 (PM 11/10): 경보를 처음 만든 시각. 백테스트 파일은 available_at과 같고,
+        # 다시 만들어도 첫 생성 시각을 유지한다. available_at보다 빠를 수 없다
+        "generated_at": _c("datetime_kst"),
     },
     "forward_log": {
         "signal_date": _c("date"),
@@ -262,11 +267,10 @@ def write_table(name: str, df: pd.DataFrame, date: str | None = None,
     if date is not None:
         _check_rows_match_date(df, date)
     path = ROOT / (Path(STUB_DIR) / rel if stub else rel)
-    path.parent.mkdir(parents=True, exist_ok=True)
     if name == "forward_log":
-        df.to_csv(path, index=False, date_format="%Y-%m-%d", encoding="utf-8")
+        _replace_atomically(path, lambda tmp: df.to_csv(tmp, index=False, date_format="%Y-%m-%d", encoding="utf-8"))
     else:
-        df.to_parquet(path, index=False)
+        _replace_atomically(path, lambda tmp: df.to_parquet(tmp, index=False))
     return path
 
 
@@ -298,6 +302,10 @@ def validate(name: str, df: pd.DataFrame) -> None:
         errors.extend(_check_labels_rows(df))
     if name in RECEIVED_AT and not missing and not errors:
         errors.extend(_check_available_after_receipt(df, RECEIVED_AT[name]))
+    if name == "alerts" and not missing and not errors:
+        early = df["generated_at"] < df["available_at"]
+        if early.any():
+            errors.append(f"generated_at이 available_at보다 빠른 행이 {int(early.sum())}건 있다")
     if name == "news_daily" and not missing and not errors:
         errors.extend(_check_available_after_date(df, "date"))
         errors.extend(_check_unique(df, ["date", "ticker"]))
@@ -320,10 +328,13 @@ def write_evidence(date: str, records: list[dict], stub: bool = False) -> Path:
     rel = _evidence_path(date)
     _validate_evidence(records, date)
     path = ROOT / (Path(STUB_DIR) / rel if stub else rel)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with open(path, "w", encoding="utf-8", newline="\n") as f:
-        for rec in records:
-            f.write(json.dumps(rec, ensure_ascii=False) + "\n")
+
+    def save(tmp: Path) -> None:
+        with open(tmp, "w", encoding="utf-8", newline="\n") as f:
+            for rec in records:
+                f.write(json.dumps(rec, ensure_ascii=False) + "\n")
+
+    _replace_atomically(path, save)
     return path
 
 
@@ -544,6 +555,20 @@ def _check_labels_rows(df: pd.DataFrame) -> list[str]:
     if df.loc[~is20, "y_crash"].notna().any():
         errors.append("y_crash: h = 20이 아닌 행에 값이 있다 (h = 20 행만)")
     return errors
+
+
+def _replace_atomically(path: Path, save) -> None:
+    """같은 폴더의 임시 파일에 저장을 마친 뒤 대상 파일을 바꾼다. 저장 중 실패하면 기존 파일은 그대로다."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fd, tmp_name = tempfile.mkstemp(prefix=f".{path.name}.", suffix=".tmp", dir=path.parent)
+    os.close(fd)
+    tmp = Path(tmp_name)
+    try:
+        save(tmp)
+        os.replace(tmp, path)
+    except BaseException:
+        tmp.unlink(missing_ok=True)
+        raise
 
 
 def _check_available_after_receipt(df: pd.DataFrame, received: str) -> list[str]:

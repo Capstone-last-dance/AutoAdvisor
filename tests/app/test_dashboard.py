@@ -139,6 +139,7 @@ class AlertTimingTest(RootTest):
                 "report_nm": ["샘플 공시"],
                 "rcept_dt": pd.to_datetime([pd.NaT]).tz_localize(ui.KST),
                 "available_at": pd.to_datetime([available]).tz_localize(ui.KST),
+                "generated_at": pd.to_datetime([available]).tz_localize(ui.KST),
             }), date=day)
         finally:
             io.ROOT = saved
@@ -151,7 +152,7 @@ class AlertTimingTest(RootTest):
         self.assertIn(self.top, set(self.candidates()["종목코드"]))
         at = self.open(APP / "pages" / "2_alerts.py")
         self.assertEqual(len(at.dataframe), 0)
-        self.assertEqual(at.info[0].value, "최근 20거래일 경보가 없습니다.")
+        self.assertEqual(at.info[0].value, "최근 20거래일 확정 경보 0건입니다.")
 
     def test_alert_inside_window_applies(self):
         self.alert("2026-10-19", "2026-10-19 10:00:00")              # 11/13부터 세어 20번째 거래일
