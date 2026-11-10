@@ -127,22 +127,31 @@ def forward_test_commit(ctx: StepContext) -> None:
     if ctx.source_commit is None:
         raise forward_test.ForwardTestError("forward test 커밋에는 --source-commit이 필요하다 (DEC-04)")
     deviations = ctx.memory.get("deviations") or []   # 예: M9가 없어 쿨다운 없이 기록한 주 (M4·M8)
-    memo = "\n".join(["기록 시 이탈 사항:", *(f"- {_hide_paths(d)}" for d in deviations)]) if deviations else None
-    commit_hash = forward_test.record(ctx.date, source_commit=ctx.source_commit, memo=memo)
+    for note in deviations:  # 상세 사유(예외 문장 포함)는 로컬 로그에만 남긴다
+        ctx.log.warning("7단계: 기록 시 이탈 사항 상세: %s", note)
+    commit_hash = forward_test.record(ctx.date, source_commit=ctx.source_commit, memo=deviation_memo(ctx.date, deviations))
     ctx.log.info("7단계: 신호 커밋 %s를 forward_log.csv에 기록하고 push했다", commit_hash)
 
 
-# 커밋 메시지는 push되어 공개된다. 예외 문장에 섞인 로컬 절대경로(계정 폴더명 등)를 가린다
-_LOCAL_PATH = re.compile(r"""(?:[A-Za-z]:[\\/]|\\\\|(?<![\w.])/(?:Users|home|tmp|var|private|mnt)/)[^\s'"()<>]*""")
+# 커밋 메시지는 push되어 공개된다. 이탈 문장에는 예외 메시지(로컬 경로 등)가 섞일 수 있어
+# 정해진 사유로만 바꿔 쓰고, 상세는 logs/{date}.log에 둔다 (PM #38 리뷰)
+_DEVIATION_REASONS = (
+    (re.compile(r"M9 쿨다운 없이 계산"), "M9 쿨다운 없이 계산 (PM 11/9 결정)"),
+    (re.compile(r"M9 체결 지도 없이 계산"), "M9 체결 지도 없이 계산 (PM 11/9 결정)"),
+)
+_OTHER_DEVIATION = "그 밖의 이탈"
 
 
-def _hide_paths(text: str) -> str:
-    """저장소 루트는 <저장소>로, 그 밖의 로컬 절대경로는 <로컬 경로>로 바꾼다."""
-    text = str(text)
-    roots = {str(io.ROOT), str(io.ROOT.resolve()), io.ROOT.as_posix(), io.ROOT.resolve().as_posix()}
-    for root in sorted(roots, key=len, reverse=True):
-        text = text.replace(root, "<저장소>")
-    return _LOCAL_PATH.sub("<로컬 경로>", text)
+def deviation_memo(date: str, deviations: Sequence[str]) -> str | None:
+    """이탈 문장 목록을 공개 커밋용 메모로 바꾼다. 이탈이 없으면 None."""
+    if not deviations:
+        return None
+    reasons: list[str] = []
+    for note in deviations:
+        reason = next((r for pattern, r in _DEVIATION_REASONS if pattern.search(str(note))), _OTHER_DEVIATION)
+        if reason not in reasons:
+            reasons.append(reason)
+    return "\n".join([f"기록 시 이탈 사항 (상세는 실행 로그 logs/{date}.log):", *(f"- {r}" for r in reasons)])
 
 
 def _no_stub(ctx: StepContext) -> None:

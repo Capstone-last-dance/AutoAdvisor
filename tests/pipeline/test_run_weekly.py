@@ -110,30 +110,29 @@ class ForwardCommitMemoTest(unittest.TestCase):
     def ctx(self, **memory):
         return rw.StepContext(date=DAY, source_commit="abc", memory=memory)
 
-    def test_deviations_go_to_commit_memo(self):
-        with mock.patch.object(rw.forward_test, "record", return_value="h") as record:
-            rw.forward_test_commit(self.ctx(deviations=["M9 없음: 쿨다운 없이 기록", "경보 파일 없음"]))
-        self.assertEqual(record.call_args.kwargs["memo"],
-                         "기록 시 이탈 사항:\n- M9 없음: 쿨다운 없이 기록\n- 경보 파일 없음")
+    NOTES = [
+        f"{DAY}: M9 쿨다운 없이 계산했다 (날짜별 경보 파일이 하나도 없다: C:\\Users\\some one\\My Proj\\alerts). "
+        "PM 11/9 결정에 따라 deviation log에 남긴다",
+        f"{DAY}: M9 체결 지도 없이 계산했다 (/home/some one/proj/x.py). PM 11/9 결정에 따라 deviation log에 남긴다",
+        f"{DAY}: M9 쿨다운 없이 계산했다 (함수가 연결되지 않았다). PM 11/9 결정에 따라 deviation log에 남긴다",
+        "알 수 없는 이탈: D:\\secret folder\\a b.txt",
+    ]
 
-    def test_local_paths_are_hidden(self):
-        root = Path(tempfile.mkdtemp())
-        saved, io.ROOT = io.ROOT, root
-        try:
-            notes = [f"M9 경보 없이 계산했다 ({root / 'alerts'}에 날짜별 경보 파일이 없다)",
-                     "원인: C:\\Users\\someone\\proj\\x.py 와 /home/someone/proj/y.py",
-                     "기준 src/events/alerts.py와 2026-11-20 15:30은 그대로"]
-            with mock.patch.object(rw.forward_test, "record", return_value="h") as record:
-                rw.forward_test_commit(self.ctx(deviations=notes))
-            memo = record.call_args.kwargs["memo"]
-        finally:
-            io.ROOT = saved
-            shutil.rmtree(root, ignore_errors=True)
-        for leaked in (str(root), root.as_posix(), "someone", "Users", "/home/"):
-            self.assertNotIn(leaked, memo)
-        self.assertIn("<저장소>", memo)
-        self.assertIn("<로컬 경로>", memo)
-        self.assertIn("기준 src/events/alerts.py와 2026-11-20 15:30은 그대로", memo)
+    def test_commit_memo_has_fixed_reasons_only(self):
+        with mock.patch.object(rw.forward_test, "record", return_value="h") as record:
+            rw.forward_test_commit(self.ctx(deviations=self.NOTES))
+        self.assertEqual(record.call_args.kwargs["memo"],
+                         f"기록 시 이탈 사항 (상세는 실행 로그 logs/{DAY}.log):\n"
+                         "- M9 쿨다운 없이 계산 (PM 11/9 결정)\n"
+                         "- M9 체결 지도 없이 계산 (PM 11/9 결정)\n"
+                         "- 그 밖의 이탈")
+
+    def test_details_stay_in_local_log(self):
+        ctx = self.ctx(deviations=self.NOTES)
+        with mock.patch.object(rw.forward_test, "record", return_value="h"), \
+                self.assertLogs(ctx.log, level="WARNING") as logs:
+            rw.forward_test_commit(ctx)
+        self.assertIn("some one", "\n".join(logs.output))
 
     def test_no_memo_without_deviations(self):
         for memory in ({}, {"deviations": []}):
