@@ -233,9 +233,10 @@ def main(argv: Sequence[str] | None = None) -> Path:
                                "(regime_mc)", "rows": len(features), "sha256": content_sha256(features)},
     }
 
+    commit = _git_commit()  # 결과 폴더를 만들기 전에 (R-10)
     out.mkdir(parents=True)
     shutil.copyfile(cfg_path, out / "config.yaml")
-    (out / "git_commit.txt").write_text(_git_commit(), encoding="utf-8")
+    (out / "git_commit.txt").write_text(commit, encoding="utf-8")
     (out / "metrics.json").write_text(json.dumps(metrics, ensure_ascii=False, indent=2, default=str) + "\n",
                                       encoding="utf-8")
     c = metrics["criteria"]

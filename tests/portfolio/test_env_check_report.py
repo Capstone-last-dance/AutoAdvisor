@@ -136,7 +136,11 @@ def test_main_writes_the_run_folder_once(synthetic, cfg_with_vol_target, tmp_pat
     monkeypatch.setattr(report, "_a_signal_function", lambda: lambda close, tickers, t: by_date[t])
     monkeypatch.setattr(report, "feature_table", lambda prices, bm, members, risk: kept.features)
     monkeypatch.setattr(report, "input_fingerprints", lambda t, root: {n: {"rows": len(df)} for n, df in t.items()})
-    monkeypatch.setattr(report, "_git_commit", lambda: "abc\n")
+    def commit():
+        assert not (tmp_path / "reports" / "20261109_B_test").exists()  # 결과 폴더가 새 파일 목록에 들지 않게
+        return "abc\n"
+
+    monkeypatch.setattr(report, "_git_commit", commit)
     monkeypatch.setattr(report, "LAST_SIGNAL_DATE", "2011-12-31")  # 합성 시장 1년만 (빠르게)
 
     out = report.main(["--run-id", "20261109_B_test", "--config", str(config)])

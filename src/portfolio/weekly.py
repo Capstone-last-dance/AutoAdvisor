@@ -12,11 +12,13 @@
 - 기록이 없는 주(스텁 등으로 커밋되지 않은 주)는 리밸런싱 없이 직전 보유를 유지한 것으로 재생하고 경고한다.
   C의 사후 성과(evaluate_forward_record, PR #22)도 기록된 주만 이어 재생한다.
 - 다른 역할의 함수는 아래 *_ENTRY에 "모듈:함수"로 연결한다 (R-17). 형태는 interfaces.py에 있다.
-  - M9(PM, PR #34)가 없으면 쿨다운·M9 청산 없이 계산하고 기록한다. '없음'은 연결 전, 함수를 찾지 못함(PR 미병합),
-    경보 파일 없음(FileNotFoundError)이다. 경고와 ctx.memory["deviations"]에 남기고 PM이 deviation log에 적는다
-    (PM 11/9 결정). RECORD_WITHOUT_M9 = False면 스텁 실행으로 표시해 커밋을 막는다. M9의 다른 오류는 그대로 멈춘다.
+  - M9(PM, PR #34)가 없으면 쿨다운·M9 청산 없이 계산하고 기록한다. '없음'은 두 경우뿐이다 (PM #36 리뷰):
+    연결 전이거나 연결한 모듈·함수 자체가 없다(PR 미병합), alerts/에 날짜별 경보 파일이 하나도 없다(M9를 아직
+    돌리지 않았다). 경고와 ctx.memory["deviations"]에 남기고 PM이 deviation log에 적는다 (PM 11/9 결정).
+    RECORD_WITHOUT_M9 = False면 스텁 실행으로 표시해 커밋을 막는다. M9 모듈 안의 다른 import 실패, 경보 파일이
+    있는데 난 FileNotFoundError, 그 밖의 M9 오류는 그대로 멈춘다.
   - 지난 기록이 필요한데(positions_from 다음 신호일부터) 읽는 함수(D)를 찾지 못하면 실패한다.
-- 앞 단계가 B 입력 표를 스텁으로 썼으면 B 출력도 스텁이다 (빈 w_raw, 0행 positions).
+- 앞 단계가 B 입력 표(신호 입력, 재생할 때는 엔진 입력까지)를 스텁으로 썼으면 B 출력도 스텁이다 (빈 w_raw, 0행 positions).
 """
 from __future__ import annotations
 
@@ -27,6 +29,7 @@ from typing import Any
 
 import pandas as pd
 
+from src.common import io
 from src.portfolio.buffer_rule import buffer_rule_weights
 from src.portfolio.engine_adapter import build_engine, engine_inputs
 from src.portfolio.interfaces import ForwardEngine
@@ -83,6 +86,10 @@ def forward_inputs(
         raise ValueError(f"{date}: signals 종목과 U_t가 다르다")
     k = index.loc[index["index_code"] == "KOSPI200"]
     bm = pd.Series(k["close"].to_numpy(dtype="float64"), index=pd.to_datetime(k["date"])).sort_index().loc[:t]
+    if bm.empty or bm.index[-1] != t:
+        # 없으면 그 주의 마지막 거래일이 t 전날로 잡혀 지난 신호일·M8 입력이 조용히 틀어진다 (A #36 리뷰)
+        last = "없음" if bm.empty else bm.index[-1].strftime("%Y-%m-%d")
+        raise ValueError(f"index에 신호일 {date}의 코스피 200 종가가 없다 (t까지 마지막 날: {last})")
     return ForwardInputs(date, s, members, sectors_at(sector, t), bm, frozenset(str(x) for x in cooldown))
 
 
@@ -166,6 +173,8 @@ def m4_step(ctx) -> None:
     )
     dates = signal_dates_between(inputs.bm_close.index, start, t)
     holdings = _replayed_holdings(ctx, cfg, dates, t) if dates else set()
+    if holdings is None:
+        return  # 재생에 쓸 엔진 입력이 스텁이다. 비운 w_raw를 두고 5단계가 0행 positions를 스텁으로 쓴다
     w_raw = buffer_w_raw(inputs, holdings, buffer)
     ctx.memory["w_raw"], ctx.memory[MEMORY_KEY] = w_raw, inputs
     ctx.log.info(
@@ -201,18 +210,27 @@ def m8_step(ctx) -> None:
     )
 
 
-def _replayed_holdings(ctx, cfg: Mapping[str, Any], dates: list[str], t: str) -> set[str]:
+def _replayed_holdings(ctx, cfg: Mapping[str, Any], dates: list[str], t: str) -> set[str] | None:
+    """dates(positions_from ~ t 전 신호일)의 기록을 재생한 t 종가 보유. 엔진 입력이 스텁이면 None."""
     read_recorded = _resolve(RECORDED_POSITIONS_ENTRY, "D 지난 forward positions")
     if read_recorded is None:
         raise RuntimeError("지난 forward positions를 읽는 D 함수가 연결되지 않았다 (weekly.RECORDED_POSITIONS_ENTRY)")
     recorded = read_recorded(t)
+    if not recorded:
+        # 첫 기록(positions_from)에는 dates가 비어 여기 오지 않는다. 지난 신호일이 모두 커밋되지 않은 경우다
+        ctx.log.warning(
+            "4단계 B: 지난 신호일 %s의 forward 기록이 하나도 없어 현금 100%%에서 시작한다", ", ".join(dates)
+        )
+        return set()  # 엔진을 만들 필요가 없다
     missing = [d for d in dates if d not in recorded]
     if missing:
         ctx.log.warning(
             "4단계 B: forward 기록이 없는 신호일 %s는 리밸런싱 없이 직전 보유를 유지한 것으로 재생한다", ", ".join(missing)
         )
-    if not recorded:
-        return set()  # 기록이 하나도 없으면 아직 현금 100%다 (엔진을 만들 필요가 없다)
+    stub = _stub_inputs(ctx, ENGINE_INPUTS)
+    if stub:
+        ctx.log.warning("4단계 B: 보유 재생에 쓸 엔진 입력이 스텁이라(%s) w_raw도 비운다", ", ".join(stub))
+        return None
     maps = _call_m9(ctx, M9_ENGINE_ENTRY, "체결 지도", dates[0], t)
     cooldowns, events = (None, None) if maps is None else maps
     inputs = engine_inputs(*(ctx.read_table(name) for name in ENGINE_INPUTS))
@@ -241,8 +259,11 @@ def _mark_stub(ctx, label: str) -> None:
 
 
 def _call_m9(ctx, entry: Any, what: str, *args: str) -> Any:
-    """M9 함수를 부른다. 연결 전, 함수를 찾지 못함(PR #34 미병합), 경보 파일 없음(FileNotFoundError)이면
-    M9 없이 계산하고(_without_m9) None을 돌려준다. 다른 오류는 M9가 틀린 값을 냈을 수 있어 그대로 낸다."""
+    """M9 함수를 부른다. M9가 아직 없는 두 경우만 M9 없이 계산하고(_without_m9) None을 돌려준다 (PM #36 리뷰).
+    - 연결 전이거나, 연결한 모듈·함수 자체가 없다 (PR #34 미병합. _resolve가 EntryNotFound)
+    - FileNotFoundError가 났고 alerts/에 날짜별 경보 파일이 하나도 없다 (M9를 아직 돌리지 않았다)
+    경보 파일이 있는데 난 FileNotFoundError(목록의 파일을 못 엶, M9가 읽는 index가 없음 등), M9 모듈 안의
+    import 실패, 그 밖의 오류는 M9가 틀린 값을 냈을 수 있어 그대로 낸다."""
     try:
         fn = _resolve(entry, f"PM M9 {what}")
         if fn is not None:
@@ -251,9 +272,16 @@ def _call_m9(ctx, entry: Any, what: str, *args: str) -> Any:
     except EntryNotFound as e:
         reason = str(e)
     except FileNotFoundError as e:
-        reason = f"경보 파일이 없다: {e}"
+        if _alert_file_dates():
+            raise
+        reason = f"날짜별 경보 파일이 하나도 없다: {e}"
     _without_m9(ctx, what, reason)
     return None
+
+
+def _alert_file_dates() -> list[str]:
+    """alerts/{d}.parquet(9.3절, PM M9 출력)이 있는 날짜. D io.list_dates로 센다."""
+    return io.list_dates("alerts")
 
 
 def _without_m9(ctx, what: str, reason: str) -> None:
@@ -269,14 +297,23 @@ def _without_m9(ctx, what: str, reason: str) -> None:
 
 
 class EntryNotFound(RuntimeError):
-    """*_ENTRY에 이름이 있는데 함수를 찾지 못했다 (담당 PR 미병합 등)."""
+    """*_ENTRY의 모듈이나 함수 자체가 없다 (담당 PR 미병합 등)."""
 
 
 def _resolve(entry: Any, what: str) -> Any:
+    """'모듈:함수'를 찾는다. 모듈(또는 그 상위 패키지)이나 함수가 없으면 EntryNotFound.
+    모듈은 있는데 그 안의 import가 실패하면(하위 의존성 없음 등) 담당 코드·환경 문제라 원래 오류를 그대로 낸다."""
     if entry is None or callable(entry):
         return entry
     module, _, name = str(entry).partition(":")
+    missing = f"{what} 함수 {entry}를 찾지 못했다 (담당 PR이 병합됐는지 확인한다)"
     try:
-        return getattr(importlib.import_module(module), name)
-    except (ImportError, AttributeError) as e:
-        raise EntryNotFound(f"{what} 함수 {entry}를 찾지 못했다 (담당 PR이 병합됐는지 확인한다)") from e
+        mod = importlib.import_module(module)
+    except ModuleNotFoundError as e:
+        if e.name is None or not (module == e.name or module.startswith(f"{e.name}.")):
+            raise
+        raise EntryNotFound(missing) from e
+    try:
+        return getattr(mod, name)
+    except AttributeError as e:
+        raise EntryNotFound(missing) from e

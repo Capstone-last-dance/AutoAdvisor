@@ -1,2 +1,0 @@
-6d6a15d6a32c822fa898d6ffdbac8f855216e34e
-uncommitted: docs/design_B.md

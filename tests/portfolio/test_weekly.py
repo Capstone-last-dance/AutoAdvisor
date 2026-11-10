@@ -4,6 +4,7 @@ from __future__ import annotations
 import copy
 import inspect
 import logging
+import sys
 from dataclasses import dataclass, field
 from types import SimpleNamespace
 
@@ -11,6 +12,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
+from src.common import io
 from src.pipeline.run_weekly import StepContext
 from src.portfolio import weekly
 from src.portfolio.buffer_rule import run_buffer_rule
@@ -151,16 +153,29 @@ def _no_alert_files(*args):
     raise FileNotFoundError("alerts/에 날짜별 경보 파일이 없다")  # PR #34 read_alerts와 같은 경우
 
 
+@pytest.fixture
+def alerts_root(tmp_path, monkeypatch):
+    """io.ROOT를 빈 임시 폴더로 바꾼다. alerts/{d}.parquet을 만들면 '경보 파일이 있는' 상태다."""
+    monkeypatch.setattr(io, "ROOT", tmp_path)
+
+    def add(day):
+        (tmp_path / "alerts").mkdir(exist_ok=True)
+        (tmp_path / "alerts" / f"{day}.parquet").write_bytes(b"")  # 날짜 목록만 세므로 내용은 읽지 않는다
+
+    return add
+
+
 @pytest.mark.parametrize(
     ("cooldown", "engine", "reason"),
     [
         (None, None, "함수가 연결되지 않았다"),
         ("src.events.no_such_module:cooldown_at", "src.events.no_such_module:engine_alerts", "찾지 못했다"),  # PR 미병합
-        (_no_alert_files, _no_alert_files, "경보 파일이 없다"),
+        ("src.events.alerts:no_such_function", "src.events.alerts:no_such_function", "찾지 못했다"),
+        (_no_alert_files, _no_alert_files, "날짜별 경보 파일이 하나도 없다"),
     ],
-    ids=["not-wired", "not-merged", "no-alert-files"],
+    ids=["not-wired", "not-merged", "no-function", "no-alert-files"],
 )
-def test_missing_m9_records_without_cooldown_as_a_deviation(wired, monkeypatch, cooldown, engine, reason):
+def test_missing_m9_records_without_cooldown_as_a_deviation(wired, monkeypatch, alerts_root, cooldown, engine, reason):
     """PM 11/9 결정: M9가 없어도 기록을 미루지 않는다. 결과는 M9가 아무 경보도 주지 않을 때와 같고, 스텁이 아니다."""
     t, recorded = wired.dates[2], {d: wired.backtest[d] for d in wired.dates[:2]}
     monkeypatch.setattr(weekly, "M9_COOLDOWN_ENTRY", lambda d: ())
@@ -185,6 +200,52 @@ def test_other_m9_errors_stop_the_run(wired, monkeypatch):
     monkeypatch.setattr(weekly, "M9_COOLDOWN_ENTRY", broken)
     with pytest.raises(ValueError, match="스키마 오류"):
         _run(wired, wired.dates[0])
+
+
+@pytest.mark.parametrize("which", ["M9_COOLDOWN_ENTRY", "M9_ENGINE_ENTRY"])
+def test_file_errors_stop_the_run_once_alert_files_exist(wired, monkeypatch, alerts_root, which):
+    """PM #36 리뷰: 경보 파일이 있는데 M9가 FileNotFoundError를 내면(목록의 파일을 못 엶, index 없음 등)
+    'M9 없음'이 아니다. 쿨다운 없이 기록하지 않고 멈춘다."""
+    alerts_root("2026-11-19")
+
+    def unreadable(*args):
+        raise FileNotFoundError("alerts/2026-11-19.parquet")
+
+    monkeypatch.setattr(weekly, which, unreadable)
+    t, recorded = wired.dates[2], {d: wired.backtest[d] for d in wired.dates[:2]}
+    with pytest.raises(FileNotFoundError, match="2026-11-19"):
+        _run(wired, t, recorded, monkeypatch)
+
+
+@pytest.fixture
+def broken_m9_module(tmp_path, monkeypatch):
+    """모듈은 있는데 그 안의 import가 실패하는 M9 (하위 의존성 없음)."""
+    (tmp_path / "b_test_broken_m9.py").write_text(
+        "import b_test_no_such_dependency\n\ndef cooldown_at(t):\n    return set()\n", encoding="utf-8"
+    )
+    monkeypatch.syspath_prepend(str(tmp_path))
+    yield "b_test_broken_m9:cooldown_at"
+    sys.modules.pop("b_test_broken_m9", None)
+
+
+def test_import_failure_inside_the_m9_module_stops_the_run(wired, monkeypatch, alerts_root, broken_m9_module):
+    monkeypatch.setattr(weekly, "M9_COOLDOWN_ENTRY", broken_m9_module)
+    with pytest.raises(ModuleNotFoundError, match="b_test_no_such_dependency"):
+        _run(wired, wired.dates[0])
+
+
+@pytest.mark.parametrize(
+    "entry", ["src.no_such_package.alerts:f", "src.events.no_such_module:f", "src.events.alerts:no_such_function"]
+)
+def test_resolve_reports_missing_modules_and_functions(entry):
+    with pytest.raises(weekly.EntryNotFound, match="찾지 못했다"):
+        weekly._resolve(entry, "PM M9 쿨다운")
+
+
+def test_resolve_keeps_import_errors_inside_an_existing_module(broken_m9_module):
+    with pytest.raises(ModuleNotFoundError) as e:
+        weekly._resolve(broken_m9_module, "PM M9 쿨다운")
+    assert not isinstance(e.value, weekly.EntryNotFound) and e.value.name == "b_test_no_such_dependency"
 
 
 def test_missing_m9_can_still_block_the_commit(wired, monkeypatch):
@@ -219,7 +280,40 @@ def test_no_record_yet_starts_from_cash_without_building_the_engine(wired, monke
         ctx = _run(s, s.dates[2], {}, monkeypatch)
     from_cash = weekly.buffer_w_raw(ctx.memory[weekly.MEMORY_KEY], set(), s.buffer)
     pd.testing.assert_series_equal(ctx.memory["w_raw"], from_cash)
-    assert any(f"{s.dates[0]}, {s.dates[1]}" in r.getMessage() for r in caplog.records)
+    messages = [r.getMessage() for r in caplog.records]
+    assert any(f"{s.dates[0]}, {s.dates[1]}" in m and "현금 100%에서 시작" in m for m in messages)
+    assert not any("직전 보유를 유지" in m for m in messages)  # A #36 리뷰: 재생하지 않는데 재생한다고 하지 않는다
+
+
+def test_stub_engine_inputs_give_stub_outputs(wired, monkeypatch):
+    """A #36 리뷰: 신호 입력은 진짜인데 엔진 입력(prices 등)만 스텁이면 스텁 가격으로 재생하지 않는다."""
+    s = wired
+    monkeypatch.setattr(weekly, "build_engine", lambda *a, **k: pytest.fail("스텁 가격으로 엔진을 만들었다"))
+    monkeypatch.setattr(weekly, "M9_ENGINE_ENTRY", lambda *a: pytest.fail("스텁 실행인데 M9 체결 지도를 불렀다"))
+    monkeypatch.setattr(weekly, "RECORDED_POSITIONS_ENTRY", lambda t: {d: s.backtest[d] for d in s.dates[:2]})
+    t = s.dates[2]
+    ctx = TableCtx(date=t, tables=s.tables, log=logging.getLogger("test_weekly"))
+    ctx.stubbed.append("1(M1)")
+    ctx.stub_tables.add("prices")
+    weekly.m4_step(ctx)
+    weekly.m8_step(ctx)
+    df, stub = ctx.written[("positions", t)]
+    assert ctx.memory["w_raw"].empty and stub and df.empty
+    # 기록이 없어 재생하지 않는 주는 엔진 입력이 스텁이어도 상관없다 (첫 기록)
+    first = TableCtx(date=s.dates[0], tables=s.tables, log=logging.getLogger("test_weekly"))
+    first.stub_tables.add("prices")
+    weekly.m4_step(first)
+    assert not first.memory["w_raw"].empty
+
+
+def test_signal_date_must_be_in_the_index(wired):
+    """A #36 리뷰: 1단계가 t의 index 행을 못 넣으면 그 주 신호일이 t 전날로 잡힌다. 계산하지 않고 멈춘다."""
+    t = wired.dates[1]
+    idx = wired.tables["index"]
+    tables = {**wired.tables, "index": idx.loc[pd.to_datetime(idx["date"]) != pd.Timestamp(t)]}
+    ctx = TableCtx(date=t, tables=tables, log=logging.getLogger("test_weekly"))
+    with pytest.raises(ValueError, match=f"index에 신호일 {t}의 코스피 200 종가가 없다"):
+        weekly.m4_step(ctx)
 
 
 def test_stub_inputs_give_stub_outputs(wired):
