@@ -19,6 +19,7 @@ from __future__ import annotations
 import argparse
 import importlib
 import logging
+import re
 import sys
 import traceback
 from collections.abc import Callable, Sequence
@@ -126,9 +127,22 @@ def forward_test_commit(ctx: StepContext) -> None:
     if ctx.source_commit is None:
         raise forward_test.ForwardTestError("forward test 커밋에는 --source-commit이 필요하다 (DEC-04)")
     deviations = ctx.memory.get("deviations") or []   # 예: M9가 없어 쿨다운 없이 기록한 주 (M4·M8)
-    memo = "\n".join(["기록 시 이탈 사항:", *(f"- {d}" for d in deviations)]) if deviations else None
+    memo = "\n".join(["기록 시 이탈 사항:", *(f"- {_hide_paths(d)}" for d in deviations)]) if deviations else None
     commit_hash = forward_test.record(ctx.date, source_commit=ctx.source_commit, memo=memo)
     ctx.log.info("7단계: 신호 커밋 %s를 forward_log.csv에 기록하고 push했다", commit_hash)
+
+
+# 커밋 메시지는 push되어 공개된다. 예외 문장에 섞인 로컬 절대경로(계정 폴더명 등)를 가린다
+_LOCAL_PATH = re.compile(r"""(?:[A-Za-z]:[\\/]|\\\\|(?<![\w.])/(?:Users|home|tmp|var|private|mnt)/)[^\s'"()<>]*""")
+
+
+def _hide_paths(text: str) -> str:
+    """저장소 루트는 <저장소>로, 그 밖의 로컬 절대경로는 <로컬 경로>로 바꾼다."""
+    text = str(text)
+    roots = {str(io.ROOT), str(io.ROOT.resolve()), io.ROOT.as_posix(), io.ROOT.resolve().as_posix()}
+    for root in sorted(roots, key=len, reverse=True):
+        text = text.replace(root, "<저장소>")
+    return _LOCAL_PATH.sub("<로컬 경로>", text)
 
 
 def _no_stub(ctx: StepContext) -> None:

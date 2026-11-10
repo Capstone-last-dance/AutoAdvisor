@@ -116,6 +116,25 @@ class ForwardCommitMemoTest(unittest.TestCase):
         self.assertEqual(record.call_args.kwargs["memo"],
                          "기록 시 이탈 사항:\n- M9 없음: 쿨다운 없이 기록\n- 경보 파일 없음")
 
+    def test_local_paths_are_hidden(self):
+        root = Path(tempfile.mkdtemp())
+        saved, io.ROOT = io.ROOT, root
+        try:
+            notes = [f"M9 경보 없이 계산했다 ({root / 'alerts'}에 날짜별 경보 파일이 없다)",
+                     "원인: C:\\Users\\someone\\proj\\x.py 와 /home/someone/proj/y.py",
+                     "기준 src/events/alerts.py와 2026-11-20 15:30은 그대로"]
+            with mock.patch.object(rw.forward_test, "record", return_value="h") as record:
+                rw.forward_test_commit(self.ctx(deviations=notes))
+            memo = record.call_args.kwargs["memo"]
+        finally:
+            io.ROOT = saved
+            shutil.rmtree(root, ignore_errors=True)
+        for leaked in (str(root), root.as_posix(), "someone", "Users", "/home/"):
+            self.assertNotIn(leaked, memo)
+        self.assertIn("<저장소>", memo)
+        self.assertIn("<로컬 경로>", memo)
+        self.assertIn("기준 src/events/alerts.py와 2026-11-20 15:30은 그대로", memo)
+
     def test_no_memo_without_deviations(self):
         for memory in ({}, {"deviations": []}):
             with self.subTest(memory=memory), mock.patch.object(rw.forward_test, "record", return_value="h") as record:
