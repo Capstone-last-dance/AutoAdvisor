@@ -7,7 +7,8 @@
 - 같은 종목·유형의 후보가 진행 중인 쿨다운 안에 또 나오면 v1은 같은 사건으로 보고 종료일을 늘리지 않는다
 - 신호일 t에는 `available_at < t 15:30 KST`인 경보만 쓴다 (DEC-09)
 - 체결일 d의 쿨다운·청산에는 d 15:30 KST 전에 만들어진 경보(`generated_at`)만 쓴다 (DEC-32). 나중에 채운 경보가
-  지난 체결 재생을 바꾸지 않게 하는 규칙이다. 백테스트 파일은 `generated_at = available_at`이라 영향이 없다
+  지난 체결 재생을 바꾸지 않게 하는 규칙이다. 늦게 만든 경보는 생성 뒤 첫 체결일에 청산하고 남은 쿨다운을 적용한다.
+  백테스트 파일은 `generated_at = available_at`이라 영향이 없다
 
 종목 연결: OpenDART 목록의 종목코드가 A의 `tickers`에 있고, 접수일이 그 상장 구간 안이며,
 입력 전체에서 회사코드와 종목코드가 1:1일 때만 붙인다 (DEC-09 (2)). 일간 실행의 입력 전체는 그날 공시다.
@@ -172,50 +173,45 @@ class AlertBook:
         self.cooldown_days = int(cooldown_days)
         self.cutoff = pd.Timedelta(hours=int(cutoff_time[:2]), minutes=int(cutoff_time[3:]))
         rows = alerts.sort_values(["available_at", "rcept_no"]) if len(alerts) else alerts
-        self.available = pd.DatetimeIndex(rows["available_at"]).tz_convert(KST) if len(rows) else None
+        empty_times = pd.DatetimeIndex([], tz=KST)
+        self.available = pd.DatetimeIndex(rows["available_at"]).tz_convert(KST) if len(rows) else empty_times
+        self.generated = pd.DatetimeIndex(rows["generated_at"]).tz_convert(KST) if len(rows) else empty_times
         self.tickers = rows["ticker"].astype(str).to_numpy() if len(rows) else np.array([], dtype=object)
         self.start = np.array([_next_day_index(self.days, _kst_date(a)) for a in rows["available_at"]], dtype=int)
         self.end = self.start + self.cooldown_days - 1
-        self.applied_from = self._applied_from(rows)
-
-    def _applied_from(self, rows: pd.DataFrame) -> np.ndarray:
-        """경보별로 적용할 수 있는 첫 거래일 위치. 그 거래일 15:30 전에 만들어진 경보여야 한다 (DEC-32)."""
-        if not len(rows):
-            return np.zeros(0, dtype=int)
+        # 경보를 적용할 수 있는 첫 체결일은 생성 시각보다 마감이 늦은 첫 거래일이다 (DEC-32).
         closes = self.days.tz_localize(KST) + self.cutoff
-        return np.asarray(closes.searchsorted(pd.DatetimeIndex(rows["generated_at"]).tz_convert(KST), side="right"))
+        self.applied_from = np.asarray(closes.searchsorted(self.generated, side="right"))
 
     def _cutoff_at(self, t: str) -> pd.Timestamp:
         return pd.Timestamp(t).tz_localize(KST) + self.cutoff
 
-    def _known(self, t: str) -> np.ndarray:
-        if self.available is None:
-            return np.zeros(0, dtype=bool)
-        return np.asarray(self.available < self._cutoff_at(t))
-
     def cooldown_at(self, t: str) -> set[str]:
-        """신호일 t의 다음 거래일에 신규 진입이 금지된 종목. t 15:30 전에 이용 가능한 경보만 쓴다."""
+        """t의 15:30 전에 이용 가능하고 생성된 경보로 다음 거래일의 진입 금지 종목을 계산한다."""
+        cutoff = self._cutoff_at(t)
         execution = _next_day_index(self.days, pd.Timestamp(t))
-        active = self._known(t) & (self.start <= execution) & (execution <= self.end) & (self.applied_from <= execution)
+        known = (self.available < cutoff) & (self.generated < cutoff)
+        active = known & (self.start <= execution) & (execution <= self.end)
         return set(self.tickers[active])
 
     def engine_alerts(self, first_signal: str, t: str) -> tuple[dict[str, frozenset[str]], dict[str, frozenset[str]]]:
         """(cooldowns, event_liquidations). 첫 신호일 다음 날부터 t까지 거래일별 종목 집합이다.
 
-        체결일 d에는 d 15:30 전에 만들어진 경보만 넣는다. 늦게 만들어진 경보는 그 뒤 체결일부터 쿨다운만 적용하고,
-        이미 지난 청산일로 되돌아가 청산하지 않는다 (DEC-32).
+        체결일 d에는 d 15:30 전에 만들어진 경보만 넣는다. 늦게 만들어진 경보는 생성 뒤 첫 체결일부터 적용하고,
+        그날이 아직 쿨다운 기간이면 그날 청산한다. 이미 지난 체결일로 되돌아가지는 않는다 (DEC-32).
         """
         first = _next_day_index(self.days, pd.Timestamp(first_signal))
         last = int(self.days.searchsorted(pd.Timestamp(t).normalize(), side="right")) - 1
-        known = self._known(t)
+        known = self.available < self._cutoff_at(t)
         cooldowns: dict[str, set[str]] = {}
         liquidations: dict[str, set[str]] = {}
         for i, ticker in zip(np.flatnonzero(known), self.tickers[known]):
             start, end, applied = int(self.start[i]), int(self.end[i]), int(self.applied_from[i])
             for position in range(max(start, first, applied), min(end, last) + 1):
                 cooldowns.setdefault(self._key(position), set()).add(ticker)
-            if first <= start <= last and applied <= start:
-                liquidations.setdefault(self._key(start), set()).add(ticker)
+            exit_day = max(start, applied)
+            if exit_day <= end and first <= exit_day <= last:
+                liquidations.setdefault(self._key(exit_day), set()).add(ticker)
         return ({day: frozenset(names) for day, names in cooldowns.items()},
                 {day: frozenset(names) for day, names in liquidations.items()})
 
@@ -250,7 +246,7 @@ def read_alerts(run_id: str | None = None) -> pd.DataFrame:
 
 def _require_started() -> None:
     if not io.list_dates("alerts"):
-        raise AlertsNotStarted(f"{io.ROOT / 'alerts'}에 날짜별 경보 파일이 없다. M9 경보 생성을 먼저 실행한다")
+        raise AlertsNotStarted("날짜별 경보 파일이 없다. M9 경보 생성을 먼저 실행한다")
 
 
 def _read_dates(dates: Sequence[str]) -> pd.DataFrame:
@@ -335,16 +331,17 @@ def daily_alerts(d: str) -> pd.DataFrame:
     events = load_prereg()["events"]
     days = load_trading_days()
     history = _history_before(day, days, int(events["cooldown_trading_days"]))
-    built = build_alerts(_collected_disclosures(day, now), io.read_table("tickers"), events, days,
-                         history=history, generated_at=now)
-    return _keep_first_generated(built.alerts, day.strftime("%Y-%m-%d"))
+    alerts = build_alerts(_collected_disclosures(day, now), io.read_table("tickers"), events, days,
+                          history=history).alerts
+    alerts["generated_at"] = _now_kst()
+    return _keep_first_generated(alerts, day.strftime("%Y-%m-%d"))
 
 
 def backfill_alert_files(first: str, last: str, *, data_raw: Path | None = None) -> list[str]:
     """D-06 시작 전 달력일의 `alerts/{d}.parquet`를 보관된 공시 원본으로 채운다 (PM 운영용).
 
     공시 전체 이력으로 판정하므로 같은 사건 처리가 백테스트와 같다. 경보가 없는 날은 0행 파일을 쓰고,
-    `generated_at`은 실제 실행 시각이다. 수집이 끝나지 않은 날짜가 있거나 `last` 다음 날 08:00 KST 전이면
+    `generated_at`은 경보 생성이 끝난 시각이다. 수집이 끝나지 않은 날짜가 있거나 `last` 다음 날 08:00 KST 전이면
     파일을 하나도 쓰지 않는다.
     """
     from src.data.disclosures import build_disclosures
@@ -363,7 +360,8 @@ def backfill_alert_files(first: str, last: str, *, data_raw: Path | None = None)
     _require_windows_complete(built.windows, dates)
     frame = attach_stock_codes(built.df, built.observations)
     frame = frame[_kst_days(frame["available_at"]) <= end].reset_index(drop=True)
-    alerts = build_alerts(frame, tickers, load_prereg()["events"], load_trading_days(), generated_at=now).alerts
+    alerts = build_alerts(frame, tickers, load_prereg()["events"], load_trading_days()).alerts
+    alerts["generated_at"] = _now_kst()
     written = []
     for date in dates:
         part = alerts[alerts["date"] == pd.Timestamp(date)].reset_index(drop=True)

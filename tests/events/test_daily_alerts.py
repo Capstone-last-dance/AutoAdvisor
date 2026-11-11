@@ -79,16 +79,26 @@ class TestGeneratedAt:
     def test_one_second_before_cutoff_counts(self):
         assert self.schedule("2026-01-12 15:29:59")[1] == {"2026-01-12": frozenset({"000001"})}
 
-    def test_exact_cutoff_is_too_late(self):
+    def test_exact_cutoff_moves_to_next_execution_day(self):
         cooldowns, liquidations = self.schedule("2026-01-12 15:30:00")
-        assert liquidations == {}
+        assert liquidations == {"2026-01-13": frozenset({"000001"})}
         assert "2026-01-12" not in cooldowns
         assert "000001" in cooldowns["2026-01-13"]
 
-    def test_late_alert_cools_down_later_days_only(self):
+    def test_late_alert_liquidates_on_first_execution_day_after_generation(self):
         cooldowns, liquidations = self.schedule("2026-01-14 09:00:00")
-        assert liquidations == {}
+        assert liquidations == {"2026-01-14": frozenset({"000001"})}
         assert sorted(cooldowns) == ["2026-01-14", "2026-01-15", "2026-01-16"]
+
+    @pytest.mark.parametrize(("generated", "expected"), [
+        ("2026-02-06 15:29:59", {"2026-02-06": frozenset({"000001"})}),   # 쿨다운 마지막 날
+        ("2026-02-06 15:30:00", {}),                                       # 쿨다운이 끝난 뒤
+    ])
+    def test_no_liquidation_after_cooldown_ended(self, generated, expected):
+        book = AlertBook(stamped(self.AVAILABLE, generated), DAYS, COOLDOWN)
+        cooldowns, liquidations = book.engine_alerts("2026-01-05", "2026-02-20")
+        assert liquidations == expected
+        assert sorted(cooldowns) == sorted(expected)
 
     def test_backfilled_after_settlement_does_not_change_past_replay(self):
         before = AlertBook(EMPTY, DAYS, COOLDOWN).engine_alerts("2026-01-09", "2026-01-12")
@@ -101,11 +111,15 @@ class TestGeneratedAt:
         assert liquidations == {"2026-01-12": frozenset({"000001"})}
         assert "2026-01-12" in cooldowns
 
-    def test_cooldown_at_uses_the_same_rule(self):
-        late = AlertBook(stamped(self.AVAILABLE, "2026-01-13 16:00:00"), DAYS, COOLDOWN)
-        early = AlertBook(stamped(self.AVAILABLE, "2026-01-13 15:00:00"), DAYS, COOLDOWN)
-        assert late.cooldown_at("2026-01-12") == set()
-        assert early.cooldown_at("2026-01-12") == {"000001"}
+    @pytest.mark.parametrize(("generated", "expected"), [
+        ("2026-01-12 15:29:59", {"000001"}),
+        ("2026-01-12 15:30:00", set()),
+        ("2026-01-12 17:00:00", set()),
+        ("2026-01-13 15:00:00", set()),
+    ])
+    def test_cooldown_at_uses_only_alerts_generated_before_signal_cutoff(self, generated, expected):
+        book = AlertBook(stamped(self.AVAILABLE, generated), DAYS, COOLDOWN)
+        assert book.cooldown_at("2026-01-12") == expected
 
     def test_build_defaults_to_available_at(self):
         built = build_alerts(disclosures([("1", "2026-01-06", "C1", "000001", TITLE)]), TICKERS, EVENTS, DAYS)
@@ -170,8 +184,9 @@ class TestForwardFiles:
         assert not isinstance(caught.value, AlertsNotStarted)
 
     def test_no_files_at_all_is_not_started(self, forward):
-        with pytest.raises(AlertsNotStarted):
+        with pytest.raises(AlertsNotStarted) as caught:
             cooldown_at(SIGNAL)
+        assert str(forward) not in str(caught.value)
         with pytest.raises(AlertsNotStarted):
             engine_alerts(SIGNAL, SIGNAL)
 
@@ -199,12 +214,21 @@ class TestDailyAlerts:
         assert out.empty and list(out.columns) == ALERT_COLUMNS
         io.validate("alerts", out)
 
-    def test_alert_has_run_time(self, forward, monkeypatch):
+    def test_alert_is_stamped_after_collection_and_build(self, forward, monkeypatch):
         self.history()
         collected(monkeypatch, [("1", self.DAY, "C1", "000001", TITLE)])
+        built_at = NOW + pd.Timedelta(minutes=1)
+        build = m9.build_alerts
+
+        def finish_build(*args, **kwargs):
+            result = build(*args, **kwargs)
+            monkeypatch.setattr(m9, "_now_kst", lambda: built_at)
+            return result
+
+        monkeypatch.setattr(m9, "build_alerts", finish_build)
         out = daily_alerts(self.DAY)
         assert list(out["rcept_no"]) == ["1"]
-        assert out.loc[0, "generated_at"] == NOW
+        assert out.loc[0, "generated_at"] == built_at
         io.write_table("alerts", out, date=self.DAY)
 
     def test_before_eight_next_day_is_not_collected(self, forward, monkeypatch):

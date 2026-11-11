@@ -15,7 +15,7 @@
 | PM-07 | PM 장지원 | 11/9 | 대기 | | |
 | PM-08 | PM 장지원 | 11/16 | 대기 | | |
 | PM-09 | PM 장지원 | 11/16 | 대기 | | |
-| PM-10 | PM 장지원 | 11/16 | 진행 중 | src/events/; [PR #34](https://github.com/Capstone-last-dance/AutoAdvisor/pull/34) | M9 v1과 일간 경보 입력 `daily_alerts`, `generated_at` 재생 규칙(DEC-32·33) 구현. 완료 기준 (2) 유형별 10건 수작업 점검, (3) 백테스트 청산 분포, T1·T3·T6 원문 판정은 남음 |
+| PM-10 | PM 장지원 | 11/16 | 진행 중 | src/events/; [PR #34](https://github.com/Capstone-last-dance/AutoAdvisor/pull/34)·[PR #51](https://github.com/Capstone-last-dance/AutoAdvisor/pull/51) | 일간 경보 입력과 재생 규칙(DEC-32·33) 구현. #51에 신호일 생성 시각 제한(C 리뷰), `AlertsNotStarted` 경로 제거(D 리뷰), 늦은 경보의 생성 뒤 첫 체결일 청산(DEC-32 정정)을 반영했고 C 재검토가 필요하다. 유형별 10건 수작업 점검, 백테스트 청산 분포, T1·T3·T6 원문 판정은 남음 |
 | PM-11 | PM 장지원 | 12/4 | 대기 | | |
 | PM-12 | PM 장지원 | 12/7 | 대기 | | |
 | PM-13 | PM 장지원 | 12/11 | 대기 | | |
