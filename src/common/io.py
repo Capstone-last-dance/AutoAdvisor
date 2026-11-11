@@ -327,6 +327,30 @@ def write_evidence(date: str, records: list[dict], stub: bool = False) -> Path:
     return path
 
 
+def list_dates(name: str) -> list[str]:
+    """신호일별 파일이 있는 날짜를 오름차순으로 돌려준다. name: DATED_FOLDERS의 이름 또는 evidence."""
+    folder = EVIDENCE_FOLDER if name == "evidence" else DATED_FOLDERS[name]
+    pattern = "*.jsonl" if name == "evidence" else "*.parquet"
+    stems = (p.stem for p in (ROOT / folder).glob(pattern))
+    return sorted(s for s in stems if re.fullmatch(r"\d{4}-\d{2}-\d{2}", s))
+
+
+def file_mtime(name: str, date: str | None = None) -> float | None:
+    """파일 수정 시각(유닉스 시간). 파일이 없으면 None. name에 evidence도 받는다."""
+    rel = _evidence_path(date) if name == "evidence" else _relative_path(name, date, None)
+    path = ROOT / rel
+    return path.stat().st_mtime if path.is_file() else None
+
+
+def list_final_reports() -> list[str]:
+    """reports/final/의 확정 결과 파일 이름. .gitkeep은 뺀다."""
+    folder = ROOT / "reports" / "final"
+    if not folder.is_dir():
+        return []
+    return sorted(p.relative_to(folder).as_posix() for p in folder.rglob("*")
+                  if p.is_file() and p.name != ".gitkeep")
+
+
 # ---------------------------------------------------------------------------
 # 경로
 # ---------------------------------------------------------------------------

@@ -11,6 +11,7 @@ A의 ``delisted.parquet``에 있는 ``delist_date``가 마지막 가격일의 �
 from __future__ import annotations
 
 from collections.abc import Mapping
+from copy import copy
 from dataclasses import dataclass
 from math import isfinite
 
@@ -27,6 +28,17 @@ class EngineState:
     cash: float
     asof_date: str | None = None
     pending_liquidations: frozenset[str] = frozenset()
+
+
+@dataclass(frozen=True)
+class SignalCloseResult:
+    """다음 신호일 종가까지의 forward 재생 결과 (다음 체결일 가격 미사용)."""
+
+    nav_start: float
+    nav_end: float
+    weights_obs: Mapping[str, float]
+    cash_obs: float
+    state: EngineState
 
 
 class ExecutionEngine:
@@ -109,6 +121,26 @@ class ExecutionEngine:
     def initial_state(self) -> EngineState:
         return EngineState({}, 1.0)
 
+    def with_alert_schedule(
+        self,
+        cooldowns: Mapping[str, frozenset[str]],
+        event_liquidations: Mapping[str, frozenset[str]],
+    ) -> ExecutionEngine:
+        """같은 가격·비용 엔진에 M9 일정을 붙인 독립 실행 인스턴스."""
+        schedules = (cooldowns, event_liquidations)
+        for schedule in schedules:
+            if any(day not in self.day_index for day in schedule):
+                raise ValueError("M9 일정에 거래일이 아닌 날짜가 있습니다")
+            if any(not set(names).issubset(self.col_index) for names in schedule.values()):
+                raise ValueError("M9 일정에 알 수 없는 종목코드가 있습니다")
+        result = copy(self)
+        result.cooldowns = {day: frozenset(names) for day, names in cooldowns.items()}
+        result.events = {day: frozenset(names) for day, names in event_liquidations.items()}
+        result.ledger = []
+        result.rebalance_count = 0
+        result.scaled_rebalance_count = 0
+        return result
+
     def _prices(self, day_index: int, holdings: Mapping[str, float]) -> dict[str, float]:
         out = {}
         for ticker in holdings:
@@ -164,18 +196,42 @@ class ExecutionEngine:
         self, state: EngineState, targets: Mapping[str, float], signal_date: str,
         next_signal_date: str,
     ) -> PeriodResult:
+        """다음 신호일의 다음 체결일 종가까지 평가한다 (M4·M5)."""
+        return self._run_interval(state, targets, signal_date, next_signal_date,
+                                  stop_at_signal_close=False)
+
+    def run_to_signal_close(
+        self, state: EngineState, targets: Mapping[str, float], signal_date: str,
+        next_signal_date: str,
+    ) -> SignalCloseResult:
+        """t+1 종가에 체결하고 t′ 종가의 실제 보유와 상태를 반환한다.
+
+        forward test에서는 첫 신호일에 현금 100%로 시작하고, 이후 이 함수가
+        반환한 상태를 다음 호출에 넘긴다. t′+1 가격은 필요하지 않다.
+        """
+        result = self._run_interval(state, targets, signal_date, next_signal_date,
+                                    stop_at_signal_close=True)
+        return SignalCloseResult(result.nav_start, result.nav_end, result.weights_obs,
+                                 result.cash_obs, result.state)
+
+    def _run_interval(
+        self, state: EngineState, targets: Mapping[str, float], signal_date: str,
+        next_signal_date: str, *, stop_at_signal_close: bool,
+    ) -> PeriodResult:
         if signal_date not in self.day_index or next_signal_date not in self.day_index:
             raise ValueError("신호일은 거래일 목록에 있어야 합니다")
         signal_i, next_i = self.day_index[signal_date], self.day_index[next_signal_date]
-        if next_i <= signal_i or next_i + 1 >= len(self.days):
-            raise ValueError("다음 신호일 뒤에 체결일이 있어야 합니다")
-        if state.asof_date is not None and state.asof_date != self.days[signal_i + 1]:
-            raise ValueError("상태의 평가일과 다음 체결일이 일치하지 않습니다")
+        if next_i <= signal_i or (not stop_at_signal_close and next_i + 1 >= len(self.days)):
+            raise ValueError("평가 종료일이 거래일 목록에 있어야 합니다")
+        expected_asof = signal_date if stop_at_signal_close else self.days[signal_i + 1]
+        if state.asof_date is not None and state.asof_date != expected_asof:
+            raise ValueError(f"상태의 평가일은 {expected_asof}이어야 합니다")
         if any(ticker not in self.col_index for ticker in set(targets) | set(state.holdings)):
             raise ValueError("알 수 없는 종목코드가 있습니다")
         if any(not isfinite(weight) or weight < 0 for weight in targets.values()) or sum(targets.values()) > 1 + 1e-9:
             raise ValueError("목표 비중은 음수가 아니고 합이 1 이하여야 합니다")
-        first_i, end_i = signal_i + 1, next_i + 1
+        first_i = signal_i + 1
+        end_i = next_i if stop_at_signal_close else next_i + 1
         holdings, cash = dict(state.holdings), float(state.cash)
         pending = set(state.pending_liquidations)
         pending_rebalance_sells: dict[str, float] = {}
@@ -194,7 +250,7 @@ class ExecutionEngine:
             pending.update(self.events.get(day, frozenset()))
             # 다음 체결일은 이 호출에서 평가만 한다. 새 목표와 같은 날의
             # 청산은 다음 호출의 리밸런싱보다 먼저 처리된다.
-            if i == end_i:
+            if i == end_i and not stop_at_signal_close:
                 nav_max = max(nav_max, nav_before)
                 if self.record_ledger:
                     self.ledger.append({"date": day, "nav_before": nav_before, "nav_after": nav_before,

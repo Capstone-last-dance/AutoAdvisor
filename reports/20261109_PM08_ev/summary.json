@@ -1,0 +1,17 @@
+{
+  "signal_dates": 826,
+  "first": "2011-01-07",
+  "last": "2026-11-06",
+  "rows": 348678,
+  "dropped_signal_dates": [],
+  "coverage_end": "2026-11-08",
+  "raw_runs": [
+    "20261029_PM_disclosures_full",
+    "20261109_PM_disclosures_backfill"
+  ],
+  "independent_diff": 0,
+  "ones": 116148,
+  "leak_identical": "20/20",
+  "base_commit": "d4c4f65edbe146b043c1280801d2dfda03ff0998",
+  "seed": 20261109
+}
