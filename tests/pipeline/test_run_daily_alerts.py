@@ -13,6 +13,7 @@ from unittest import mock
 import pandas as pd
 
 from src.common import io
+from src.events.alerts import AlertsNotCollected, AlertsNotStarted
 from src.pipeline import run_daily_alerts as rda
 
 SAT = "2026-11-14"  # 토요일도 달력일로 돌린다
@@ -30,10 +31,6 @@ def alerts_frame(day: str, n: int) -> pd.DataFrame:
         "available_at": at,
         "generated_at": at,
     })
-
-
-class AlertsNotCollected(RuntimeError):
-    """PM M9의 전용 예외를 흉내 낸다 (이름으로 구분한다)."""
 
 
 class TempRootTest(unittest.TestCase):
@@ -96,11 +93,18 @@ class RunTest(TempRootTest):
         self.assertEqual(rda.run(SAT, lambda d: alerts_frame(d, 1)), 0)
         self.assertEqual(len(io.read_table("alerts", date=SAT)), 1)
 
-    def test_missing_m9_function_fails(self):
-        with mock.patch.object(rda, "M9_FUNCTION", "no_such_function"):
-            self.assertEqual(rda.run(SAT), 1)
-        self.assertIn("DailyAlertsUnavailable", self.log_text())
+    def test_not_started_is_not_collected(self):
+        def fn(d):
+            raise AlertsNotStarted("경보 파일이 하나도 없다")
+
+        self.assertEqual(rda.run(SAT, fn), 1)
         self.assertFalse(self.path().exists())
+        self.assertIn("미수집", self.log_text())
+
+    def test_uses_m9_daily_alerts(self):
+        with mock.patch.object(rda.m9, "daily_alerts", side_effect=lambda d: alerts_frame(d, 1)) as fn:
+            self.assertEqual(rda.run(SAT), 0)
+        fn.assert_called_once_with(SAT)
 
 
 class DateTest(TempRootTest):
