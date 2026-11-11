@@ -375,6 +375,10 @@ def main(argv: Sequence[str] | None = None) -> Path:
     args = ap.parse_args(argv)
     if not RUN_ID_RE.match(args.run_id):
         raise SystemExit(f"run_id는 '{{YYYYMMDD}}_B_{{짧은설명}}' 형식이어야 한다: {args.run_id!r}")
+    if args.signals_run_id is not None and args.label_end_dates is None:
+        # A 폴드별 신호는 C 실제 라벨 종료일 purge 기준이다. 명목 purge로는 신호일이 맞지 않는다 (A #47 리뷰)
+        raise SystemExit("--signals-run-id(A ML 신호)를 쓰면 --label-end-dates(C end_dates.parquet)도 줘야 한다 "
+                         "(DEC-09 (3): A·B·C가 같은 실제 라벨 종료일 purge 신호일을 쓴다)")
     out = ROOT / "reports" / args.run_id
     if out.exists():
         raise SystemExit(f"{out}가 이미 있다. 결과를 덮어쓰지 않는다 (R-11)")

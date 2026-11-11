@@ -377,3 +377,13 @@ def test_main_b07_stops_when_a_signals_use_other_dates(synthetic, cfg, tmp_path,
         report.main(["--run-id", "20261111_B_wf_y2016", "--fold", "2016", "--config", str(config),
                      "--signals-run-id", "20261110_A_bad", "--label-end-dates", str(tmp_path / "end_dates.parquet")])
     assert not (tmp_path / "reports" / "20261111_B_wf_y2016").exists()
+
+
+def test_main_b07_needs_actual_label_end_dates(synthetic, cfg, tmp_path, monkeypatch):
+    """A ML 신호를 명목 purge로 돌리지 않는다 (A #47 리뷰, DEC-09 (3)). 표를 읽기 전에 멈춘다."""
+    config, dates, kept = _main_setup(synthetic, cfg, tmp_path, monkeypatch, run_id="20261111_B_wf_y2016")
+    monkeypatch.setattr(report.io, "read_table", lambda *a, **k: pytest.fail("표를 읽었다"))
+    with pytest.raises(SystemExit, match="--label-end-dates"):
+        report.main(["--run-id", "20261111_B_wf_y2016", "--fold", "2016", "--config", str(config),
+                     "--signals-run-id", "20261110_A_rlsig"])
+    assert not (tmp_path / "reports" / "20261111_B_wf_y2016").exists()
