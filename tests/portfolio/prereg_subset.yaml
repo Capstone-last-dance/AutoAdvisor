@@ -14,6 +14,12 @@ data:
   raw_price_column: "close_raw"    # 동전주 판정 전용
   investor_flow_lag_days: 1
 
+labels:
+  horizons_days: [1, 5, 20]
+  main_horizon_days: 20
+  crash_excess_threshold: -0.15
+  rank_method: "pct_average"
+
 costs:
   sell_tax: 0.0020
   commission_per_side: 0.00015
