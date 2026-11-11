@@ -16,6 +16,7 @@ import datetime as dt
 import json
 import os
 import re
+import stat
 import tempfile
 from dataclasses import dataclass
 from pathlib import Path
@@ -558,17 +559,37 @@ def _check_labels_rows(df: pd.DataFrame) -> list[str]:
 
 
 def _replace_atomically(path: Path, save) -> None:
-    """같은 폴더의 임시 파일에 저장을 마친 뒤 대상 파일을 바꾼다. 저장 중 실패하면 기존 파일은 그대로다."""
+    """같은 폴더의 임시 파일에 저장을 마친 뒤 대상 파일을 바꾼다. 저장 중 실패하면 기존 파일은 그대로다.
+
+    권한은 기존 파일이 있으면 그 권한, 없으면 일반 파일 기본값(0666 & ~umask)이다 (mkstemp는 0600으로 만든다).
+    교체 전에 임시 파일을, POSIX에서는 교체 뒤 폴더도 디스크에 반영해 전원이 끊겨도 파일이 깨지지 않게 한다.
+    """
     path.parent.mkdir(parents=True, exist_ok=True)
+    mode = stat.S_IMODE(path.stat().st_mode) if path.exists() else _default_file_mode()
     fd, tmp_name = tempfile.mkstemp(prefix=f".{path.name}.", suffix=".tmp", dir=path.parent)
     os.close(fd)
     tmp = Path(tmp_name)
     try:
         save(tmp)
+        os.chmod(tmp, mode)
+        with open(tmp, "r+b") as f:
+            os.fsync(f.fileno())
         os.replace(tmp, path)
     except BaseException:
         tmp.unlink(missing_ok=True)
         raise
+    if os.name == "posix":
+        dir_fd = os.open(path.parent, os.O_RDONLY)
+        try:
+            os.fsync(dir_fd)
+        finally:
+            os.close(dir_fd)
+
+
+def _default_file_mode() -> int:
+    mask = os.umask(0)
+    os.umask(mask)
+    return 0o666 & ~mask
 
 
 def _check_available_after_receipt(df: pd.DataFrame, received: str) -> list[str]:

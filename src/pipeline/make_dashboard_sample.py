@@ -17,6 +17,7 @@ import numpy as np
 import pandas as pd
 
 from src.common import io
+from src.pipeline.run_weekly import empty_frame
 
 KST = "Asia/Seoul"
 SIGNAL_DATES = ("2026-11-06", "2026-11-13")
@@ -79,8 +80,12 @@ def _write_all() -> None:
         "regime_mc": np.zeros(6, dtype="int8"),
     }), date=date)
 
+    # 경보가 없는 날도 0행 파일을 둔다. 파일 없음은 미수집이다 (D-06)
     alert_day = "2026-11-11"
-    rcept = pd.to_datetime([f"{alert_day} 16:20:00", pd.NaT]).tz_localize(KST)
+    for day in pd.date_range(days[0], SIGNAL_DATES[-1], freq="D").strftime("%Y-%m-%d"):
+        if day != alert_day:
+            io.write_table("alerts", empty_frame("alerts"), date=day)
+    rcept =pd.to_datetime([f"{alert_day} 16:20:00", pd.NaT]).tz_localize(KST)
     io.write_table("alerts", pd.DataFrame({
         "date": [pd.Timestamp(alert_day)] * 2,
         "ticker": [TICKERS[6], TICKERS[7]],

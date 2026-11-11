@@ -28,6 +28,7 @@ from zoneinfo import ZoneInfo
 import pandas as pd
 
 from src.common import io
+from src.pipeline import runlog
 
 KST = ZoneInfo("Asia/Seoul")
 M9_MODULE = "src.events.alerts"
@@ -76,27 +77,11 @@ def run(date: str, daily_alerts: Callable[[str], pd.DataFrame] | None = None) ->
             log.error("실패 (%s: %s). 파일을 쓰지 않았다\n%s", type(exc).__name__, exc, traceback.format_exc())
         return 1
     finally:
-        _close_logger(log)
+        runlog.close_log(log)
 
 
 def _setup_logger(date: str) -> logging.Logger:
-    log_path = io.ROOT / "logs" / f"alerts_{date}.log"
-    log_path.parent.mkdir(parents=True, exist_ok=True)
-    log = logging.getLogger(f"run_daily_alerts.{date}")
-    log.setLevel(logging.INFO)
-    log.propagate = False
-    _close_logger(log)
-    fmt = logging.Formatter("%(asctime)s %(levelname)s %(message)s")
-    for handler in (logging.FileHandler(log_path, encoding="utf-8"), logging.StreamHandler(sys.stderr)):
-        handler.setFormatter(fmt)
-        log.addHandler(handler)
-    return log
-
-
-def _close_logger(log: logging.Logger) -> None:
-    for handler in list(log.handlers):
-        handler.close()
-        log.removeHandler(handler)
+    return runlog.open_log(f"run_daily_alerts.{date}", io.ROOT / "logs" / f"alerts_{date}.log")
 
 
 def main(argv: Sequence[str] | None = None) -> int:

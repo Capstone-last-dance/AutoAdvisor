@@ -5,6 +5,7 @@
 """
 
 import datetime as dt
+import os
 import shutil
 import tempfile
 import unittest
@@ -156,6 +157,19 @@ class RoundTripTest(TempRootTest):
         self.assertEqual(sorted(p.name for p in path.parent.iterdir()), [path.name])
         io.write_table("alerts", sample("alerts").iloc[:1], date=DAY)             # 성공하면 교체
         self.assertEqual(len(io.read_table("alerts", date=DAY)), 1)
+
+    @unittest.skipUnless(os.name == "posix", "POSIX 권한")
+    def test_write_keeps_normal_permissions(self):
+        # mkstemp의 0600이 남지 않는다. 새 파일은 umask 기본값, 기존 파일은 그 권한을 유지한다
+        old = os.umask(0o022)
+        try:
+            path = io.write_table("alerts", sample("alerts"), date=DAY)
+            self.assertEqual(path.stat().st_mode & 0o777, 0o644)
+            os.chmod(path, 0o664)
+            io.write_table("alerts", sample("alerts"), date=DAY)
+            self.assertEqual(path.stat().st_mode & 0o777, 0o664)
+        finally:
+            os.umask(old)
 
     def test_failed_evidence_write_keeps_old_file(self):
         path = io.write_evidence(DAY, [])
