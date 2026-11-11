@@ -59,13 +59,22 @@ def vol_target_metrics(bm_close: pd.Series, cfg: Mapping[str, Any]) -> dict[str,
 
 
 def _git_commit() -> str:
-    """HEAD 커밋 해시와, 커밋되지 않은 추적 파일 목록 (R-10)."""
+    """HEAD 커밋 해시와 커밋되지 않은 파일 목록 (R-10). 추적 파일의 변경은 'uncommitted:', git에 아직 없는 새 파일
+    (.gitignore 대상 제외)은 'untracked:'로 적는다. 결과 폴더를 만들기 전에 불러야 그 폴더가 목록에 들지 않는다."""
     git = ["git", "-C", str(ROOT)]
     head = subprocess.run([*git, "rev-parse", "HEAD"], capture_output=True, text=True, check=True).stdout.strip()
-    dirty = subprocess.run(
-        [*git, "status", "--porcelain", "--untracked-files=no"], capture_output=True, text=True, check=True
-    ).stdout.splitlines()
-    lines = [head] + [f"uncommitted: {d[3:]}" for d in dirty]
+    # -z: 경로를 따옴표·이스케이프 없이 NUL로 나눈다. 이름 바꾸기(R)·복사(C)는 옛 경로가 한 칸 더 붙는다
+    entries = iter(subprocess.run(
+        [*git, "status", "--porcelain", "-z", "--untracked-files=all"],
+        capture_output=True, text=True, check=True, encoding="utf-8",
+    ).stdout.split("\0"))
+    lines = [head]
+    for e in entries:
+        if not e:
+            continue
+        lines.append(f"{'untracked' if e.startswith('??') else 'uncommitted'}: {e[3:]}")
+        if e[0] in "RC":
+            next(entries, None)
     return "\n".join(lines) + "\n"
 
 
@@ -83,9 +92,10 @@ def main(argv: Sequence[str] | None = None) -> Path:
     cfg_path = Path(args.config)
     metrics = {"run_id": args.run_id, "task": "B-02", **vol_target_metrics(load_kospi200(), load_prereg(cfg_path))}
 
+    commit = _git_commit()  # 결과 폴더를 만들기 전에 (R-10)
     out.mkdir(parents=True)
     shutil.copyfile(cfg_path, out / "config.yaml")
-    (out / "git_commit.txt").write_text(_git_commit(), encoding="utf-8")
+    (out / "git_commit.txt").write_text(commit, encoding="utf-8")
     (out / "metrics.json").write_text(json.dumps(metrics, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     print(f"vol_target_annual = {metrics['vol_target_annual']:.6f} → {out}")
     return out

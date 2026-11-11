@@ -194,3 +194,40 @@ def test_reused_ticker_old_delisting_does_not_remove_new_company_labels(ticker):
     assert old.iloc[0].ret == pytest.approx(-0.5)
     assert set(new.h) == {1, 5}
     assert new.ret.tolist() == pytest.approx([0.0, 0.0])
+
+
+def test_dec28_separate_old_delisting_and_current_company_exit():
+    days = [stamp.date() for stamp in pd.bdate_range("2025-01-02", periods=18)]
+    ticker = "101970"
+    active = list(range(5)) + list(range(10, 16))
+    prices = pd.DataFrame([
+        {"date": days[i], "ticker": ticker,
+         "close": 50.0 if i == 4 else 80.0 if i >= 10 else 100.0,
+         "close_raw": 25.0 if i == 4 else 80.0 if i >= 10 else 50.0}
+        for i in active
+    ])
+    index = pd.DataFrame({"date": days, "index_code": "KOSPI200", "close": 100.0})
+    universe = pd.DataFrame({"date": [days[0], days[10]], "ticker": ticker, "in_universe": True})
+    status = prices[["date", "ticker"]].copy()
+    status["is_halted"] = False
+    old = pd.DataFrame([{"ticker": ticker, "delist_date": days[5], "last_price": 25.0}])
+    current = pd.DataFrame([{"ticker": ticker, "delist_date": days[16], "last_price": 40.0}])
+    result = build_labels(
+        prices=prices, index=index, universe=universe, status=status,
+        delisted=current, delisted_reused=old,
+        trading_days=days, signal_dates=[days[0], days[10]],
+        rules=LabelRules((1, 5), 5, -0.15), policy=POLICY,
+        allow_holdout=False, run_date=days[-1],
+    )
+    old_label = result.labels[(result.labels.date == pd.Timestamp(days[0])) & (result.labels.h == 5)]
+    new_label = result.labels[(result.labels.date == pd.Timestamp(days[10])) & (result.labels.h == 5)]
+    assert old_label.iloc[0].ret == pytest.approx(-0.5)
+    assert new_label.iloc[0].ret == pytest.approx(-0.5)
+    with pytest.raises(ValueError, match="중복"):
+        build_labels(
+            prices=prices, index=index, universe=universe, status=status,
+            delisted=old, delisted_reused=old,
+            trading_days=days, signal_dates=[days[0], days[10]],
+            rules=LabelRules((1, 5), 5, -0.15), policy=POLICY,
+            allow_holdout=False, run_date=days[-1],
+        )
