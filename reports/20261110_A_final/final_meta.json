@@ -1,0 +1,26 @@
+{
+  "h": 20,
+  "actual_end_dates_used": true,
+  "train_signal_dates": 658,
+  "val_signal_dates": 100,
+  "train_dates": [
+    "2011-01-07",
+    "2023-11-10"
+  ],
+  "val_dates": [
+    "2024-01-05",
+    "2025-11-28"
+  ],
+  "gate_params": {
+    "num_leaves": 15,
+    "learning_rate": 0.02,
+    "min_child_samples": 200
+  },
+  "gate_val_auc": 0.6468759474851193,
+  "ranker_params": {
+    "num_leaves": 15,
+    "learning_rate": 0.02,
+    "min_child_samples": 50
+  },
+  "ranker_val_mean_rank_ic": 0.10243800014405675
+}

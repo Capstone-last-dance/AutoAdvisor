@@ -1,3 +1,4 @@
+import json
 import logging
 import math
 from pathlib import Path
@@ -197,3 +198,16 @@ def test_m3_step_rejects_final_model_named_baseline(trained, tmp_path, monkeypat
     ctx = _FakeCtx("2026-11-27", {"features": x, "universe": _universe("2026-11-27", x["ticker"])})
     with pytest.raises(ValueError, match="model_version"):
         m3_step(ctx)
+
+
+def test_save_final_records_weight_hashes(trained, tmp_path):
+    import hashlib
+    from src.models.signals import final_sha256
+    _, _, models = trained
+    d = tmp_path / "final"
+    save_final(models, d)
+    recorded = json.loads((d / "final_sha256.json").read_text(encoding="utf-8"))
+    assert set(recorded) == {"final_gate.txt", "final_ranker.txt", "final_aux.joblib"}   # meta와 해시 파일은 뺀다
+    for name, digest in recorded.items():
+        assert hashlib.sha256((d / name).read_bytes()).hexdigest() == digest
+    assert recorded == final_sha256(d)

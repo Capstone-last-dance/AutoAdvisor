@@ -1,0 +1,109 @@
+{
+  "train": {
+    "h": 20,
+    "actual_end_dates_used": true,
+    "train_signal_dates": 658,
+    "val_signal_dates": 100,
+    "train_dates": [
+      "2011-01-07",
+      "2023-11-10"
+    ],
+    "val_dates": [
+      "2024-01-05",
+      "2025-11-28"
+    ],
+    "gate_params": {
+      "num_leaves": 15,
+      "learning_rate": 0.02,
+      "min_child_samples": 200
+    },
+    "gate_val_auc": 0.6468759474851193,
+    "ranker_params": {
+      "num_leaves": 15,
+      "learning_rate": 0.02,
+      "min_child_samples": 50
+    },
+    "ranker_val_mean_rank_ic": 0.10243800014405675
+  },
+  "signal_checks": [
+    {
+      "date": "2011-01-07",
+      "rows": 372,
+      "U_t": 372,
+      "종목집합 일치": true,
+      "rank 연속": true,
+      "flag": 38,
+      "기대 flag": 38,
+      "crash_prob 범위": [
+        0.058,
+        0.5098
+      ]
+    },
+    {
+      "date": "2015-06-26",
+      "rows": 440,
+      "U_t": 440,
+      "종목집합 일치": true,
+      "rank 연속": true,
+      "flag": 44,
+      "기대 flag": 44,
+      "crash_prob 범위": [
+        0.058,
+        0.5098
+      ]
+    },
+    {
+      "date": "2023-03-31",
+      "rows": 459,
+      "U_t": 459,
+      "종목집합 일치": true,
+      "rank 연속": true,
+      "flag": 46,
+      "기대 flag": 46,
+      "crash_prob 범위": [
+        0.058,
+        0.4318
+      ]
+    },
+    {
+      "date": "2025-12-26",
+      "rows": 473,
+      "U_t": 473,
+      "종목집합 일치": true,
+      "rank 연속": true,
+      "flag": 48,
+      "기대 flag": 48,
+      "crash_prob 범위": [
+        0.058,
+        0.5098
+      ]
+    },
+    {
+      "date": "2026-06-26",
+      "rows": 484,
+      "U_t": 484,
+      "종목집합 일치": true,
+      "rank 연속": true,
+      "flag": 49,
+      "기대 flag": 49,
+      "crash_prob 범위": [
+        0.058,
+        0.3284
+      ]
+    },
+    {
+      "date": "2026-11-06",
+      "rows": 443,
+      "U_t": 443,
+      "종목집합 일치": true,
+      "rank 연속": true,
+      "flag": 45,
+      "기대 flag": 45,
+      "crash_prob 범위": [
+        0.058,
+        0.3112
+      ]
+    }
+  ],
+  "seconds": 44.5
+}
