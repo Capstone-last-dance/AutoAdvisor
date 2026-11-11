@@ -46,6 +46,9 @@ CLAUDE.local.md
 /_sample/
 _stub/*
 !_stub/.gitkeep
+# Hand-off files from other roles (labels, signals, features) stay local
+/files/
+/signals/wf_*.parquet
 
 # Personal PM investigations, collection runs, reviews and execution records
 # Keep team experiment reports and reports/final eligible for Git.
