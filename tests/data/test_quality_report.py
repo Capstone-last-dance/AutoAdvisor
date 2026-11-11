@@ -5,6 +5,7 @@ import pytest
 
 from src.data.quality_report import (SPLIT_CASES, build, check_calendar, check_delisted,
                                      check_reused_delisted, check_splits, check_ticker_format,
+                                     reused_candidates,
                                      check_universe_size, dividend_check, listing_vs_first_price)
 
 DAYS = pd.bdate_range("2010-01-04", "2010-03-31")
@@ -121,3 +122,44 @@ def test_reused_ticker_old_company_is_checked_separately():
     assert r["all_old_company_rows_present"] and r["all_last_price_matches"]
     assert check_reused_delisted(prices, None)["checked"] is False            # 입력이 없으면 미점검
     assert check_reused_delisted(prices, reused.iloc[:0])["checked"] is False
+
+
+def _reused_prices():
+    """재사용 코드 2개(구회사 구간 + 60거래일 넘는 공백 + 신회사 구간)와 보통 종목 1개."""
+    days = pd.bdate_range("2016-01-04", periods=400)
+    rows = []
+    for ticker, cut in (("036220", 100), ("101970", 120)):
+        old = days[:cut]
+        new = days[cut + 80:]                       # 80거래일 공백 → 재사용으로 본다
+        rows.append(pd.DataFrame({"ticker": ticker, "date": old, "close_raw": 3500.0}))
+        rows.append(pd.DataFrame({"ticker": ticker, "date": new, "close_raw": 20000.0}))
+    rows.append(pd.DataFrame({"ticker": "005930", "date": days, "close_raw": 70000.0}))
+    return pd.concat(rows, ignore_index=True), days
+
+
+def test_reused_candidates_come_from_price_gaps_not_from_the_input():
+    prices, days = _reused_prices()
+    assert reused_candidates(prices, days) == {"036220", "101970"}   # 공백 없는 005930은 빠진다
+
+
+def test_partial_delisted_reused_is_not_reported_as_complete():
+    """부분 파일이거나 대조가 실패하면 complete가 false여야 한다 (C 리뷰 #45)."""
+    prices, days = _reused_prices()
+    expected = reused_candidates(prices, days)
+    full = pd.DataFrame({"ticker": ["036220", "101970"],
+                         "delist_date": [days[100], days[120]], "last_price": [3500.0, 3500.0]})
+    good = check_reused_delisted(prices, full, expected)
+    assert good["checked"] and good["complete"] and good["missing_codes"] == []
+
+    partial = check_reused_delisted(prices, full.iloc[:1], expected)      # 한 코드만 담긴 파일
+    assert partial["checked"] is True and partial["complete"] is False
+    assert partial["missing_codes"] == ["101970"]
+
+    wrong = full.copy()
+    wrong.loc[0, "last_price"] = 9999.0                                   # 마지막 원종가 대조 실패
+    bad = check_reused_delisted(prices, wrong, expected)
+    assert bad["checked"] is True and bad["all_last_price_matches"] is False and bad["complete"] is False
+
+    none = check_reused_delisted(prices, None, expected)                  # 입력 자체가 없음
+    assert none["checked"] is False and none["complete"] is False
+    assert none["missing_codes"] == ["036220", "101970"]

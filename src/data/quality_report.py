@@ -18,6 +18,7 @@ from pathlib import Path
 import pandas as pd
 
 from src.common import io
+from src.data.build_processed import RELISTING_GAP_TRADING_DAYS
 
 RUN_ID_RE = re.compile(r"^\d{8}_[A-Za-z]+_[A-Za-z0-9_]+$")
 # 6.1절 완료 기준 (4): 액면분할 종목의 수정종가가 끊기지 않는지 본다
@@ -38,7 +39,7 @@ def check_calendar(index: pd.DataFrame) -> dict:
 
 
 def check_delisted(tickers: pd.DataFrame, prices: pd.DataFrame, delisted: pd.DataFrame,
-                   delisted_reused: pd.DataFrame | None = None) -> dict:
+                   delisted_reused: pd.DataFrame | None = None, trading_days=None) -> dict:
     """완료 기준 (2): 2010년 이후 폐지 종목이 시세에 남아 있는지 (생존 편향 점검).
 
     `tickers.delisting_date`는 **그 종목코드의 가장 최근 회사** 기준이다. 폐지된 코드를 몇 년 뒤 다른
@@ -56,17 +57,33 @@ def check_delisted(tickers: pd.DataFrame, prices: pd.DataFrame, delisted: pd.Dat
     out["common_delisted_in_prices"] = int(common["ticker"].isin(in_prices).sum())
     out["common_delisted_with_last_price"] = int(
         delisted.set_index("ticker").reindex(common["ticker"])["last_price"].notna().sum())
-    out["reused"] = check_reused_delisted(prices, delisted_reused)
-    out["complete"] = bool(out["reused"]["checked"])
+    expected = reused_candidates(prices, trading_days) if trading_days is not None else None
+    out["reused"] = check_reused_delisted(prices, delisted_reused, expected)
+    out["complete"] = bool(out["reused"]["complete"])
     return out
 
 
-def check_reused_delisted(prices: pd.DataFrame, delisted_reused: pd.DataFrame | None) -> dict:
+def reused_candidates(prices: pd.DataFrame, trading_days) -> set:
+    """시세에 `RELISTING_GAP_TRADING_DAYS` 거래일을 넘는 공백이 있는 종목코드 = 재사용 후보.
+
+    `delisted_reused`가 부분 파일로 와도 알 수 있도록, 기대 목록을 입력이 아니라 시세에서 직접 뽑는다
+    (DEC-28의 `listed_days`와 같은 공백 기준, C 리뷰 #45)."""
+    days = pd.DatetimeIndex(sorted(pd.to_datetime(list(trading_days))))
+    position = pd.Series(range(len(days)), index=days)
+    rows = prices[["ticker", "date"]].sort_values(["ticker", "date"])
+    at = rows["date"].map(position)
+    gap = at - at.groupby(rows["ticker"]).shift(1)
+    return set(rows.loc[gap > RELISTING_GAP_TRADING_DAYS, "ticker"])
+
+
+def check_reused_delisted(prices: pd.DataFrame, delisted_reused: pd.DataFrame | None,
+                          expected: set | None = None) -> dict:
     """재사용 종목코드의 **구회사** 폐지 이력이 시세에 남아 있는지 (DEC-28, C 리뷰 #45).
 
     구회사 구간은 폐지일 이전 시세다. 같은 코드에 신회사 시세가 이어 붙어 있으므로 날짜로 나눠 본다."""
     if delisted_reused is None or not len(delisted_reused):
-        return {"checked": False,
+        return {"checked": False, "complete": False, "expected_codes": sorted(expected or []),
+                "missing_codes": sorted(expected or []),
                 "reason": "delisted_reused 입력이 없다 — 재사용 코드의 구회사 폐지 이력은 점검하지 못했다 (DEC-28)"}
     rows = []
     for r in delisted_reused.itertuples():
@@ -77,9 +94,14 @@ def check_reused_delisted(prices: pd.DataFrame, delisted_reused: pd.DataFrame | 
                      "rows_before_delist": int(len(before)), "rows_after_delist": int(len(after)),
                      "last_close_raw_before_delist": last_raw, "last_price": float(r.last_price),
                      "last_price_matches_close_raw": last_raw is not None and abs(last_raw - float(r.last_price)) < 1e-9})
+    missing = sorted((expected or set()) - set(delisted_reused["ticker"]))
+    rows_present = all(x["rows_before_delist"] > 0 for x in rows)
+    prices_match = all(x["last_price_matches_close_raw"] for x in rows)
     return {"checked": True, "n": len(rows),
-            "all_old_company_rows_present": all(x["rows_before_delist"] > 0 for x in rows),
-            "all_last_price_matches": all(x["last_price_matches_close_raw"] for x in rows), "detail": rows}
+            "expected_codes": sorted(expected or []), "missing_codes": missing,
+            "all_old_company_rows_present": rows_present, "all_last_price_matches": prices_match,
+            # checked(입력이 왔다)와 complete(점검이 끝났고 전부 통과했다)를 나눈다 (C 리뷰 #45)
+            "complete": not missing and rows_present and prices_match, "detail": rows}
 
 
 def check_ticker_format(tables: dict) -> dict:
@@ -196,7 +218,8 @@ def build(run_id: str, out_root: Path | None = None) -> dict:
 
     metrics = {"run_id": run_id, "source_commit": _git_commit()}
     metrics["c1_calendar"] = check_calendar(index)
-    metrics["c2_delisted"] = check_delisted(tickers, prices, delisted, reused)
+    kospi200_days = index.loc[index["index_code"] == "KOSPI200", "date"]
+    metrics["c2_delisted"] = check_delisted(tickers, prices, delisted, reused, kospi200_days)
     metrics["c3_ticker_format"] = check_ticker_format(
         {"prices": prices, "tickers": tickers, "status": status, "universe": universe, "delisted": delisted})
     splits, split_rows = check_splits(prices)

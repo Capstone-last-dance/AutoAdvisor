@@ -1,6 +1,6 @@
 {
   "run_id": "20261110_A_dq_v1",
-  "source_commit": "d6e635527566f848e7e9e5a6648c8c747d0369e9",
+  "source_commit": "9d8bc1c363a7035bbd846e5c168ac0180ae1ec3c",
   "c1_calendar": {
     "n_days": 4146,
     "first": "2010-01-04",
@@ -52,8 +52,14 @@
     "reused": {
       "checked": true,
       "n": 2,
+      "expected_codes": [
+        "036220",
+        "101970"
+      ],
+      "missing_codes": [],
       "all_old_company_rows_present": true,
       "all_last_price_matches": true,
+      "complete": true,
       "detail": [
         {
           "ticker": "101970",
