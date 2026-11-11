@@ -14,12 +14,14 @@
 | `src/portfolio/params.py` | 부록 1 `portfolio`, `risk_layer` 읽기. `FILL_` 값은 None으로 읽고, 실제로 쓰는 순간 `PreregValueMissing` (R-08) | 구현 |
 | `src/portfolio/risk_layer.py` | M8 Step 1~6, 불변식, positions 행 생성, t일 유효 업종표 | 구현. 경계 사례 테스트 추가 (B-04) |
 | 〃 `compute_regime_mc(date)`, `compute_vol_target_annual` | 공개 함수, Q-12 값 계산 | 구현 (B-02). 값 0.157263을 부록 1에 기입했다 (4절) |
-| `src/portfolio/vol_target_report.py` | B-02 결과 리포트: `python -m src.portfolio.vol_target_report --run-id {YYYYMMDD}_B_{설명}` → `reports/{run_id}/`에 config.yaml 사본, git_commit.txt, metrics.json (R-10) | 구현 (B-02) |
+| `src/portfolio/vol_target_report.py` | B-02 결과 리포트: `python -m src.portfolio.vol_target_report --run-id {YYYYMMDD}_B_{설명}` → `reports/{run_id}/`에 config.yaml 사본, git_commit.txt, metrics.json (R-10). git_commit.txt에는 HEAD와 커밋되지 않은 파일(새 파일 포함)을 적는다. 세 리포트가 같이 쓴다 | 구현 (B-02) |
 | `src/portfolio/market_state_report.py` | B-04 결과 리포트: `python -m src.portfolio.market_state_report --run-id {YYYYMMDD}_B_{설명}` → 위 세 파일과 `figures/e_t_regime_mc.svg`(2011~2025년 일별 E_t·regime_mc 그림), 그 원자료 `figures/e_t_regime_mc.csv` | 구현 (B-04). 실제 실행은 4절 |
 | `src/portfolio/buffer_rule.py` | 버퍼 규칙 단계 1~5와 엔진 위 실행 (`run_buffer_rule`) | 구현 (B-03). C 엔진 연결은 `engine_adapter.py` |
 | `src/portfolio/engine_adapter.py` | 9.3절 `prices`·`status`·`index`·`delisted`(+ DEC-28 `delisted_reused`)와 부록 1 `costs`·`execution` → C의 `ExecutionEngine` (`engine_inputs`, `load_engine_inputs`, `build_engine`, `cost_rates`) | 구현 (B-05). 규칙은 5.1절 |
-| `src/portfolio/env_check.py` | B-05 완료 기준 확인: `run_full_episode`(끝까지 실행), `compare_buffer_and_env`(같은 비중이면 같은 체결·비용), `BufferWeightsEnv`, `ledger_counts` | 구현 (B-05). 실제 신호 리포트는 A PR #1 병합 뒤 |
+| `src/portfolio/env_check.py` | B-05 완료 기준 확인: `run_full_episode`(끝까지 실행), `compare_buffer_and_env`(같은 비중이면 같은 체결·비용), `BufferWeightsEnv`, `ledger_counts` | 구현 (B-05) |
+| `src/portfolio/env_check_report.py` | B-05 결과 리포트: `python -m src.portfolio.env_check_report --run-id {YYYYMMDD}_B_{설명}` → `reports/{run_id}/`에 config.yaml, git_commit.txt, metrics.json(완료 기준 (1)·(2), 입력 파일 SHA-256) | 구현 (B-05). 결과 `reports/20261110_B_env_check/` (5.1절) |
 | `src/portfolio/interfaces.py` | B가 C(M5)와 PM(M9)에 기대하는 호출 형태 | 초안. C·PM 확인 필요 (5절) |
+| `src/portfolio/weekly.py` | run_weekly 4단계 `m4_step`(w_raw), 5단계 `m8_step`(positions). forward 지난 보유 재생 `replay_holdings` | 구현. PM(M9)·D(지난 기록) 함수 연결 대기 (5.4절) |
 | `src/portfolio/rl_data.py` | 9.3절 표 → 신호일별 스냅샷 | 구현 |
 | `src/portfolio/rl_env.py` | gymnasium 환경: 관측, 행동 해석, M8 호출, 보상 | 구현. C 엔진 위 실행 확인 (B-05) |
 | `src/portfolio/rl_train.py` | λ 선택, 본 학습, 검증 IR 체크포인트, 결정적 운용 | 구현. 폴드 데이터 구성과 R-10 기록은 B-06 |
@@ -231,7 +233,21 @@ B-05 완료 기준 확인 (`env_check.py`):
   - 조건: B main과 A PR #1(154b089)을 임시로 합친 폴더에서 돌렸다. 신호는 A의 `baseline_signals`, vol_20은 A의 정의대로 B가 계산했다. 쿨다운은 비어 있다.
   - 2011-01-07 ~ 2025-12-26의 781개 신호일(U_t 평균 419종목)이 행동 0과 무작위 행동 모두 끝까지 돌았다. 스텝당 0.55 ms다.
   - (2)의 차이는 모두 0이다. 체결 12,277건이 있었고, 거부는 정지 71번, 하한가 근접 5번, 상한가 근접 2번이었다. 보유 중 폐지는 없었다.
-- 남은 것: A PR #1 병합 뒤 A의 signals·features로 같은 실행을 `reports/{run_id}/`에 남긴다.
+- 리포트 (`env_check_report.py`, 11/9):
+  - 표는 io로 읽는다 (prices, status, index, delisted, delisted_reused, universe, sector).
+  - 신호일은 universe의 2011-01-01 ~ 2025-12-31 날짜다. 주마다 마지막 거래일과 같은지 확인한다. 끝날이 휴장일이어도(2025-12-31) 그 주를 잘못 세지 않는다.
+  - 신호는 A의 `baseline_signals`를 신호일마다 U_t로 부른다. vol_20은 A의 `compute_stock_features`·`rank_and_fill`, mkt_vol_20·mkt_ret_20은 A의 `compute_market_features`, regime_mc는 B의 `market_state_table`로 만든다.
+  - M9 쿨다운·청산은 비운다 (M9 백테스트 경보 전). 무작위 행동 시드는 0이다.
+  - 입력 파일 SHA-256과, 만든 신호·피처의 내용 지문을 남긴다.
+- 리허설 (11/9, 스크래치. B main 6506579 + A PR #35, A 11/8 데이터, 공식 결과 아님):
+  - 781개 신호일(2011-01-07 ~ 2025-12-26, U_t 평균 419, 321~494종목)이 행동 0과 무작위 행동 모두 끝까지 돌았다.
+  - (2)의 차이는 모두 0이다. 체결 12,277건, 정지 거부 71번, 하한가 근접 5번, 상한가 근접 2번이다. 보유 중 폐지는 없었다. 11/4 미리보기와 같다.
+  - 전체 73.6초 걸렸다 (베이스라인 신호 37초, 스냅샷 5초).
+- **공식 결과 `reports/20261110_B_env_check/`** (코드 커밋 5b2f1b3, 미커밋 파일 없음. A PR #35 병합 뒤 main, A 11/8 데이터, `configs/prereg.yaml`과 같은 설정):
+  - (1) 781개 신호일(2011-01-07 ~ 2025-12-26, U_t 평균 419, 321~494종목)을 행동 0과 무작위 행동(시드 0) 모두 끝까지 돌았다. 끝 NAV는 행동 0이 1.6557, 무작위가 0.7552다.
+  - (2) 목표 비중, 체결, NAV, 초과수익, 회전율 차이가 모두 0이다 (허용 오차 1e-12). 체결 12,277건, 정지 거부 71번, 하한가 근접 5번, 상한가 근접 2번, 보유 중 폐지 0번이다.
+  - 입력 7개 표의 파일 SHA-256과 만든 신호·피처의 지문이 리허설과 같다.
+  - 첫 실행(be43ba1)은 리포트 코드가 아직 git에 없던 상태라 `git_commit.txt`에 빠졌다. `_git_commit`이 새 파일도 적게 고친 뒤 커밋한 상태에서 같은 run_id로 다시 만들었다. 숫자는 실행 시간만 다르다.
 
 ### 5.2 M9 쿨다운 (PM 장지원)
 
@@ -261,11 +277,37 @@ B-05 완료 기준 확인 (`env_check.py`):
 
 - B는 positions를 `io.write_table("positions", df, date=t)` 또는 `run_id=...`로 쓴다 (R-18). 앞 단계 파일이 아직 없으면 `stub=True`로 읽는다. B가 만드는 `date` 열은 io.py(D-02) 규칙대로 시각 없는 datetime64[ns]다. io.py로 쓰고 읽어도 그대로인지는 `test_positions_round_trip_through_io`가 확인한다.
 - forward test positions (11/20부터, 6.8절):
-  - `run_weekly` 4단계(M4)는 `ctx.memory["w_raw"]`(종목코드 → 비중 Series)를 채우고, 5단계(M8)는 `ctx.write_table("positions", df, date=t)`로 쓴다. 입력은 `ctx.read_table`로 읽는다. D가 이 형태에 동의했다 (11/8). entry 이름은 11/18까지 D에게 알린다.
+  - `run_weekly` 4단계(M4)는 `ctx.memory["w_raw"]`(종목코드 → 비중 Series)를 채우고, 5단계(M8)는 `ctx.write_table("positions", df, date=t)`로 쓴다. 입력은 `ctx.read_table`로 읽는다. D가 이 형태에 동의했다 (11/8). D가 B PR 병합 뒤 아래 entry를 STEPS에 넣는다 (11/9).
   - `constructor`는 RL 최종 정책이 나오기 전까지 `buffer`다.
   - 버퍼 규칙 단계 1의 H는 백테스트와 같이 실제 보유다. positions는 목표 비중이라, 정지·상하한가로 체결되지 않으면 실제 보유와 다르다 (PM 지적, 11/27 기록부터 영향).
   - 그래서 태그 `ft-{날짜}`에 기록된 목표 비중을 11/20부터 순서대로 C의 `run_to_signal_close`(PR #22)에 넣고, 현금 100%에서 시작해 직전 신호일 t′ 종가의 보유를 H로 쓴다. `run_period`는 t′+1 가격이 있어야 하는데, forward 실행(t′+1 09:00 KST 마감, DEC-04)에는 그 가격이 없다.
-  - 태그에서 지난 positions를 날짜순으로 읽는 함수는 PR #19 병합 뒤 D가 `forward_test` 쪽에 만든다. 11/20은 첫 기록이라 H가 비어 있다. 그 뒤로 지난 기록이 하나라도 없으면 B 단계를 실패시킨다.
+  - 태그에서 지난 positions를 날짜순으로 읽는 함수는 D의 `src.pipeline.forward_test:past_positions(t)`다 (PR #31). 11/20은 첫 기록이라 H가 비어 있다.
+  - 기록이 없는 주(스텁 등으로 커밋되지 않은 주)는 리밸런싱 없이 직전 보유를 유지한 것으로 재생하고 경고한다 (11/9 변경). C의 사후 성과(`evaluate_forward_record`, PR #22)도 기록된 주만 이어 재생하므로 둘이 같은 보유를 쓴다. 처음 안은 실패였는데, 그러면 한 주가 빠졌을 때 그 뒤 기록이 모두 멈춘다.
+- 구현 (`src/portfolio/weekly.py`, 11/8):
+  - entry는 `src.portfolio.weekly:m4_step`(4단계)과 `src.portfolio.weekly:m8_step`(5단계)이다.
+  - 버퍼 규칙은 백테스트와 같은 `buffer_rule_weights`를, M8은 `apply_risk_layer`를 쓴다. signals 종목이 U_t와 다르면 멈춘다 (`build_snapshots`와 같은 검사). index에 신호일 t의 코스피 200 종가가 없어도 멈춘다. 그대로 두면 그 주의 신호일이 t 전날로 잡혀 지난 신호일과 M8 입력이 조용히 틀어진다 (A #36 리뷰, 11/10).
+  - 지난 신호일은 KOSPI200 거래일에서 주마다 마지막 거래일로 센다 (`calendar.signal_day`). 지난 기록 날짜는 positions_from부터 t 전까지의 신호일이어야 하고, 아니면 멈춘다.
+  - 다른 역할 함수는 `weekly.py` 위쪽 세 상수에 "모듈:함수"로 연결한다. 형태는 `interfaces.py`에 있다. 모듈(또는 상위 패키지)이나 함수 자체가 없으면 담당 PR 병합 여부를 적은 `EntryNotFound`를 낸다. 모듈은 있는데 그 안의 import가 실패하면(하위 의존성 없음 등) 원래 오류 그대로 멈춘다 (PM #36 리뷰, 11/10).
+
+    | 상수 | 담당 | 형태 | 없을 때 |
+    |---|---|---|---|
+    | `M9_COOLDOWN_ENTRY` | PM | `CooldownFunction`: 신호일 t → t+1 진입 금지 종목. `src.events.alerts:cooldown_at` (PR #34) | '없음'은 두 경우뿐이다 (PM #36 리뷰, 11/10): (1) 연결 전이거나 모듈·함수 자체가 없다(PR 미병합) (2) M9가 `FileNotFoundError`를 냈고 `alerts/`에 날짜별 경보 파일이 하나도 없다(`io.list_dates("alerts")`가 빈 목록, M9를 실행하지 않은 상태). 이때 쿨다운 없이 계산하고 기록한다 (PM 11/9 결정: 기록을 미루지 않는다). 경고 로그와 `ctx.memory["deviations"]`에 이유와 함께 남기고 PM이 deviation log에 적는다. `RECORD_WITHOUT_M9 = False`면 `4(M9 쿨다운 없음)`을 스텁으로 표시해 7단계가 커밋하지 않는다 (6.12절). 경보 파일이 있는데 난 `FileNotFoundError`(목록의 파일을 못 엶, M9가 읽는 index가 없음 등), M9 모듈 안의 import 실패, 그 밖의 M9 오류는 틀린 경보로 기록하지 않도록 그대로 멈춘다 |
+    | `M9_ENGINE_ENTRY` | PM | `EngineAlertsFunction`: (첫 기록 신호일, t) → 체결일별 cooldowns, event_liquidations. `src.events.alerts:engine_alerts` (PR #34) | 재생할 때만 쓴다. 없으면 M9 청산·체결일 쿨다운 없이 재생하고 위와 같이 남긴다 |
+    | `RECORDED_POSITIONS_ENTRY` | D | `RecordedPositionsFunction`: t → t 전 기록의 positions (신호일 → 표). `src.pipeline.forward_test:past_positions` (PR #31) | 첫 기록(positions_from)에는 필요 없다. 그 뒤에는 실패한다 |
+
+  - **열린 문제 (PM #36 리뷰, 11/10)**: 재생은 그 시점의 경보 파일로 처음 기록부터 체결 지도를 다시 만든다. 그래서 M9 없이 체결한 주나 체결 뒤 보충된 경보(예: 11/21 토요일 경보를 11/23 체결 뒤 보충)가 지난 체결에 소급된다. C 사후 성과(`evaluate_forward_record`)도 같은 `engine_alerts`를 써서 둘은 같지만, 둘 다 당시 적용한 일정과 다르다. ft 태그에는 signals·positions만 커밋되므로 B 코드만으로는 막을 수 없다. B 제안: (1안) M9 경보 행에 생성 시각을 두고 `engine_alerts`가 체결일 d에는 d 15:30 전에 생성된 경보만 넣는다 (B·C 코드 변경 없음, alerts 스키마 변경) (2안) 매 기록 때 쓴 체결 지도를 ft 태그에 같이 커밋한다 (D `record()`·9.3절 변경, 주 단위로만 고정). 첫 재생(11/27 신호 기록, 11/30 오전) 전에 PM이 정한다.
+  - PR #34 경계 확인 (11/9, 스크래치. 신호일 11/20(금), 체결일 11/23):
+    - 15:29:59 경보는 `cooldown_at(11/20)`에 들어간다.
+    - 15:30·저녁·토요일 경보는 신호 쪽 쿨다운에는 들어가지 않는다. 엔진이 11/23에 매수를 거부하고 청산한다 (5.2절 '체결' 행).
+    - 20거래일 쿨다운은 두 형태가 같은 날 끝난다.
+    - 합성 경보 파일 하나로 `weekly`가 두 함수를 실제로 불러 값을 받는 것도 확인했다.
+
+  - 앞 단계가 B 입력 표(signals, universe, sector, index)를 스텁으로 썼으면 w_raw는 비우고 positions는 0행 스텁으로 쓴다. 지난 보유를 재생해야 하는 주에는 엔진 입력(prices, status, index, delisted, delisted_reused)도 같이 본다 (A #36 리뷰, 11/10). 입력이 없는데 스텁 실행도 아니면 멈춘다.
+  - 지난 신호일의 기록이 하나도 없으면(첫 기록이 커밋되지 않은 경우) 현금 100%에서 시작한다고 경고한다. 첫 기록일에는 지난 신호일이 없어 이 경로에 오지 않는다.
+  - 실제 데이터 리허설 (스크래치, 공식 결과 아님. A 11/8 데이터, A PR #1 베이스라인 신호, C PR #22 엔진):
+    - 10/30을 첫 기록으로 가정했다. 10/30은 10종목, 현금 0.70이었다.
+    - 11/6에는 10/30 기록을 `run_to_signal_close`로 재생해 보유 10종목을 만들었다. 버퍼 규칙이 9종목을 유지하고 3종목을 새로 사고 1종목을 팔아 12종목, 현금 0.71이 됐다. 표 읽기를 포함해 16.4초 걸렸다.
+    - 두 날 모두 E_t는 하한 0.30이다 (코스피 200 변동성이 높다). 업종 한도(전자부품 0.364 → 0.30)가 실제로 걸렸고 불변식을 통과했다.
 - 단위 테스트는 `tests/portfolio/`에 두었다 (`tests/__init__.py` 포함). README의 `tests/{영역}/` 규칙과 같다.
 - 검증한 환경:
   - B-01: macOS, Python 3.13.7, numpy 2.5.4, pandas 3.1.0, gymnasium 1.4.0, stable-baselines3 2.9.2, torch 2.14.1, PyYAML 6.0.3, pytest 9.2.0
@@ -300,11 +342,13 @@ PPO를 실제로 학습하는 테스트 2개는 `slow`로 표시했다. `-m "not
 | `test_params.py` | 부록 1 값과 키 이름 (R-14), FILL_ 값을 쓰면 멈춤 (R-08), 구현하지 않은 설정값 거부, `configs/prereg.yaml` 커밋 뒤 테스트 입력과 같은지 (커밋 전에는 건너뜀) |
 | `test_engine_adapter.py` | B-05 어댑터: 표 → 종가·정지 행렬(상장 전 결측, KOSPI200 행만), status 행이나 지수 거래일이 빠지면 멈춤, 폐지일을 전 거래일로 옮기고 원종가를 수정종가 단위로 바꿔 청산, 가격 없는 폐지는 0, 잘못된 delist_date 거부, DEC-28 옛 회사 청산과 새 회사 매수, 가격 공백에 폐지 기록이 없거나 공백이 둘이면 멈춤, `load_engine_inputs`가 `delisted_reused`를 io로 읽고 파일이 없으면 FileNotFoundError, 엔진이 모르는 재상장은 멈춤, 정지일 평가(DEC-25), 비용 배율, 엔진이 구현하지 않은 부록 1 값 거부 |
 | `test_env_check.py` | **B-05 완료 기준 (1)·(2)** (합성 신호): 9.3절 형식 합성 표(정지 칸, 보유 중 폐지 1건)를 어댑터로 C 엔진에 넣는다. RL 환경이 행동 0·무작위 행동으로 끝까지 돌고, 버퍼 비중을 넣은 RL 환경과 버퍼 규칙의 체결·비용·NAV 차이가 0이며 정지 거부와 폐지 청산이 실제로 일어난다. 비용 배율을 다르게 하면 차이가 잡힌다 |
+| `test_env_check_report.py` | B-05 리포트: 신호일이 달력과 같음(끝날이 휴장일인 주 포함), universe 날짜가 다르면 멈춤, 합성 시장에서 두 기준 통과, 차이가 있으면 기준 (2) 실패, vol_20·시장 피처가 6.2절 정의와 같고 종목을 나눠 계산해도 같음(A PR #35 병합 전에는 건너뜀), 입력 파일 SHA-256, run 폴더를 한 번만 씀 |
 | `test_market_state_report.py` | **B-04 완료 기준 (3)**: 그림 기간의 매 거래일이 결측 없이 계산되고 M8 표와 같다. 기간 뒤 종가를 바꿔도 결과와 데이터 지문이 같다. 이력 부족·해가 끝나지 않음·FILL_이면 멈춘다. metrics와 일별 표가 일치하고, SVG가 올바른 XML이며 같은 입력이면 같다. 리포트 폴더 구성과 덮어쓰기 거부 (R-11) |
 | `test_risk_layer.py` | **B-04 완료 기준 (1)·(2)**. (2) 경계 사례는 손으로 계산할 수 있는 결정적 코스피 200 경로로 확인한다: 한 업종 20종목(업종 있음·'미분류', 한 종목 쏠림), 보유 5종목(한도 0.10, 업종 합이 정확히 0.30), regime_mc = 1(상한 0.70이 걸릴 때와 안 걸릴 때), sigma_t = 3배(E_t = 1/3)와 4배(하한 0.30), 네 경계가 겹칠 때. 그 밖에 Step 4~5를 6.9절 식 그대로의 느린 구현과 비교, regime_mc = 1일 때 E_t 상한, t 이후 코스피 200 미사용 (R-03), Step 1~3·6 손계산, '미분류' 한 그룹, mode off, 무작위 입력 200건의 불변식, 위반 시 예외, positions를 io.py로 쓰고 읽기 (io.py가 있을 때) |
 | `test_rl_env.py` | SB3·gymnasium 환경 검사, 관측 배치, 보유·U_t 밖 슬롯, 마스킹, 상위 20개와 min_weight, 전액 현금, 보상 식, 52스텝과 구간 경계, purge로 빠진 신호일을 건너뛰지 않음(DEC-21 (g)), 슬롯 초과, 9.3절 표 → 스냅샷 |
 | `test_rl_train.py` | **B-01 완료 기준** (`slow`): 합성 입력으로 λ 탐색 → 시드별 학습 → 체크포인트 저장·로드 → 결정적 운용이 끝까지 돈다. 저장한 체크포인트로 검증 IR 재현, 같은 시드면 같은 학습 결과 (`slow`). 연도 경계 모델 교체 |
-| `test_vol_target.py` | **B-02 완료 기준**: 2016년 이후 종가를 바꿔도 vol_target_annual이 같다. 6.9절 식 그대로의 느린 구현과 비교, 2010년 종가는 첫 sigma_t 창의 21개만 사용, 기간이 모자라면 예외. compute_regime_mc가 M8 표와 같고 vol_target_annual 없이 계산됨, t 이후 종가 미사용, 2011년 초 bear_t 이력이 없을 때 rebound_t = 0이면 0, 1이면 결측(D4), io.py로 index를 읽어 계산 (io.py가 없으면 오류 안내). 리포트의 데이터 지문이 2016년 이후 종가와 무관, 리포트 폴더 구성, 같은 run_id 덮어쓰기 거부 (R-11) |
+| `test_weekly.py` | forward 4·5단계: 합성 시장의 7주 동안 매주 positions가 같은 신호일 `run_buffer_rule` positions와 같다. 지난 보유는 그 전 기록을 엔진으로 재생해 만들고, 기록된 목표와 실제 보유가 다른 주가 들어 있다(정지 10%). 재생 엔진은 C의 `run_to_signal_close`가 있으면 그것을, 없으면 같은 보유를 주는 `run_period` 대역을 쓴다. positions_from 전에는 쓰지 않음, index에 신호일 종가가 없으면 멈춤, 첫 기록은 지난 기록 없이, 다음 기록부터 D 함수가 없으면 실패, M9가 없으면(연결 전·모듈 없음·함수 없음·날짜별 경보 파일 0개) M9가 경보를 주지 않을 때와 같은 positions를 스텁 아닌 실행으로 쓰고 이유를 적은 deviation 2건을 남김(`RECORD_WITHOUT_M9 = False`면 스텁 표시), M9의 다른 오류·경보 파일이 있는데 난 FileNotFoundError·M9 모듈 안의 import 실패는 멈춤, `_resolve`가 모듈·함수 없음만 `EntryNotFound`로 바꿈, 스텁 입력이면 스텁 출력, 재생할 주에 엔진 입력만 스텁이어도 스텁 출력(엔진·M9를 부르지 않음), 재생이 상태를 잇고 체결 안 된 목표를 H에서 뺌, 기록이 빠진 주는 직전 보유를 유지하고 다음 주 기록이 이어짐, 기록이 하나도 없으면 엔진 없이 현금 100%에서 시작('직전 보유 유지' 경고 없이 '현금 100%에서 시작' 경고), 신호일이 아닌 기록이면 멈춤, 찾지 못한 entry의 오류 문구, 담당자와 정한 함수 이름 3개와 인자(PR #34·#31 병합 전에는 건너뜀), 휴장 주의 신호일 |
+| `test_vol_target.py` | **B-02 완료 기준**: 2016년 이후 종가를 바꿔도 vol_target_annual이 같다. 6.9절 식 그대로의 느린 구현과 비교, 2010년 종가는 첫 sigma_t 창의 21개만 사용, 기간이 모자라면 예외. compute_regime_mc가 M8 표와 같고 vol_target_annual 없이 계산됨, t 이후 종가 미사용, 2011년 초 bear_t 이력이 없을 때 rebound_t = 0이면 0, 1이면 결측(D4), io.py로 index를 읽어 계산 (io.py가 없으면 오류 안내). 리포트의 데이터 지문이 2016년 이후 종가와 무관, 리포트 폴더 구성, 같은 run_id 덮어쓰기 거부 (R-11). `_git_commit`이 바뀐 추적 파일과 git에 없는 새 파일(무시 대상 제외, 공백·한글 경로 그대로)을 적음 |
 
 `tests/portfolio/fakes.py`의 가짜 엔진과 합성 시장은 테스트 전용이다. 4.3절 상·하한가, 거래정지, 상장폐지, M9 청산은 구현하지 않았고, 실험과 보고서에 쓰지 않는다.
 
@@ -439,5 +483,5 @@ rebound_t = 1인데 bear_t를 계산할 수 없으면 결측이다 (Insufficient
 | B-02 | 11/8 | 완료: 0.157263을 부록 1에 기입, PR #11 병합. Q-12 결과 칸은 PM이 기입했고 D4는 DEC-19로 기록됐다 |
 | B-03 | 11/13 | 단계 1~5와 엔진 위 실행을 구현했다 (2절). C의 M5(PR #8 헤드)를 합친 상태에서 합성 시장 실행을 확인했다: 목표 비중이 FakeEngine과 같고, 초과수익은 목표 합이 1인 체결(현금 부족 배율)에서만 최대 7e-5 다르다. PR #8 병합(b2b32a6) 뒤 main에서 `test_runs_on_c_execution_engine`이 건너뛰지 않고 통과한다 (전체 336 통과). 남은 것: A 코드 리뷰 승인. 실제 신호(A-04) 실행은 완료 기준 밖이라 B-05 완료 기준 (베이스라인 신호로 에피소드 끝까지)에서 확인한다 |
 | B-04 | 11/16 | 완료: 완료 기준 (1)·(2) 테스트 통과, (3) 그림 `reports/20261104_B_m8_states/` (4절, prereg.yaml 초안 기준), A 승인 (PR #13). 11/9 공식 사전등록에서 쓰는 키가 바뀌면 새 run_id로 다시 만든다 |
-| B-05 | 11/16 | 엔진 어댑터와 완료 기준 확인 함수 구현 (5.1절). 합성 시장에서 (1) 끝까지 실행, (2) 버퍼 규칙과 차이 0. 실제 A 베이스라인 신호 미리보기도 781개 신호일 끝까지, 차이 0. A 승인 (PR #21, 11/6). `delisted_reused`를 io로 읽고 가격 공백 검사를 더했다 (11/8). 남은 것: A PR #1 병합 뒤 리포트(`reports/{run_id}/`). 수정종가가 소급해서 바뀔 수 있으므로(A 11/8 공지) 리포트에 입력 파일의 SHA-256을 남긴다 |
+| B-05 | 11/16 | 엔진 어댑터와 완료 기준 확인 함수 구현 (5.1절). 합성 시장에서 (1) 끝까지 실행, (2) 버퍼 규칙과 차이 0. 실제 A 베이스라인 신호 미리보기도 781개 신호일 끝까지, 차이 0. A 승인 (PR #21, 11/6). `delisted_reused`를 io로 읽고 가격 공백 검사를 더했다 (11/8). 리포트 `env_check_report.py`로 실제 A 베이스라인 신호의 공식 결과 `reports/20261110_B_env_check/`를 남겼다 (11/10, 코드 커밋 5b2f1b3): 781개 신호일 끝까지, 버퍼 규칙과 차이 0, 입력 파일 SHA-256 포함. 남은 것: 리포트 코드와 결과의 A 리뷰 승인 (PR #36) |
 | B-06 | 11/23 | 폴드별 스냅샷 구성(D1, D5), R-10 기록(`reports/{run_id}/`), 베이스라인 신호 리허설 |

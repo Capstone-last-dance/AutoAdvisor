@@ -1,0 +1,236 @@
+# configs/prereg.yaml — 2026-11-09 커밋 후 변경 금지 (R-02)
+version: "0.3"
+prereg_commit_date: "2026-11-09"
+
+calendar:
+  timezone: "Asia/Seoul"
+  signal_day: "last_trading_day_of_week"
+  signal_cutoff_time: "15:30"
+  execution: "next_trading_day_close"
+  annualization: {daily: 252, weekly: 52}
+
+data:
+  start_date: "2010-01-04"
+  first_train_signal_year: 2011
+  price_column: "close"            # KRX 정규장 수정종가
+  raw_price_column: "close_raw"    # 동전주 판정 전용
+  investor_flow_lag_days: 1
+
+universe:
+  markets: ["KOSPI", "KOSDAQ"]
+  exclude_security_types: ["preferred", "etf", "etn", "reit", "infra_fund"]   # 판별 규칙은 Q-15
+  exclude_name_contains: ["스팩"]
+  min_listed_trading_days: 60
+  exclude_admin_issue: true
+  exclude_halted: true
+  top_n_by_mcap: 500
+  avg_trading_value_window_days: 20
+  min_avg_trading_value_krw: 1000000000
+
+benchmark:
+  primary: "KOSPI200_price_index"   # Q-05 결과에 따라 TR로 바꿀 수 있음 (deviation log 기록)
+  secondary: "universe_equal_weight_weekly_rebalanced_no_cost"
+
+labels:
+  horizons_days: [1, 5, 20]
+  main_horizon_days: 20
+  crash_excess_threshold: -0.15
+  rank_method: "pct_average"
+
+costs:
+  sell_tax: 0.0020
+  commission_per_side: 0.00015
+  slippage_per_side: 0.0010
+  stress_multiplier: 2.0
+  cash_return: 0.0
+
+execution:
+  limit_move_abs_return: 0.295
+  delisted_without_price_value: 0.0
+
+splits:
+  walk_forward_test_years: [2016, 2017, 2018, 2019, 2020, 2021, 2022, 2023, 2024, 2025]
+  validation_years: 2
+  purge: "drop_signal_dates_whose_label_window_reaches_next_segment"
+  holdout_signal_range: ["2026-01-01", "2026-10-31"]
+  holdout_open_date: "2026-12-11"
+  forward_test:
+    baseline_signals_from: "2026-11-06"
+    positions_from: "2026-11-20"
+    ml_signals_from: "2026-11-27"
+
+features:
+  rank_transform: "pct_average_within_universe"
+  missing_fill: 0.5
+  add_missing_flag: true
+  model_input_exclusions: ["ss_allowed"]  # DEC-29. v1에서 ss_regime은 유지
+  event_window_days: 20
+  news_window_offsets: [-5, -1]    # DEC-06. 날짜 단위 자료라 t일을 쓰지 않는다
+  news_baseline_offsets: [-65, -6]
+  event_keywords:                  # 후보 검색용. events.title_filters를 함께 적용 (Q-13)
+    ev_earnings: ["영업(잠정)실적", "매출액또는손익구조"]
+    ev_buyback: ["자기주식취득결정"]
+    ev_cancel: ["주식소각결정"]
+    ev_dividend: ["현금현물배당결정"]
+    ev_rights: ["유상증자결정"]
+    ev_cbbw: ["전환사채권발행결정", "신주인수권부사채권발행결정"]
+  news_sentiment_model: "snunlp/KR-FinBert-SC@f8586286cc3161fb648e9fee09a456069fd846d0"   # Q-09. 제목 입력, 점수 = P(positive) − P(negative)
+
+models:
+  seed: 42
+  lightgbm_grid:
+    num_leaves: [15, 31, 63]
+    learning_rate: [0.02, 0.05]
+    min_child_samples: [50, 200]
+  lightgbm_fixed:
+    feature_fraction: 0.8
+    bagging_fraction: 0.8
+    bagging_freq: 1
+    n_estimators_max: 2000
+    early_stopping_rounds: 100
+  gate:
+    objective: "binary"
+    early_stopping_metric: "val_roc_auc"
+    selection_metric: "val_roc_auc"
+    calibration: "isotonic_fit_on_validation"
+    flag_top_fraction: 0.10        # 신호일별 ceil(0.10 × N_t)
+    baseline: "logistic_regression_on_vol_60_rank"
+    forward_test_initial_flag: "top_fraction_by_vol_60"   # 2026-11-06, 2026-11-13 기록용
+  ranker:
+    objective: "regression"
+    target: "y_rank"
+    early_stopping_metric: "val_l2"
+    selection_metric: "val_mean_rank_ic"
+    baselines:
+      B1: "rank_score = mom_12_1"
+      B2: "rank_score = -rev_1m"
+      B3: {model: "ridge", alpha_grid: [0.1, 1, 10, 100], selection_metric: "val_mean_rank_ic"}
+  mlp: "optional_after_required_tasks_not_used_for_kpi"
+
+portfolio:
+  buffer_rule:
+    enter_rank_max: 20
+    exit_rank_greater_than: 40
+    max_holdings: 20
+    weighting: "equal"
+  rl:
+    library: "stable-baselines3"
+    algorithm: "PPO"
+    policy: "MlpPolicy"
+    candidate_top_k: 40
+    max_holdings: 20
+    min_weight: 0.005
+    slots: 60
+    episode_steps: 52
+    total_timesteps_per_seed: 300000
+    lambda_search: {grid: [0, 0.5, 1, 2], seed: 0, total_timesteps: 100000}
+    eval_every_steps: 10000
+    checkpoint_selection: "val_ir"
+    seeds: [0, 1, 2, 3, 4]
+    test_action: "deterministic_mean"
+    other_hyperparameters: "sb3_defaults"
+    env:                                   # DEC-21 (design_B.md 8절 D3)
+      action_bound: 10.0                   # (a) 행동 = 로짓, 범위 [−10, 10]
+      out_of_universe_fill: 0.0            # (b) U_t 밖 보유 슬롯의 rank_score 백분위·crash_prob·vol_20
+      candidate_overflow: "drop_nonheld_worst_rank"   # (c)
+      top_k_tie_break: "better_rank_first"            # (d)
+      episode_end: "truncated"                        # (e)
+      lambda_score: "max_checkpoint_val_ir_then_smaller_lambda"  # (f)
+      signal_dates: "purged_h20_no_step_over_gaps"    # (g)
+      current_weight: "signal_date_close"             # (h)
+
+risk_layer:
+  stock_cap: 0.10
+  sector_cap: 0.30
+  sector_source: "KRX_industry"     # 시점별 이력이 없으면 Q-04 결정에 따름
+  unknown_sector_label: "미분류"
+  excess_weight_to: "cash"
+  vol_lookback_days: 20
+  vol_target_annual: 0.157263   # 2011~2015 매 거래일 sigma의 산술평균 (6.9절, Q-12). B-02, reports/20261103_B_vol_target/
+  exposure_min: 0.30
+  exposure_max: 1.00
+  momentum_crash_regime:
+    drawdown_threshold: 0.20
+    drawdown_high_lookback_days: 252
+    drawdown_recent_window_days: 60
+    rebound_lookback_days: 20
+    rebound_threshold: 0.10
+    exposure_cap: 0.70
+  invariant_tolerance: 1.0e-9
+
+events:
+  report_name_normalization: "remove_spaces_and_middle_dots"
+  exit: "close_of_next_trading_day_after_available_date"
+  cooldown_trading_days: 20
+  title_filters:                     # ev_*와 T1~T6 후보에서 신규 사건이 아닌 공시를 뺀다 (Q-13)
+    strip_prefixes: ["[첨부추가]", "[정정명령부과]"]  # 원 공시에 나중에 붙는 표시. 떼고 판정
+    exclude_prefixes: ["[기재정정]", "[첨부정정]"]    # 따로 접수된 후속 정정
+    exclude_terms: ["철회", "취소"]
+  triggers:                          # 초기값. PM이 2026-11-08까지 검증 (Q-13)
+    T1:
+      name: "관리종목 지정"
+      keywords: ["관리종목지정"]  # 후보 검색용
+      sources: ["kind", "opendart"]
+      exclude_terms: ["우려", "사유발생", "사유추가", "사유변경", "해소", "해제", "예고", "내부결산시점"]
+      require_confirmed_designation: true
+    T2:
+      name: "상장폐지 관련 심사·사유"
+      keywords: ["상장적격성실질심사", "상장폐지사유발생"]  # 후보 검색용
+      require_any: ["대상결정", "사유발생", "실질심사관련)", "실질심사관련안내)", "실질심사관련매매거래정지"]
+      exclude_terms: ["우려", "제외결정", "기한", "조사기간연장", "해제", "청산예정", "지속", "계속"]
+    T3:
+      name: "횡령·배임"
+      keywords: ["횡령", "배임"]  # 후보 검색용. 한 공시는 한 번만 센다
+      require_any: ["혐의발생", "사실확인", "협의발생"]
+      exclude_terms: ["진행사항", "무혐의", "취하", "각하", "기각", "해소", "손해배상"]
+      require_company_confirmation_if_any: ["풍문", "소문", "조회공시", "답변"]
+    T4:
+      name: "회생절차"
+      keywords: ["회생절차개시신청"]  # 후보 검색용
+      exclude_terms: ["자회사", "종속회사", "풍문", "조회공시", "신청설", "기각", "취하", "해소", "각하", "항고", "종결", "기타시장안내"]
+    T5:
+      name: "부도"
+      keywords: ["부도발생"]  # 후보 검색용
+      exclude_terms: ["자회사", "종속회사", "해소", "풍문"]
+    T6: {name: "대규모 희석 유상증자", keywords: ["유상증자결정"], methods: ["주주배정", "일반공모"], min_amount_to_mcap: 0.10}
+
+retail_proxy:
+  top_n: 30
+  net_buy_window_offsets: [-5, -1]
+  holding_days: 20
+  cohort_fraction_of_nav: 0.25
+  apply_risk_layer: false
+  fallback_if_flows_unavailable: "sort_by_mean_value_t-4_to_t_over_mean_value_t-64_to_t-5"
+
+kpi:
+  G0: {max_violations: 0}
+  G1: {min_auc_gain_vs_baseline: 0.03, min_lift_at_10pct: 2.0}
+  G2: {min_mdd_reduction_rel: 0.20, cagr_with_gate_not_lower: true, max_t_stat: -3.0, nw_maxlags: 4}
+  G3: {min_mean_ic: 0.03, min_t_stat: 3.0, min_ic_gain_vs_best_baseline: 0.01, nw_maxlags: 4}
+  G4: {min_excess_cagr: 0.03, min_ir: 0.6, max_mdd_gap_vs_bm: 0.05, excess_positive_under_stress_costs: true}
+  G5: {min_ir_gain: 0.10, alternative: {cagr_not_lower: true, max_turnover_ratio: 0.7}, aggregate: "mean_over_seeds"}
+  G6: {report_only: true, hypothesis: "h=1 net excess CAGR < 0"}
+  G7: {min_mdd_reduction_rel: 0.25, max_cagr_giveup: 0.02}
+  project_success: ["G0", "G1", "G2"]
+
+analysis_periods:
+  P1: ["2016-01-01", "2017-12-31"]
+  P2: ["2018-01-01", "2019-12-31"]
+  P3: ["2020-01-01", "2020-12-31"]
+  P4: ["2021-01-01", "2022-12-31"]
+  P5: ["2023-01-01", "2023-11-05"]
+  P6: ["2023-11-06", "2025-03-30"]   # 공매도 전면 금지
+  P7: ["2025-03-31", "2025-12-31"]
+  H:  ["2026-01-01", "2026-10-31"]   # 홀드아웃. 2026-12-11 이후에만 계산
+
+stress_windows:
+  S1: ["2020-02-17", "2020-03-31"]
+  S2: ["2022-01-01", "2022-12-31"]
+  S3: ["2026-10-01", "2026-10-31"]   # 홀드아웃 구간
+
+allowed_deviations:                  # 사전 허용 변경. 적용해도 deviation log에 기록
+  - "portfolio.rl.total_timesteps_per_seed: 300000 -> 150000 (일정 부족 시)"
+  - "M6 LLM 요약 -> 템플릿 요약 (LLM 자원 부족 시)"
+  - "뉴스 피처 제외 (뉴스 수집 실패 시, 공시 피처는 유지)"
+  - "개인 행동 프록시 정렬 기준 -> retail_proxy.fallback_if_flows_unavailable (Q-01 실패 시)"
+  - "news_sent_5 제외 (제목 수집 또는 감성 모델 이용 조건이 2026-11-16까지 해결되지 않을 때, news_cnt_spike는 유지)"
