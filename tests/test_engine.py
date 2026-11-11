@@ -133,6 +133,30 @@ def test_unheld_delisting_does_not_interrupt_later_periods():
     assert second.nav_end == pytest.approx(first.nav_end)
 
 
+def test_target_delisted_on_first_fill_is_rejected_before_price_lookup():
+    days = pd.bdate_range("2025-01-06", periods=4)
+    d = [day.strftime("%Y-%m-%d") for day in days]
+    closes = pd.DataFrame({"000001": [100.0] * 4,
+                           "048260": [50.0, float("nan"), float("nan"), float("nan")]}, index=days)
+    targets = {"000001": 0.4, "048260": 0.3}
+
+    def new_engine():
+        return ExecutionEngine(closes, pd.Series(100.0, index=days), CostRates(0, 0, 0),
+                               delistings={"048260": (d[0], 50.0)}, record_ledger=True)
+
+    for stop_at_signal_close in (False, True):
+        engine = new_engine()
+        result = (engine.run_to_signal_close if stop_at_signal_close else engine.run_period)(
+            engine.initial_state(), targets, d[0], d[2])
+        assert result.nav_end == pytest.approx(1.0)
+        assert result.state.holdings == {"000001": pytest.approx(0.004)}
+        assert result.state.cash == pytest.approx(0.6)
+        assert engine.ledger[0]["rejected"]["048260"] == "cooldown_or_delisted"
+        assert engine.ledger[0]["fills"][0].ticker == "000001"
+        if not stop_at_signal_close:
+            assert result.turnover == pytest.approx(0.35)
+
+
 def test_held_delisting_does_not_interrupt_next_period():
     days = pd.bdate_range("2020-01-01", periods=10)
     d = [x.strftime("%Y-%m-%d") for x in days]
