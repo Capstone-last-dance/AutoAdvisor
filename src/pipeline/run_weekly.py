@@ -162,7 +162,7 @@ def _no_stub(ctx: StepContext) -> None:
 STEPS: tuple[Step, ...] = (
     Step(1, "M1", "데이터 갱신", None, _stub_tables(*PROCESSED_TABLES, dated=False)),
     Step(2, "M2", "피처 계산", None, _stub_tables("features", dated=True)),
-    Step(3, "M3a·M3b", "급락 확률·순위 점수", None, _stub_tables("signals", dated=True)),
+    Step(3, "M3a·M3b", "급락 확률·순위 점수", "src.models.signals:m3_step", _stub_tables("signals", dated=True)),
     Step(4, "M4", "원시 목표 비중 w_raw", "src.portfolio.weekly:m4_step", _stub_w_raw),
     Step(5, "M8", "리스크 레이어", "src.portfolio.weekly:m8_step", _stub_tables("positions", dated=True)),
     Step(6, "M6", "근거 요약", None, _stub_evidence),

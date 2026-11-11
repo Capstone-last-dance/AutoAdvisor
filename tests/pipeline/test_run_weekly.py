@@ -142,8 +142,9 @@ class ForwardCommitMemoTest(unittest.TestCase):
 
 
 class StepsTest(unittest.TestCase):
-    def test_b_entries(self):
+    def test_connected_entries(self):
         entries = {s.no: s.entry for s in rw.STEPS}
+        self.assertEqual(entries[3], "src.models.signals:m3_step")
         self.assertEqual(entries[4], "src.portfolio.weekly:m4_step")
         self.assertEqual(entries[5], "src.portfolio.weekly:m8_step")
 
