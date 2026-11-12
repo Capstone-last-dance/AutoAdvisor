@@ -204,6 +204,52 @@ def build_all(raw: Path, start: date, end: date, first_signal_year: int = 2011) 
             "_events": adjust_events(p), "_days": days}
 
 
+# ---------------------------------------------------------------------------
+# run_weekly 1단계 (A 담당, issue #5 1·2단계 질문의 임시 처리)
+# ---------------------------------------------------------------------------
+
+# scripts/signal_day.sh와 같은 값이어야 한다(이어받기 수집 폴더). 둘 중 하나를 바꾸면 같이 바꾼다.
+COLLECT_SNAPSHOT = "2026-11-02"
+COLLECT_START = "2010-01-04"
+
+# M1의 PM 몫(공시·뉴스). PM이 자동 경로를 맡기 전까지 0행으로 둔다 (issue #5, R-08).
+_PM_TABLES = ("disclosures", "news_daily", "news")
+
+
+def _empty_table(name: str) -> pd.DataFrame:
+    """9.3절 스키마의 열과 자료형을 가진 0행 DataFrame (run_weekly.empty_frame과 같은 규칙)."""
+    from src.common import io
+    dtypes = {
+        "date": "datetime64[ns]", "datetime_kst": pd.DatetimeTZDtype("ns", "Asia/Seoul"),
+        "str": "str", "ticker": "str", "ticker_or_cash": "str",
+        "float64": "float64", "int64": "int64", "int32": "int32", "int8": "int8",
+        "nullable_int8": "Int8", "bool": "bool", "nullable_bool": "boolean",
+    }
+    return pd.DataFrame({col: pd.Series(dtype=dtypes[rule.kind]) for col, rule in io.SCHEMAS[name].items()})
+
+
+def m1_step(ctx) -> None:
+    """run_weekly 1단계: `data/processed/`를 신호일 t까지 갱신한다 (6.1절, A-02).
+
+    **A 담당 8표**(prices·index·tickers·status·universe·delisted·delisted_reused·sector)는
+    `build_all`로 실제로 다시 만든다. 수집(`collect_openapi`)은 여기서 돌리지 않는다 — 신호일
+    자료가 이미 열려 있다고 보고(DEC-04, 운영은 `scripts/signal_day.sh`가 먼저 돌아간 뒤에 이 단계를
+    부른다), 자료가 비어 있으면 `build_all`의 `require_complete_files`가 그대로 예외를 낸다.
+    `sector`는 DEC-23대로 정적 분류라 다시 받지 않고 기존 표를 그대로 옮긴다.
+
+    **PM 담당 3표**(disclosures·news_daily·news)는 PM이 이 단계에 자기 수집 경로를 연결하기 전까지
+    0행으로 쓴다. issue #5에 1단계를 1a(A)/1b(PM)로 쪼갤지 올렸으나 3일째 PM 답이 없어, 쪼개지 않는
+    쪽(A가 제안한 안)으로 임시 진행한다 — 지금 forward test 신호도 PM 피처 없이 돌고 있어 결과가
+    달라지지 않는다(R-08). PM이 경로를 정하면 이 세 표만 바꾸면 된다."""
+    raw = ROOT / "data" / "raw" / COLLECT_SNAPSHOT
+    out = build_all(raw, date.fromisoformat(COLLECT_START), date.fromisoformat(ctx.date))
+    for name in ("prices", "index", "tickers", "status", "universe", "delisted", "delisted_reused"):
+        ctx.write_table(name, out[name])
+    ctx.write_table("sector", ctx.read_table("sector"))
+    for name in _PM_TABLES:
+        ctx.write_table(name, _empty_table(name))
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser()
     ap.add_argument("--snapshot", required=True)

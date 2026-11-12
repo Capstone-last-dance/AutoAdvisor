@@ -144,6 +144,8 @@ class ForwardCommitMemoTest(unittest.TestCase):
 class StepsTest(unittest.TestCase):
     def test_connected_entries(self):
         entries = {s.no: s.entry for s in rw.STEPS}
+        self.assertEqual(entries[1], "src.data.build_openapi:m1_step")
+        self.assertEqual(entries[2], "src.features.store:m2_step")
         self.assertEqual(entries[3], "src.models.signals:m3_step")
         self.assertEqual(entries[4], "src.portfolio.weekly:m4_step")
         self.assertEqual(entries[5], "src.portfolio.weekly:m8_step")
@@ -159,7 +161,7 @@ class StubPropagationTest(TempRootTest):
             seen["prices_rows"] = len(ctx.read_table("prices"))  # 1단계 스텁을 읽는다
             ctx.write_table("features", rw.empty_frame("features"), date=ctx.date)
 
-        self.assertEqual(rw.run(DAY, with_entries(s2=features)), 0)
+        self.assertEqual(rw.run(DAY, with_entries(s1=None, s2=features)), 0)
         self.assertEqual(seen["prices_rows"], 0)
         self.assertTrue((self.tmp / "_stub" / "features" / f"{DAY}.parquet").exists())
         self.assertFalse((self.tmp / "features" / f"{DAY}.parquet").exists())
@@ -191,7 +193,13 @@ class MainTest(TempRootTest):
         self.assertFalse((self.tmp / "logs").exists())
 
     def test_cli_runs(self):
-        self.assertEqual(rw.main(["--date", DAY]), 0)
+        # 1·2단계(m1_step·m2_step)는 실제 수집·재구축을 거쳐야 해서 이 테스트의 관심사가 아니다
+        # (각자 test_build_openapi.py·test_store.py가 따로 본다). CLI 배선만 보므로 연결을 끊어
+        # resolve()가 "아직 없음"으로 보고 원래 스텁으로 대신하게 한다.
+        import src.data.build_openapi as build_openapi
+        import src.features.store as store
+        with mock.patch.object(build_openapi, "m1_step", None), mock.patch.object(store, "m2_step", None):
+            self.assertEqual(rw.main(["--date", DAY]), 0)
 
 
 if __name__ == "__main__":

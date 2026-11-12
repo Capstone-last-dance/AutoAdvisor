@@ -180,3 +180,47 @@ def test_delisted_reused_skips_ticker_outside_build_range():
     days = [pd.Timestamp(d) for d in pd.bdate_range("2020-01-01", "2020-01-10")]
     out = build_delisted_reused(pd.DataFrame(columns=["ticker", "date", "close_raw"]), days)
     assert out.empty
+
+
+# ---------------------------------------------------------------------------
+# run_weekly 1단계 (m1_step)
+# ---------------------------------------------------------------------------
+
+class _FakeCtx:
+    """D의 StepContext 중 1단계가 쓰는 부분만 흉내 낸다 (test_signals.py의 m3_step 테스트와 같은 요령)."""
+
+    def __init__(self, date, tables=()):
+        self.date = date
+        self._tables = dict(tables)
+        self.written = {}
+
+    def read_table(self, name, date=None):
+        return self._tables[name]
+
+    def write_table(self, name, df, date=None):
+        self.written[name] = df
+        return f"{name}.parquet"
+
+
+def _canned_out():
+    a_tables = ("prices", "index", "tickers", "status", "universe", "delisted", "delisted_reused")
+    return {name: pd.DataFrame({"name": [name]}) for name in a_tables}
+
+
+def test_m1_step_writes_a_tables_empty_pm_tables_and_passes_sector_through(monkeypatch):
+    from src.data import build_openapi
+
+    out = _canned_out()
+    monkeypatch.setattr(build_openapi, "build_all", lambda raw, start, end: out)
+    sector = pd.DataFrame({"name": ["sector"]})
+    ctx = _FakeCtx("2026-11-13", {"sector": sector})
+
+    build_openapi.m1_step(ctx)
+
+    for name, df in out.items():
+        pd.testing.assert_frame_equal(ctx.written[name], df)
+    pd.testing.assert_frame_equal(ctx.written["sector"], sector)   # 다시 받지 않고 그대로 옮김 (DEC-23)
+    for name in build_openapi._PM_TABLES:
+        assert ctx.written[name].empty
+        from src.common import io
+        io.validate(name, ctx.written[name])   # 9.3절 스키마를 만족하는 0행
