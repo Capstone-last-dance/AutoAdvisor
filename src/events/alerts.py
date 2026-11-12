@@ -6,8 +6,10 @@
 - 쿨다운: 그 거래일부터 `events.cooldown_trading_days` 거래일 동안 신규 진입 금지
 - 같은 종목·유형의 후보가 진행 중인 쿨다운 안에 또 나오면 v1은 같은 사건으로 보고 종료일을 늘리지 않는다
 - 신호일 t에는 `available_at < t 15:30 KST`인 경보만 쓴다 (DEC-09)
-- 체결일 d의 쿨다운·청산에는 d 15:30 KST 전에 만들어진 경보(`generated_at`)만 쓴다 (DEC-32). 나중에 채운 경보가
-  지난 체결 재생을 바꾸지 않게 하는 규칙이다. 늦게 만든 경보는 생성 뒤 첫 체결일에 청산하고 남은 쿨다운을 적용한다.
+- 신호일 t의 진입 금지(`cooldown_at`)에는 기록 마감(t 다음 거래일 09:00 KST, DEC-04) 전에 만들어진 경보만 쓰고,
+  체결일 d의 쿨다운·청산에는 d 15:30 KST 전에 만들어진 경보만 쓴다 (`generated_at`, DEC-32). 나중에 채운 경보가
+  고정된 기록과 지난 체결 재생을 바꾸지 않게 하는 규칙이다. 정보 컷오프는 위의 `available_at`이 맡는다.
+  늦게 만든 경보는 생성 뒤 첫 체결일에 청산하고 남은 쿨다운을 적용한다.
   백테스트 파일은 `generated_at = available_at`이라 영향이 없다
 
 종목 연결: OpenDART 목록의 종목코드가 A의 `tickers`에 있고, 접수일이 그 상장 구간 안이며,
@@ -39,6 +41,9 @@ UNLINKED = "unlinked"
 DISCLOSURE_TYPES = ("B", "I")
 # 달력일 d 00:00부터 잰다. OpenDART 목록은 접수일만 줘서 d 다음 날 08:00 KST 전의 결과는 확정이 아니다 (DEC-33)
 CONFIRM_AFTER = pd.Timedelta(days=1, hours=8)
+# 주간 기록 마감: 신호일 다음 거래일 09:00 KST (DEC-04 변경, `forward_test.commit_deadline`과 같은 시각).
+# 신호일 t의 목표는 이 전에 고정되므로, `cooldown_at(t)`에는 이 전에 만들어진 경보만 쓴다 (DEC-32)
+RECORD_DEADLINE = pd.Timedelta(hours=9)
 
 
 class AlertsNotCollected(FileNotFoundError):
@@ -187,10 +192,15 @@ class AlertBook:
         return pd.Timestamp(t).tz_localize(KST) + self.cutoff
 
     def cooldown_at(self, t: str) -> set[str]:
-        """t의 15:30 전에 이용 가능하고 생성된 경보로 다음 거래일의 진입 금지 종목을 계산한다."""
-        cutoff = self._cutoff_at(t)
+        """t의 15:30 전에 이용 가능했고 t의 기록 마감 전에 만들어진 경보로 다음 거래일의 진입 금지 종목을 계산한다.
+
+        기록 마감은 다음 거래일 09:00 KST다 (DEC-04). 주간 기록은 t일 경보 파일이 있어야 돌므로 t 다음 날 08:00 뒤에
+        실행되고, 그 전에 만든 경보는 기록 때 이미 있었다. t 15:30으로 자르면 그 사이에 만든 t−1일 이전 경보가
+        forward에서만 빠져 백테스트와 어긋난다 (DEC-32, 2026-11-12 정정).
+        """
         execution = _next_day_index(self.days, pd.Timestamp(t))
-        known = (self.available < cutoff) & (self.generated < cutoff)
+        deadline = self.days[execution].tz_localize(KST) + RECORD_DEADLINE
+        known = (self.available < self._cutoff_at(t)) & (self.generated < deadline)
         active = known & (self.start <= execution) & (execution <= self.end)
         return set(self.tickers[active])
 

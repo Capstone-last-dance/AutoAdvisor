@@ -113,13 +113,42 @@ class TestGeneratedAt:
 
     @pytest.mark.parametrize(("generated", "expected"), [
         ("2026-01-12 15:29:59", {"000001"}),
-        ("2026-01-12 15:30:00", set()),
-        ("2026-01-12 17:00:00", set()),
+        ("2026-01-12 15:30:00", {"000001"}),   # 신호 컷오프 뒤라도 기록 마감 전이면 기록 때 이미 있었다
+        ("2026-01-12 17:00:00", {"000001"}),   # C #51 리뷰의 재현 사례와 같은 모양
+        ("2026-01-13 08:59:59", {"000001"}),
+        ("2026-01-13 09:00:00", set()),        # 기록 마감 = t 다음 거래일 09:00 (DEC-04)
         ("2026-01-13 15:00:00", set()),
     ])
-    def test_cooldown_at_uses_only_alerts_generated_before_signal_cutoff(self, generated, expected):
+    def test_cooldown_at_uses_only_alerts_generated_before_record_deadline(self, generated, expected):
         book = AlertBook(stamped(self.AVAILABLE, generated), DAYS, COOLDOWN)
         assert book.cooldown_at("2026-01-12") == expected
+
+    @pytest.mark.parametrize(("generated", "expected"), [
+        ("2026-01-17 08:05:00", {"000001"}),   # 목요일 경보를 토요일 주간 실행 전에 몰아서 만든 경우
+        ("2026-01-19 08:59:59", {"000001"}),
+        ("2026-01-19 09:00:00", set()),
+    ])
+    def test_friday_signal_deadline_is_monday_nine(self, generated, expected):
+        book = AlertBook(stamped("2026-01-15 23:59:59", generated), DAYS, COOLDOWN)
+        assert book.cooldown_at("2026-01-16") == expected
+
+    def test_deadline_skips_holiday(self):
+        days = DAYS.drop(pd.Timestamp("2026-01-19"))                      # 월요일 휴장 → 마감은 화요일 09:00
+        late = AlertBook(stamped("2026-01-15 23:59:59", "2026-01-19 12:00:00"), days, COOLDOWN)
+        assert late.cooldown_at("2026-01-16") == {"000001"}
+        after = AlertBook(stamped("2026-01-15 23:59:59", "2026-01-20 09:00:00"), days, COOLDOWN)
+        assert after.cooldown_at("2026-01-16") == set()
+
+    def test_same_as_backtest_when_generated_before_deadline(self):
+        # 기록 마감 전에 만들면 백테스트(generated_at = available_at)와 진입 금지가 같다
+        backtest = AlertBook(alerts_frame([("000001", "2026-01-15 23:59:59")]), DAYS, COOLDOWN)
+        forward = AlertBook(stamped("2026-01-15 23:59:59", "2026-01-17 08:05:00"), DAYS, COOLDOWN)
+        assert forward.cooldown_at("2026-01-16") == backtest.cooldown_at("2026-01-16") == {"000001"}
+
+    def test_record_deadline_matches_forward_commit_deadline(self):
+        from src.pipeline.forward_test import commit_deadline
+        signal = pd.Timestamp("2026-11-20")
+        assert commit_deadline(signal) == pd.Timestamp("2026-11-23", tz=KST) + m9.RECORD_DEADLINE
 
     def test_build_defaults_to_available_at(self):
         built = build_alerts(disclosures([("1", "2026-01-06", "C1", "000001", TITLE)]), TICKERS, EVENTS, DAYS)
