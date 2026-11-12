@@ -49,6 +49,7 @@ _stub/*
 # Hand-off files from other roles (labels, signals, features) stay local
 /files/
 /signals/wf_*.parquet
+/alerts/wf_20261112_PM_m9_b07_v1.parquet
 
 # Personal PM investigations, collection runs, reviews and execution records
 # Keep team experiment reports and reports/final eligible for Git.
