@@ -31,13 +31,15 @@ ONE_DAY = pd.Timedelta(days=1)
 def compute_news_features(articles: pd.DataFrame, universe: pd.DataFrame, trading_days: Iterable,
                           collected: Iterable[str], coverage: tuple,
                           covered_from: Mapping[str, Any] | None = None,
-                          window: tuple[int, int] = (-5, -1), baseline: tuple[int, int] = (-65, -6)) -> pd.DataFrame:
+                          window: tuple[int, int] = (-5, -1), baseline: tuple[int, int] = (-65, -6),
+                          covered_until: Mapping[str, Any] | None = None) -> pd.DataFrame:
     """신호일별 U_t 전 종목의 `date, ticker, news_cnt_spike, news_sent_5` 원값(순위 변환 전).
 
     articles: date(기사 달력일), ticker, sentiment. 분석 대상 기사만 넣는다. 감성 점수가 없는 기사는 건수에만 든다.
     collected: 건수를 수집한 종목. 여기 없는 U_t 종목은 두 피처 모두 결측이다.
     coverage: 빠짐없이 수집한 달력일 구간 (시작, 끝).
     covered_from: {종목: 현재 상호를 쓰기 시작한 날}. 그 전 달력일이 창에 들면 결측이다.
+    covered_until: {종목: 건수를 믿을 수 있는 마지막 날}. 그 뒤 달력일이 창에 들면 결측이다(예: 새 상호가 일반어·지명과 겹침).
     """
     days = pd.DatetimeIndex(sorted(pd.to_datetime(list(trading_days)))).normalize().unique()
     members = universe.loc[universe["in_universe"], ["date", "ticker"]].copy()
@@ -78,9 +80,10 @@ def compute_news_features(articles: pd.DataFrame, universe: pd.DataFrame, tradin
     start, end = pd.Timestamp(coverage[0]).normalize(), pd.Timestamp(coverage[1]).normalize()
     since = {str(k): pd.Timestamp(v).normalize() for k, v in (covered_from or {}).items() if pd.notna(v)}
     known = set(map(str, collected))
+    until = {str(k): pd.Timestamp(v).normalize() for k, v in (covered_until or {}).items() if pd.notna(v)}
     lo = np.array([max(start, since.get(t, start)) if t in known else pd.Timestamp.max for t in tickers],
                   dtype="datetime64[ns]")
-    hi = np.datetime64(end)
+    hi_all = np.array([min(end, until.get(t, end)) for t in tickers], dtype="datetime64[ns]")
 
     frames = []
     for i, (t, group) in enumerate(members.groupby("date", sort=True)):
@@ -91,6 +94,7 @@ def compute_news_features(articles: pd.DataFrame, universe: pd.DataFrame, tradin
         base_n = _range_sum(count, calendar, b0, b1, cols)
         score_sum = _range_sum(score, calendar, r0, r1, cols)
         score_n = _range_sum(scored, calendar, r0, r1, cols)
+        hi = hi_all[cols]
         ok_recent = (lo[cols] <= np.datetime64(r0)) & (np.datetime64(r1) <= hi)
         ok_all = (lo[cols] <= np.datetime64(min(r0, b0))) & (np.datetime64(max(r1, b1)) <= hi)
         spike = np.where(ok_all, (recent_n + 1.0) / (base_n * scale + 1.0), np.nan)
@@ -116,11 +120,13 @@ def rank_news_features(raw: pd.DataFrame) -> pd.DataFrame:
 
 def build_news_features(articles: pd.DataFrame, universe: pd.DataFrame, trading_days: Iterable,
                         cfg: Mapping[str, Any], collected: Iterable[str], coverage: tuple,
-                        covered_from: Mapping[str, Any] | None = None) -> pd.DataFrame:
+                        covered_from: Mapping[str, Any] | None = None,
+                        covered_until: Mapping[str, Any] | None = None) -> pd.DataFrame:
     """사전등록 설정(`configs/prereg.yaml` 내용)으로 순위 변환까지 마친 뉴스 피처 표를 만든다."""
     features = cfg["features"]
     raw = compute_news_features(articles, universe, trading_days, collected, coverage, covered_from,
-                                tuple(features["news_window_offsets"]), tuple(features["news_baseline_offsets"]))
+                                tuple(features["news_window_offsets"]), tuple(features["news_baseline_offsets"]),
+                                covered_until)
     return rank_news_features(raw)
 
 

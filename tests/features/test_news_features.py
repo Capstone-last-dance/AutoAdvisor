@@ -30,9 +30,11 @@ def articles(rows):
                         columns=["date", "ticker", "sentiment"])
 
 
-def raw(rows, tickers=("000001", "000002"), collected=None, coverage=COVERAGE, covered_from=None, dates=(T,)):
+def raw(rows, tickers=("000001", "000002"), collected=None, coverage=COVERAGE, covered_from=None, dates=(T,),
+        covered_until=None):
     out = compute_news_features(articles(rows), universe(tickers, dates), DAYS,
-                                collected if collected is not None else tickers, coverage, covered_from)
+                                collected if collected is not None else tickers, coverage, covered_from,
+                                covered_until=covered_until)
     return out.set_index(["date", "ticker"])
 
 
@@ -121,6 +123,17 @@ class TestMissing:
         assert value(out, "news_sent_5") == pytest.approx(0.5)
         later = raw([(day(-1), "000001", 0.5)], covered_from={"000001": day(-3)})
         assert np.isnan(later.loc[(T, "000001"), "news_sent_5"])
+
+    def test_covered_until_inside_window_is_missing(self):
+        # 새 상호가 일반어·지명과 겹쳐 그 뒤 건수를 믿을 수 없는 종목 (예: 보령제약 → 보령)
+        out = raw([(day(-1), "000001", 0.5)], covered_until={"000001": day(-2)})
+        assert np.isnan(value(out, "news_cnt_spike"))
+        assert np.isnan(value(out, "news_sent_5"))
+        assert value(out, "news_cnt_spike", "000002") == pytest.approx(1.0)
+
+    def test_covered_until_after_windows_does_not_matter(self):
+        out = raw([(day(-1), "000001", 0.5)], covered_until={"000001": T})
+        assert value(out, "news_cnt_spike") == pytest.approx(2.0)
 
     def test_rename_before_windows_does_not_matter(self):
         out = raw([(day(-1), "000001", 0.5)], covered_from={"000001": day(-70)})
