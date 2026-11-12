@@ -31,7 +31,7 @@
 | A-06 | A 김윤하 | 11/22 | 대기 | | |
 | A-07 | A 김윤하 | 11/22 | 대기 | | |
 | A-08 | A 김윤하 | 11/27 | 대기 | | |
-| A-09 | A 김윤하 | 11/30 | 대기 | | |
+| A-09 | A 김윤하 | 11/30 | 완료 | src/models/ranker.py(train_ranker); tests/models/test_ranker.py | `train_ranker(h, exclude_features)`는 h=1·5·20, exclude_features 옵션 모두 이미 공개돼 있었음. 실데이터(C 공식 라벨·실제 종료일 purge, 폴드 2016)로 셋 다 오류 없이 실행됨을 확인(검증 rank IC: h=1 0.0545 / h=5 0.0517 / h=20 0.0814; exclude_features로 mom_12_1 제외 시 0.0814→0.0768로 하락해 옵션이 실제 반영됨을 확인). 합성 데이터 기반 회귀 테스트 4개 추가(파라미터화 h=1·5·20 + exclude_features), `pytest tests` 744 passed |
 | A-10 | A 김윤하 | 12/7 | 대기 | | |
 | A-11 | A 김윤하 | 기한 없음 | 대기 | | |
 | B-01 | B 조윤상 | 11/1 | 완료 | docs/design_B.md; src/portfolio/; [PR #4](https://github.com/Capstone-last-dance/AutoAdvisor/pull/4) | M4·M8 설계와 PPO 골격. 합성 입력으로 학습 루프 테스트 통과, A 리뷰 후 병합 |
