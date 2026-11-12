@@ -43,7 +43,8 @@ def evaluate_forward_record(
     ``forward_log``는 모든 기록일과 ``has_positions``를 제공한다. D는
     각 날짜의 ``ft-{YYYYMMDD}`` 태그에 있는 원본 비중을
     ``recorded_targets``로 전달한다. 태그가 없는 중간 주는 직전 보유를
-    유지한다. M9 적용 실행은 PM의 ``AlertBook.engine_alerts``를 넘겨
+    유지한다. M9 적용 실행은 PM의 모듈 함수
+    ``src.events.alerts.engine_alerts``를 넘겨 필요한 날짜별 파일만 읽고,
     B와 같은 거래일별 쿨다운·청산 일정을 사용한다.
     """
     if (not isinstance(run_at, datetime) or run_at.tzinfo is None or run_at.utcoffset() is None
