@@ -260,6 +260,19 @@ def test_reused_ticker_can_be_bought_after_new_listing():
     assert "101970" not in next(row for row in engine.ledger if row["date"] == d[10])["rejected"]
 
 
+def test_reused_ticker_target_in_old_company_gap_is_rejected():
+    days = pd.bdate_range("2020-01-01", periods=15)
+    d = [x.strftime("%Y-%m-%d") for x in days]
+    closes = pd.DataFrame({"101970": [100.0] * 4 + [50.0] + [float("nan")] * 5 + [80.0] * 5}, index=days)
+    engine = ExecutionEngine(closes, pd.Series(100.0, index=days), CostRates(0, 0, 0),
+                             delistings={"101970": (d[4], 50.0)}, record_ledger=True)
+    result = engine.run_period(engine.initial_state(), {"101970": 0.3}, d[6], d[9])
+    assert result.nav_end == pytest.approx(1.0)
+    assert result.state.holdings == {}  # 신회사 상장일에 옛 목표를 뒤늦게 매수하지 않는다
+    assert result.turnover == pytest.approx(0.15)
+    assert next(row for row in engine.ledger if row["date"] == d[7])["rejected"]["101970"] == "cooldown_or_delisted"
+
+
 def test_halted_valuation_uses_last_traded_close_even_if_source_close_changes():
     days = pd.bdate_range("2020-01-01", periods=5)
     closes = pd.DataFrame({"005930": [100.0, 100.0, 110.0, 120.0, 120.0]}, index=days)
