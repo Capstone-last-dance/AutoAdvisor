@@ -1,4 +1,5 @@
 """합성 저장소에서 주간 M6 템플릿의 대상·공시 시점·출력을 검증한다."""
+from datetime import datetime
 from types import SimpleNamespace
 
 import pandas as pd
@@ -10,13 +11,15 @@ from src.events import alerts as m9
 from src.pipeline.run_weekly import StepContext, resolve
 from src.portfolio import params
 from src.rag import evidence
-from tests.conftest import item, page
+from tests.conftest import FakeClock, item, page
 from tests.events.test_alerts import alerts_frame, disclosures
 
 T = "2026-02-20"
 DAY = pd.Timestamp(T)
 PREVIOUS = "2026-02-12"  # 합성 달력에서 전 주 금요일은 휴장
 DAYS = pd.bdate_range("2026-01-05", "2026-02-25").difference(pd.DatetimeIndex(["2026-02-13"]))
+ARCHIVE_READY = "2026-02-21T08:00:00+09:00"
+RECORD_DEADLINE = "2026-02-23T09:00:00+09:00"
 
 
 def ticker(n):
@@ -55,6 +58,19 @@ def inputs(tmp_path, monkeypatch):
     return tables, alerts
 
 
+def archive_filings(client_factory, filings=(), *, day=DAY, observed_at=ARCHIVE_READY,
+                    lookback=35, types=("B", "I")):
+    def scenario(key, attempt):
+        start, end, kind, _ = key
+        rows = [row for row in filings if kind == "B" and start <= row["rcept_dt"] <= end]
+        return page(rows) if rows else page(status="013")
+
+    clock = FakeClock(datetime.fromisoformat(observed_at))
+    client, _, _ = client_factory(scenario, clock=clock)
+    return collect_daily(day.date(), lookback_days=lookback, types=types, client=client,
+                         data_raw=io.ROOT / "data" / "raw")
+
+
 def test_archived_disclosures_calendar_boundaries_and_schema(inputs, client_factory):
     position = DAYS.get_loc(DAY)
     earliest = DAYS[position - 19]
@@ -70,13 +86,7 @@ def test_archived_disclosures_calendar_boundaries_and_schema(inputs, client_fact
         ]
     ]
 
-    def scenario(key, attempt):
-        start, end, kind, _ = key
-        rows = [row for row in filings if kind == "B" and start <= row["rcept_dt"] <= end]
-        return page(rows) if rows else page(status="013")
-
-    client, _, _ = client_factory(scenario)
-    collect_daily(DAY.date(), lookback_days=(DAY - too_old).days, client=client, data_raw=io.ROOT / "data" / "raw")
+    archive_filings(client_factory, filings, lookback=(DAY - too_old).days)
     resolve("src.rag.evidence:m6_step")(StepContext(T))
 
     record, = io.read_evidence(T)
@@ -108,10 +118,18 @@ def test_availability_is_strict_and_summary_has_at_most_three_citations(inputs, 
         pd.Timestamp(f"{T} {time}", tz=m9.KST)
         for time in ("15:30:00", "15:29:59", "15:29:58", "15:29:57", "15:29:56")
     ]).as_unit("ns")
-    observed = frame[["rcept_no", "stock_code"]].assign(fetched_at=frame["available_at"], pblntf_ty="I")
+    observed = frame.assign(fetched_at=frame["available_at"], pblntf_ty="I", run_id="run", window_id="I")
+    windows = pd.DataFrame([
+        {"run_id": "run", "window_id": kind, "pblntf_ty": kind, "state": "complete",
+         "bgn": "2026-01-05", "end": "2026-02-19", "accepted_attempts": [1],
+         "attempts": [{"n": 1, "finished_at": ARCHIVE_READY}]}
+        for kind in ("B", "I")
+    ])
     monkeypatch.setattr(evidence, "build_disclosures", lambda *args, **kw: SimpleNamespace(
-        df=frame, observations=observed,
+        df=frame, observations=observed, windows=windows,
     ))
+    # 날짜 전용 원본에서 직접 만들 수 없는 시·분·초 경계는 관측 버전에 주입한다.
+    monkeypatch.setattr(evidence, "_latest_versions", lambda observations, days: observations)
 
     evidence.m6_step(StepContext(T))
 
@@ -122,7 +140,7 @@ def test_availability_is_strict_and_summary_has_at_most_three_citations(inputs, 
     assert record["summary"].splitlines()[-1] == "최근 20거래일 공시: 거래소공시 주식…선택권 (2026-02-19) [3]"
 
 
-def test_targets_cooldown_rank_limit_and_alert_window(inputs):
+def test_targets_cooldown_rank_limit_and_alert_window(inputs, client_factory):
     tables, alerts = inputs
     tables["signals"] = pd.DataFrame({
         "ticker": [ticker(n) for n in range(1, 25)],
@@ -142,6 +160,7 @@ def test_targets_cooldown_rank_limit_and_alert_window(inputs):
     ])
     assert ticker(2) in m9.cooldown_at(T)
     assert ticker(3) not in m9.cooldown_at(T)
+    archive_filings(client_factory)
 
     evidence.m6_step(StepContext(T))
 
@@ -155,6 +174,56 @@ def test_targets_cooldown_rank_limit_and_alert_window(inputs):
     assert len(records) == 22
     assert all(row["summary"] == "최근 20거래일 공시: 조회된 근거가 없습니다." for row in records)
     assert all(row["sources"] == [] for row in records)
+
+
+def test_mixed_iso_observation_times_keep_latest_before_deadline(inputs, client_factory):
+    old = item(day="20260219", stock_code=ticker(1), report_nm="첫 관측")
+    latest = item(day="20260219", stock_code=ticker(1), report_nm="마감 전 최신 관측")
+    archive_filings(client_factory, [old], day=DAY - pd.Timedelta(days=1),
+                    observed_at="2026-02-20T08:00:00.100003+09:00")
+    archive_filings(client_factory, [latest])
+
+    evidence.m6_step(StepContext(T))
+
+    record, = io.read_evidence(T)
+    assert [source["title"] for source in record["sources"]] == ["마감 전 최신 관측"]
+
+
+@pytest.mark.parametrize("observed_at", [RECORD_DEADLINE, "2026-02-26T10:00:00+09:00"])
+def test_late_archive_cannot_change_past_evidence(inputs, client_factory, observed_at):
+    tables, _ = inputs
+    tables["tickers"] = pd.DataFrame({
+        "ticker": [ticker(1), ticker(2)], "listing_date": pd.to_datetime(["2020-01-01"] * 2),
+        "delisting_date": pd.to_datetime([None, None]),
+    })
+    tables["signals"] = pd.DataFrame({"ticker": [ticker(1), ticker(2)], "rank": [1, 2], "crash_flag": [1, 0]})
+    original = item(day="20260219", stock_code=ticker(1), report_nm="기록 마감 전 원본")
+    archive_filings(client_factory, [original])
+    evidence.m6_step(StepContext(T))
+    before = io.read_evidence(T)
+    assert before[0]["sources"][0]["title"] == "기록 마감 전 원본"
+
+    revised = item(day="20260219", stock_code=ticker(2), report_nm="기록 마감 뒤 제목")
+    late_only = item(2, day="20260219", stock_code=ticker(2), report_nm="뒤늦게 발견된 공시")
+    archive_filings(client_factory, [revised, late_only], day=DAY + pd.Timedelta(days=1),
+                    observed_at=observed_at)
+
+    evidence.m6_step(StepContext(T))
+    assert io.read_evidence(T) == before
+
+
+@pytest.mark.parametrize("case", ["absent", "missing_day", "missing_type", "completed_after_deadline"])
+def test_missing_disclosure_coverage_stops_without_writing(inputs, client_factory, case):
+    if case == "missing_day":
+        archive_filings(client_factory, lookback=5)
+    elif case == "missing_type":
+        archive_filings(client_factory, types=("B",))
+    elif case == "completed_after_deadline":
+        archive_filings(client_factory, observed_at=RECORD_DEADLINE)
+
+    with pytest.raises(m9.AlertsNotCollected, match="공시 수집이 끝나지 않은 날짜"):
+        evidence.m6_step(StepContext(T))
+    assert io.list_dates("evidence") == []
 
 
 @pytest.mark.parametrize("table", ["signals", "index", "tickers", "alerts"])
