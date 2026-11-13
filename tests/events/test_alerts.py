@@ -46,7 +46,7 @@ def alerts_frame(rows):
     return pd.DataFrame({"date": available.tz_localize(None).normalize(), "ticker": [t for t, _ in rows],
                          "trigger_type": "T2", "rcept_no": [str(i) for i in range(len(rows))], "report_nm": "x",
                          "rcept_dt": pd.Series([pd.NaT] * len(rows), dtype=pd.DatetimeTZDtype("ns", KST)),
-                         "available_at": available})
+                         "available_at": available, "generated_at": available})
 
 
 def book(rows):

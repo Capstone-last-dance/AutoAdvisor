@@ -29,7 +29,7 @@ from pathlib import Path
 import pandas as pd
 
 from src.common import io
-from src.pipeline import forward_test
+from src.pipeline import forward_test, runlog
 
 PROCESSED_TABLES = (
     "prices", "index", "tickers", "status", "universe", "delisted", "delisted_reused", "sector", "disclosures", "news_daily", "news",
@@ -211,32 +211,16 @@ def run(date: str, steps: Sequence[Step] = STEPS, source_commit: str | None = No
         except Exception as exc:  # 어떤 오류든 이후 단계를 막는다
             log.error("%s: 실패 (%s: %s)\n%s", label, type(exc).__name__, exc, traceback.format_exc())
             log.error("주간 실행 중단: %s 이후 단계는 실행하지 않았다", label)
-            _close_logger(log)
+            runlog.close_log(log)
             return 1
 
     log.info("주간 실행 완료 (스텁 사용: %s)", "예, " + ", ".join(ctx.stubbed) if ctx.uses_stub else "아니오")
-    _close_logger(log)
+    runlog.close_log(log)
     return 0
 
 
 def _setup_logger(date: str) -> logging.Logger:
-    log_path = io.ROOT / "logs" / f"{date}.log"
-    log_path.parent.mkdir(parents=True, exist_ok=True)
-    log = logging.getLogger(f"run_weekly.{date}")
-    log.setLevel(logging.INFO)
-    log.propagate = False
-    _close_logger(log)
-    fmt = logging.Formatter("%(asctime)s %(levelname)s %(message)s")
-    for handler in (logging.FileHandler(log_path, encoding="utf-8"), logging.StreamHandler(sys.stderr)):
-        handler.setFormatter(fmt)
-        log.addHandler(handler)
-    return log
-
-
-def _close_logger(log: logging.Logger) -> None:
-    for handler in list(log.handlers):
-        handler.close()
-        log.removeHandler(handler)
+    return runlog.open_log(f"run_weekly.{date}", io.ROOT / "logs" / f"{date}.log")
 
 
 def main(argv: Sequence[str] | None = None) -> int:
