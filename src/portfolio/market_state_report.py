@@ -208,9 +208,10 @@ def main(argv: Sequence[str] | None = None) -> Path:
     daily, metrics = market_state_metrics(load_kospi200(), cfg)  # vol_target_annual이 FILL_이면 여기서 멈춘다 (R-08)
     svg = svg_figure(daily, RiskLayerParams.from_prereg(cfg))
 
+    commit = _git_commit()  # 결과 폴더를 만들기 전에 (R-10)
     (out / "figures").mkdir(parents=True)
     shutil.copyfile(cfg_path, out / "config.yaml")
-    (out / "git_commit.txt").write_text(_git_commit(), encoding="utf-8")
+    (out / "git_commit.txt").write_text(commit, encoding="utf-8")
     metrics = {"run_id": args.run_id, "task": "B-04", **metrics}
     (out / "metrics.json").write_text(json.dumps(metrics, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     (out / "figures" / f"{FIGURE}.svg").write_text(svg, encoding="utf-8")

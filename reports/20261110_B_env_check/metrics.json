@@ -1,0 +1,122 @@
+{
+  "run_id": "20261110_B_env_check",
+  "task": "B-05",
+  "criteria": {
+    "1_episode_runs_to_the_end": true,
+    "2_same_weights_same_fills_and_costs": true,
+    "tolerance": 1e-12
+  },
+  "signal_dates": {
+    "n": 781,
+    "first": "2011-01-07",
+    "last": "2025-12-26"
+  },
+  "universe_size": {
+    "mean": 418.9359795134443,
+    "min": 321,
+    "max": 494
+  },
+  "m9": "쿨다운·이벤트 청산 없음 (M9 백테스트 경보 전)",
+  "random_action_seed": 0,
+  "episodes": {
+    "zero_action": {
+      "n_steps": 781,
+      "n_executed": 780,
+      "first_date": "2011-01-07",
+      "last_date": "2025-12-26",
+      "nav_end": 1.655724087127259,
+      "mean_excess_return": -0.0002984988231910504,
+      "mean_turnover": 0.155899752438871,
+      "ms_per_step": 0.5387039692647917,
+      "rebalance_count": 780,
+      "scaled_rebalance_count": 0
+    },
+    "random_action": {
+      "n_steps": 781,
+      "n_executed": 780,
+      "first_date": "2011-01-07",
+      "last_date": "2025-12-26",
+      "nav_end": 0.7552444437289101,
+      "mean_excess_return": -0.0015606011006278533,
+      "mean_turnover": 0.31043609549272466,
+      "ms_per_step": 0.365218053728094,
+      "rebalance_count": 780,
+      "scaled_rebalance_count": 0
+    }
+  },
+  "buffer_vs_env": {
+    "n_signal_dates": 781,
+    "n_periods": 780,
+    "ledger_days": 4461,
+    "mismatched_days": [],
+    "max_weight_diff": 0.0,
+    "max_fill_diff": 0.0,
+    "max_nav_diff": 0.0,
+    "max_excess_return_diff": 0.0,
+    "max_turnover_diff": 0.0,
+    "ledger_counts": {
+      "days": 4461,
+      "fills": 12277,
+      "rejected_halted": 71,
+      "rejected_near_lower_limit": 5,
+      "rejected_near_upper_limit": 2,
+      "delisting_fills": 0
+    }
+  },
+  "seconds": {
+    "snapshots": 4.63504190009553,
+    "baseline_signals": 34.59361059998628
+  },
+  "inputs": {
+    "prices": {
+      "path": "data/processed/prices.parquet",
+      "rows": 9345272,
+      "sha256": "e735be46c5ca1685f922d0c8ee78f2129d8c8256bb6cfd9181723ccd0b01b5a5"
+    },
+    "status": {
+      "path": "data/processed/status.parquet",
+      "rows": 9345272,
+      "sha256": "40812ae37f997ef5dd0b42fc2f453a15839cd9d0f4967d1b9d37fdad7e7363b3"
+    },
+    "index": {
+      "path": "data/processed/index.parquet",
+      "rows": 4146,
+      "sha256": "ce9ffb646c4723fe067c76eaba90a526683444369ac7ab43e53684e662e9300e"
+    },
+    "delisted": {
+      "path": "data/processed/delisted.parquet",
+      "rows": 932,
+      "sha256": "fc14a9183780605617f72fa784f785b4ae0635fbbef46c0d7225cc539478a54c"
+    },
+    "delisted_reused": {
+      "path": "data/processed/delisted_reused.parquet",
+      "rows": 2,
+      "sha256": "a73192de4525b05e626bd24bff5dc30e205546d6ed963bbaf5f9c1ff7ce80a25"
+    },
+    "universe": {
+      "path": "data/processed/universe.parquet",
+      "rows": 413000,
+      "sha256": "b2b892af78a83bb773b804ba3cacf673efa4f5734a8d144b1384ffce36462758"
+    },
+    "sector": {
+      "path": "data/processed/sector.parquet",
+      "rows": 3701,
+      "sha256": "e2f5ab4f5dc20a65d33c7368720f995059b2d65076a2e327246b6bdbc12fdd99"
+    }
+  },
+  "generated": {
+    "signals": {
+      "source": "src.models.baseline.baseline_signals",
+      "rows": 327189,
+      "model_version": [
+        "baseline"
+      ],
+      "sha256": "6ef4a4bccfe16483cb1d6cf45400327bc25832796c570ea863a524eab91be424"
+    },
+    "features": {
+      "source": "src.features.price_features (vol_20, mkt_vol_20, mkt_ret_20) + B market_state_table (regime_mc)",
+      "rows": 327189,
+      "sha256": "74546f1f96dbe6b196b2545bae096a6b3511ae1dbe009eaa225be06e33670e00"
+    }
+  }
+}

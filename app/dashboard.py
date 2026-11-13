@@ -20,7 +20,6 @@ if str(REPO) not in sys.path:
     sys.path.insert(0, str(REPO))
 
 from src.common import io  # noqa: E402
-from src.events import alerts as m9  # noqa: E402
 
 KST = "Asia/Seoul"
 CANDIDATE_COUNT = 20
@@ -32,6 +31,7 @@ class AlertWindow(NamedTuple):
     files: list[str]   # 기간 안의 경보 파일 날짜 (비거래일 포함)
     complete: bool     # 요청한 날까지 count거래일을 확정할 수 있으면 True
     later: int         # base 뒤의 경보 파일 수
+    missing: tuple[str, ...] = ()  # 기간 안 달력일 중 경보 파일이 없는 날 (파일 없음 = 미수집, D-06)
 
 
 def _apply_data_root() -> bool:
@@ -118,6 +118,12 @@ def cooldown_days() -> int:
         return int(yaml.safe_load(f)["events"]["cooldown_trading_days"])
 
 
+@st.cache_data(show_spinner=False)
+def _signal_cutoff_time() -> str:
+    with open(REPO / "configs" / "prereg.yaml", encoding="utf-8") as f:
+        return yaml.safe_load(f)["calendar"]["signal_cutoff_time"]
+
+
 def alert_window(count: int, until: str | None = None) -> AlertWindow | None:
     """until까지 최근 count거래일 범위에 든 경보 파일을 찾는다. index를 읽지 못하면 None.
 
@@ -135,27 +141,45 @@ def alert_window(count: int, until: str | None = None) -> AlertWindow | None:
     later = sum(d > base for d in files)
     if end > days[-1] or len(known) < count:
         return AlertWindow(base, [], False, later)
-    return AlertWindow(base, [d for d in files if known[-count] <= d <= end], True, later)
+    start = known[-count]
+    calendar = pd.date_range(start, end, freq="D").strftime("%Y-%m-%d")
+    have = set(files)
+    missing = tuple(d for d in calendar if d not in have)
+    return AlertWindow(base, [d for d in files if start <= d <= end], True, later, missing)
 
 
-def alerts_on(days: list[str]) -> pd.DataFrame | None:
-    """days의 경보 파일을 합친다. 없으면 None."""
-    frames = [df for d in days if (df := read("alerts", d)) is not None and not df.empty]
-    return pd.concat(frames, ignore_index=True) if frames else None
+def alert_gap_warning(window: AlertWindow, read_all: bool) -> str | None:
+    """경보가 빠졌을 수 있으면 경고 문구. 파일이 없는 날이 있거나 읽지 못한 파일이 있으면 0건으로 보지 않는다."""
+    gaps = []
+    if window.missing:
+        days = ", ".join(window.missing[:5]) + (f" 외 {len(window.missing) - 5}일" if len(window.missing) > 5 else "")
+        gaps.append(f"경보 파일이 없는 날 {len(window.missing)}일({days})")
+    if not read_all:
+        gaps.append("읽지 못한 경보 파일")
+    if not gaps:
+        return None
+    return f"미수집: {', '.join(gaps)}이 있어 경보가 빠졌을 수 있습니다. 확정 경보 0건으로 보지 않습니다."
 
 
-def m9_cooldown(signal_date: str) -> set[str] | None:
-    """M9 `cooldown_at`: 신호일 t의 다음 거래일에 신규 진입이 금지된 종목 (6.10절).
+def load_alerts(days: list[str]) -> tuple[pd.DataFrame | None, bool]:
+    """(합친 경보, 모든 파일을 읽었는지)."""
+    loaded = [read("alerts", d) for d in days]
+    frames = [df for df in loaded if df is not None and not df.empty]
+    return (pd.concat(frames, ignore_index=True) if frames else None), all(df is not None for df in loaded)
 
-    경보 파일이 없거나(M9 미실행) 읽지 못하면 오류를 표시하고 None을 돌려준다.
+
+def cooldown_tickers(days: list[str], signal_date: str) -> set[str] | None:
+    """days의 경보 중 신호일 컷오프 전에 이용 가능했던 경보의 종목 (available_at < cutoff_at, 6.10절).
+
+    경보 파일을 하나라도 읽지 못하면 None이다.
     """
-    try:
-        return m9.cooldown_at(signal_date)
-    except FileNotFoundError:
-        st.error("경보 파일이 아직 없습니다. M9 경보 생성을 먼저 실행해야 합니다.")
-    except Exception as exc:  # 부분 파일 등 어떤 오류든 페이지를 멈추지 않는다
-        st.error(f"M9 쿨다운을 계산하지 못했습니다.\n\n{exc}")
-    return None
+    alerts, complete = load_alerts(days)
+    if not complete:
+        return None
+    if alerts is None:
+        return set()
+    cutoff = pd.Timestamp(f"{signal_date} {_signal_cutoff_time()}", tz=KST)
+    return set(alerts.loc[alerts["available_at"] < cutoff, "ticker"])
 
 
 def entry_candidates(signals: pd.DataFrame, cooldown: set[str]) -> pd.DataFrame:

@@ -15,7 +15,7 @@
 | PM-07 | PM 장지원 | 11/9 | 대기 | | |
 | PM-08 | PM 장지원 | 11/16 | 대기 | | |
 | PM-09 | PM 장지원 | 11/16 | 대기 | | |
-| PM-10 | PM 장지원 | 11/16 | 대기 | | |
+| PM-10 | PM 장지원 | 11/16 | 진행 중 | src/events/; [PR #34](https://github.com/Capstone-last-dance/AutoAdvisor/pull/34)·[PR #51](https://github.com/Capstone-last-dance/AutoAdvisor/pull/51) | 일간 경보 입력과 재생 규칙(DEC-32·33) 구현. #51에 신호일 생성 시각 제한(C 리뷰), `AlertsNotStarted` 경로 제거(D 리뷰), 늦은 경보의 생성 뒤 첫 체결일 청산(DEC-32 정정)을 반영했고 C 재검토가 필요하다. 유형별 10건 수작업 점검, 백테스트 청산 분포, T1·T3·T6 원문 판정은 남음 |
 | PM-11 | PM 장지원 | 12/4 | 대기 | | |
 | PM-12 | PM 장지원 | 12/7 | 대기 | | |
 | PM-13 | PM 장지원 | 12/11 | 대기 | | |
@@ -31,24 +31,24 @@
 | A-06 | A 김윤하 | 11/22 | 대기 | | |
 | A-07 | A 김윤하 | 11/22 | 대기 | | |
 | A-08 | A 김윤하 | 11/27 | 대기 | | |
-| A-09 | A 김윤하 | 11/30 | 대기 | | |
+| A-09 | A 김윤하 | 11/30 | 완료 | src/models/ranker.py(train_ranker); tests/models/test_ranker.py | `train_ranker(h, exclude_features)`는 h=1·5·20, exclude_features 옵션 모두 이미 공개돼 있었음. 실데이터(C 공식 라벨·실제 종료일 purge, 폴드 2016)로 셋 다 오류 없이 실행됨을 확인(검증 rank IC: h=1 0.0545 / h=5 0.0517 / h=20 0.0814; exclude_features로 mom_12_1 제외 시 0.0814→0.0768로 하락해 옵션이 실제 반영됨을 확인). 합성 데이터 기반 회귀 테스트 4개 추가(파라미터화 h=1·5·20 + exclude_features), `pytest tests` 744 passed |
 | A-10 | A 김윤하 | 12/7 | 대기 | | |
 | A-11 | A 김윤하 | 기한 없음 | 대기 | | |
 | B-01 | B 조윤상 | 11/1 | 완료 | docs/design_B.md; src/portfolio/; [PR #4](https://github.com/Capstone-last-dance/AutoAdvisor/pull/4) | M4·M8 설계와 PPO 골격. 합성 입력으로 학습 루프 테스트 통과, A 리뷰 후 병합 |
 | B-02 | B 조윤상 | 11/8 | 완료 | src/portfolio/risk_layer.py; src/portfolio/vol_target_report.py; reports/20261103_B_vol_target/; [PR #11](https://github.com/Capstone-last-dance/AutoAdvisor/pull/11) | vol_target_annual = 0.157263 계산·부록 1 기입, 2011~2015 데이터만 사용 테스트 통과. compute_regime_mc 공개, DEC-19 반영 |
 | B-03 | B 조윤상 | 11/13 | 완료 | src/portfolio/buffer_rule.py; tests/portfolio/test_buffer_rule.py; [PR #13](https://github.com/Capstone-last-dance/AutoAdvisor/pull/13) | 단계 1~5 단위 테스트 통과. PR #8 병합 뒤 main에서 C의 M5 위 합성 시장 실행 테스트 통과(건너뛰지 않음). A 승인. 실제 신호(A-04) 실행은 B-05에서 확인 |
 | B-04 | B 조윤상 | 11/16 | 완료 | src/portfolio/risk_layer.py; src/portfolio/market_state_report.py; tests/portfolio/test_risk_layer.py; tests/portfolio/test_market_state_report.py; reports/20261104_B_m8_states/; [PR #13](https://github.com/Capstone-last-dance/AutoAdvisor/pull/13) | 불변식·경계 사례 테스트 통과, 2011~2025년 E_t·regime_mc 그림(prereg.yaml 초안 기준). A 승인. 11/9 공식 사전등록에서 쓰는 키가 바뀌면 새 run_id로 다시 만듦 |
-| B-05 | B 조윤상 | 11/16 | 진행 중 | src/portfolio/engine_adapter.py; src/portfolio/env_check.py; tests/portfolio/test_engine_adapter.py; tests/portfolio/test_env_check.py; docs/design_B.md 5.1절 | 9.3절 표 → C 엔진 어댑터(DEC-24~28 반영) 구현. 합성 시장에서 완료 기준 (1) 끝까지 실행, (2) 버퍼 규칙과 체결·비용 차이 0 통과. A 베이스라인 신호 미리보기(781개 신호일)도 통과. A PR #1 병합 뒤 리포트와 A 리뷰 남음 |
-| B-06 | B 조윤상 | 11/23 | 대기 | | |
+| B-05 | B 조윤상 | 11/16 | 진행 중 | src/portfolio/engine_adapter.py; src/portfolio/env_check.py; src/portfolio/env_check_report.py; tests/portfolio/test_engine_adapter.py; tests/portfolio/test_env_check.py; tests/portfolio/test_env_check_report.py; reports/20261110_B_env_check/; docs/design_B.md 5.1절; [PR #21](https://github.com/Capstone-last-dance/AutoAdvisor/pull/21); [PR #36](https://github.com/Capstone-last-dance/AutoAdvisor/pull/36) | 9.3절 표 → C 엔진 어댑터(DEC-24~28 반영), A 승인(PR #21). A 베이스라인 신호(PR #35)로 완료 기준 (1) 781개 신호일 끝까지 실행, (2) 버퍼 규칙과 체결·비용·NAV 차이 0 통과 (reports/20261110_B_env_check/, 입력 파일 SHA-256 기록). 리포트 코드·결과의 A 리뷰 남음 (PR #36) |
+| B-06 | B 조윤상 | 11/23 | 진행 중 | src/portfolio/rl_fold_report.py; src/portfolio/params.py; tests/portfolio/test_rl_fold_report.py; reports/20261110_B_rl_y2016_v2/; docs/design_B.md 3.4절; [PR #47](https://github.com/Capstone-last-dance/AutoAdvisor/pull/47) | 폴드 하나의 λ 탐색·PPO 학습 실행과 R-10 기록 구현(A make_folds 폴드, h = 20 purge, portfolio.rl.env 8개 검사). 폴드 2016 베이스라인 신호 리허설에서 6.5절 λ 선택 절차가 끝까지 돌았다(λ = 0, 시드 0 본 학습 300,000스텝, 약 14분). 체크포인트는 팀 드라이브, metrics.json에 지문 (PM 11/10). 다시 실행해도 가중치 지문이 같음. A 리뷰 남음 |
 | B-07 | B 조윤상 | 11/30 | 대기 | | |
 | B-08 | B 조윤상 | 12/7 | 대기 | | |
 | B-09 | B 조윤상 | 12/7 | 대기 | | |
 | B-10 | B 조윤상 | 12/14 | 대기 | | |
 | C-01 | C 손석범 | 11/1 | 완료 | [PR #3](https://github.com/Capstone-last-dance/AutoAdvisor/pull/3); [설계](design_C.md) | 4.6·6.6절 라벨·평가·체결 설계 작성 및 병합. 후속 PM 결정은 PR #8에 반영 |
-| C-02 | C 손석범 | 11/6 | 진행 중 | [병합 PR #8](https://github.com/Capstone-last-dance/AutoAdvisor/pull/8), [PR #26](https://github.com/Capstone-last-dance/AutoAdvisor/pull/26) | 구회사 폐지 이력 보완 PR #26은 B 승인. A 11/8 데이터에서 라벨·종료일 각 978,983행을 생성해 스키마·키 대응·홀드아웃 경계를 검증함. A 잠정본의 추가 2,372행은 모두 2025년 신호의 2026년 종료 결과로 확인했으며 2025년 말 평가 컷오프에 따라 C 인계본에서 제외. 로컬 파일의 팀 전달은 남음 |
+| C-02 | C 손석범 | 11/6 | 완료 | [병합 PR #8](https://github.com/Capstone-last-dance/AutoAdvisor/pull/8), [병합 PR #26](https://github.com/Capstone-last-dance/AutoAdvisor/pull/26) | A 11/8 데이터에서 라벨·종료일 각 978,983행을 생성해 스키마·키 대응·2025년 말 결과 컷오프를 검증함. C 공식 인계본을 받은 A가 자체 재현본과 전 행·전 열 값 일치를 확인함([이슈 #5](https://github.com/Capstone-last-dance/AutoAdvisor/issues/5)). 재사용 종목코드의 구회사 폐지 처리도 병합됨. |
 | C-03 | C 손석범 | 11/6 | 진행 중 | [병합 PR #8](https://github.com/Capstone-last-dance/AutoAdvisor/pull/8), [B-05 병합 PR #21](https://github.com/Capstone-last-dance/AutoAdvisor/pull/21) | 공통 체결·비용·NAV 엔진과 평가지표 구현 및 B 최종 리뷰 완료. B-05 연결 검증에서 같은 비중의 체결·비용·NAV 일치 확인. 실제 신호 기반 전체 평가가 남음 |
-| C-04 | C 손석범 | 11/16 | 진행 중 | [PR #22](https://github.com/Capstone-last-dance/AutoAdvisor/pull/22), [PR #23](https://github.com/Capstone-last-dance/AutoAdvisor/pull/23) | G0·G2 개인 행동 프록시, forward 실제 보유 재생·사후 성과 함수 구현. #22는 기록 없는 중간 주 보유 유지와 M9 청산 연동 후 B 승인, #23도 승인. 11/20 이후 실제 positions와 평가 검증이 남음 |
-| C-05 | C 손석범 | 11/23 | 진행 중 | [A 1차 결과](https://github.com/Capstone-last-dance/AutoAdvisor/issues/5#issuecomment-6735070939) | G1·G3 잠정 수치와 사전등록 기준을 대조함. G1 AUC 차이 −0.0010(기준 ≥ 0.03), G3 최선 베이스라인 대비 IC 차이 −0.0037(기준 ≥ 0.01)로 두 항목 모두 잠정 미달. PM 피처와 C 공식 라벨을 반영한 A 재실행 뒤 정식 판정 예정 |
+| C-04 | C 손석범 | 11/16 | 진행 중 | [병합 PR #22](https://github.com/Capstone-last-dance/AutoAdvisor/pull/22), [병합 PR #23](https://github.com/Capstone-last-dance/AutoAdvisor/pull/23) | G0·G2 개인 행동 프록시, forward 실제 보유 재생·사후 성과 함수 구현·병합. 11/20 이후 실제 positions와 평가 검증이 남음 |
+| C-05 | C 손석범 | 11/23 | 진행 중 | [A 판정용 재실행](https://github.com/Capstone-last-dance/AutoAdvisor/issues/5), [A PR #44](https://github.com/Capstone-last-dance/AutoAdvisor/pull/44) | C 공식 라벨과 PM `ev_*` 피처를 반영한 A의 10폴드 재실행(2016~2025년, 520 신호일, 228,422행)을 대조함. G1 ROC-AUC 0.6916 대 베이스라인 0.6975로 차이 −0.0058(기준 ≥ 0.03), G3 rank IC 0.0645 대 최선 베이스라인 0.0734로 차이 −0.0089(기준 ≥ 0.01): 둘 다 상대성과 조건 미달. 뉴스 피처 반영 재실행과 C-05 나머지 평가가 남음. |
 | C-06 | C 손석범 | 12/4 | 대기 | | |
 | C-07 | C 손석범 | 11/30 | 대기 | | |
 | C-08 | C 손석범 | 12/7 | 대기 | | |
@@ -60,8 +60,8 @@
 | D-02 | D 임소현 | 11/2 | 완료 | src/common/io.py; tests/common/test_io.py; PR #6 | io.py·스키마 검증, PM 리뷰 승인 후 병합 |
 | D-03 | D 임소현 | 11/6 | 완료 | src/pipeline/run_weekly.py; tests/pipeline/test_run_weekly.py; PR #7 | 주간 실행기, 미연결 단계는 _stub/ 처리. Q-17(자동 실행 방식) 결정 남음 |
 | D-04 | D 임소현 | 11/6 | 완료 | src/pipeline/forward_test.py; forward_log.csv; PR #19, #28; 태그 ft-20261106 | 11/6 신호를 11/8 22:27 KST에 기록(마감 11/9 09:00, DEC-04 변경). 11/13 기록 예정 |
-| D-05 | D 임소현 | 11/16 | 진행 중 | app/; src/pipeline/make_dashboard_sample.py; tests/app/test_dashboard.py | 샘플 데이터로 6.11절 완료 기준 (1)~(4) 확인. 진입 후보는 M9 `cooldown_at`으로 쿨다운 종목을 뺀다. Q-16 결정: Streamlit Community Cloud, 팀원 이메일로 접속 제한. tickers 공개 범위 확인 전까지 종목코드만 표시 |
-| D-06 | D 임소현 | 11/20 | 대기 | | |
+| D-05 | D 임소현 | 11/16 | 진행 중 | app/; src/pipeline/make_dashboard_sample.py; tests/app/test_dashboard.py | 샘플 데이터로 6.11절 완료 기준 (1)~(4) 확인. 진입 후보의 M9 쿨다운은 최근 20거래일 경보로 임시 처리. Q-16 결정: Streamlit Community Cloud, 팀원 이메일로 접속 제한. tickers 공개 범위 확인 전까지 종목코드만 표시 |
+| D-06 | D 임소현 | 11/20 | 진행 중 | src/pipeline/run_daily_alerts.py; src/common/io.py; [PR #50](https://github.com/Capstone-last-dance/AutoAdvisor/pull/50) | 일간 경보 실행기: 달력일 d로 M9 `daily_alerts(d)`를 불러 저장, 0건은 0행 파일, 미수집·실패는 파일을 쓰지 않음. alerts `generated_at` 열, 임시 파일 교체 저장. M9 PR #51 병합 뒤 실제 공시로 실행 확인 남음 |
 | D-07 | D 임소현 | 11/27 | 대기 | | |
 | D-08 | D 임소현 | 12/4 | 대기 | | |
 | D-09 | D 임소현 | 12/7 | 대기 | | |

@@ -5,6 +5,7 @@ import importlib.util
 import json
 import math
 import statistics
+import subprocess
 from pathlib import Path
 
 import numpy as np
@@ -184,3 +185,24 @@ def test_report_writes_run_folder_once(tmp_path, monkeypatch):
         vol_target_report.main(["--run-id", "20261103_B_test", "--config", config])
     with pytest.raises(SystemExit, match="run_id"):
         vol_target_report.main(["--run-id", "20261103_A_test", "--config", config])
+
+
+def test_git_commit_lists_new_files_too(tmp_path, monkeypatch):
+    """B-05 리포트 때 git에 없던 리포트 코드가 기록에서 빠졌다. 새 파일도 적고, 무시 대상은 뺀다 (R-10)."""
+    def git(*args):
+        subprocess.run(["git", "-C", str(tmp_path), "-c", "user.name=t", "-c", "user.email=t@example.invalid", *args],
+                       check=True, capture_output=True)
+
+    git("init", "-q")
+    (tmp_path / ".gitignore").write_text("*.log\n", encoding="utf-8")
+    (tmp_path / "kept.py").write_text("a = 1\n", encoding="utf-8")
+    git("add", ".")
+    git("commit", "-q", "-m", "init")
+    (tmp_path / "kept.py").write_text("a = 2\n", encoding="utf-8")
+    (tmp_path / "src").mkdir()
+    (tmp_path / "src" / "새 리포트.py").write_text("", encoding="utf-8")
+    (tmp_path / "run.log").write_text("", encoding="utf-8")
+    monkeypatch.setattr(vol_target_report, "ROOT", tmp_path)
+    head, *rest = vol_target_report._git_commit().splitlines()
+    assert len(head) == 40
+    assert sorted(rest) == ["uncommitted: kept.py", "untracked: src/새 리포트.py"]

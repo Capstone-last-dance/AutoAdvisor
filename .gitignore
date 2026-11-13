@@ -56,5 +56,14 @@ _stub/*
 /reports/*_PM_news_sample/
 /reports/*_PM_news_naver_*/
 /reports/*_PM_git_*/
+
+# Model weights go to the team drive run_id folder; metrics.json keeps their SHA-256 (PM, 11/10).
+# Do not ignore *.txt: reports/*/git_commit.txt is the R-10 record.
+best.zip
+*.joblib
+gate_*.txt
+ranker_*.txt
+final_gate.txt
+final_ranker.txt
 test.ipynb
 .ipynb_checkpoints/

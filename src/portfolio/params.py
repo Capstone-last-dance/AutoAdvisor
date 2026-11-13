@@ -70,6 +70,20 @@ class BufferRuleParams:
         )
 
 
+# portfolio.rl.env (DEC-21, design_B.md 8절 D3): rl_env.py·rl_train.py·rl_fold_report.py가 구현한 규칙.
+# 사전등록 값이 이와 다르면 멈춘다. action_bound·out_of_universe_fill은 rl_env의 상수와 같아야 한다 (테스트가 확인)
+RL_ENV_IMPLEMENTED: dict[str, Any] = {
+    "action_bound": 10.0,  # (a) rl_env.ACTION_BOUND
+    "out_of_universe_fill": 0.0,  # (b) rl_env.OUT_OF_UNIVERSE_FILL
+    "candidate_overflow": "drop_nonheld_worst_rank",  # (c)
+    "top_k_tie_break": "better_rank_first",  # (d)
+    "episode_end": "truncated",  # (e)
+    "lambda_score": "max_checkpoint_val_ir_then_smaller_lambda",  # (f) rl_train.select_lambda
+    "signal_dates": "purged_h20_no_step_over_gaps",  # (g) PortfolioEnv(calendar=...), h = 20 purge
+    "current_weight": "signal_date_close",  # (h)
+}
+
+
 @dataclass(frozen=True)
 class LambdaSearchParams:
     """portfolio.rl.lambda_search (6.5절 λ 선택)."""
@@ -105,7 +119,19 @@ class RLParams:
             ("other_hyperparameters", "sb3_defaults"),
         ):
             _expect(p[key], expected, f"portfolio.rl.{key}")
+        env = p["env"]
+        if set(env) != set(RL_ENV_IMPLEMENTED):
+            raise ValueError(
+                f"portfolio.rl.env 키가 구현과 다르다. 없는 키 {sorted(set(RL_ENV_IMPLEMENTED) - set(env))}, "
+                f"모르는 키 {sorted(set(env) - set(RL_ENV_IMPLEMENTED))}"
+            )
+        for key, expected in RL_ENV_IMPLEMENTED.items():
+            _expect(env[key], expected, f"portfolio.rl.env.{key}")
         ls = p["lambda_search"]
+        grid = [float(x) for x in ls["grid"]]
+        if grid != sorted(set(grid)):
+            # select_lambda는 동률이면 격자에서 앞선 λ를 고른다. 그게 '작은 λ'(env.lambda_score)가 되려면 오름차순이어야 한다
+            raise ValueError(f"portfolio.rl.lambda_search.grid = {grid}: 중복 없는 오름차순이어야 한다")
         params = cls(
             candidate_top_k=int(p["candidate_top_k"]),
             max_holdings=int(p["max_holdings"]),

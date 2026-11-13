@@ -67,12 +67,61 @@ def test_behaviour_not_implemented_is_rejected(cfg, loader, path, value):
         loader.from_prereg(bad)
 
 
+@pytest.mark.parametrize(
+    ("key", "value"),
+    [
+        ("action_bound", 5.0),
+        ("out_of_universe_fill", 0.5),
+        ("candidate_overflow", "drop_worst_rank"),
+        ("top_k_tie_break", "random"),
+        ("episode_end", "terminated"),
+        ("lambda_score", "mean_checkpoint_val_ir"),
+        ("signal_dates", "all_signal_dates"),
+        ("current_weight", "next_day_open"),
+    ],
+)
+def test_rl_env_rules_other_than_dec21_are_rejected(cfg, key, value):
+    """부록 1 portfolio.rl.env 8개 (DEC-21). 구현과 다른 값이면 학습하지 않는다."""
+    bad = copy.deepcopy(cfg)
+    bad["portfolio"]["rl"]["env"][key] = value
+    with pytest.raises(ValueError, match=f"portfolio.rl.env.{key}"):
+        RLParams.from_prereg(bad)
+
+
+def test_rl_env_keys_must_match(cfg):
+    missing = copy.deepcopy(cfg)
+    del missing["portfolio"]["rl"]["env"]["episode_end"]
+    with pytest.raises(ValueError, match="없는 키 \\['episode_end'\\]"):
+        RLParams.from_prereg(missing)
+    extra = copy.deepcopy(cfg)
+    extra["portfolio"]["rl"]["env"]["reward_clip"] = 1.0
+    with pytest.raises(ValueError, match="모르는 키 \\['reward_clip'\\]"):
+        RLParams.from_prereg(extra)
+
+
+def test_rl_env_constants_match_the_environment():
+    from src.portfolio import rl_env
+    from src.portfolio.params import RL_ENV_IMPLEMENTED
+
+    assert RL_ENV_IMPLEMENTED["action_bound"] == rl_env.ACTION_BOUND
+    assert RL_ENV_IMPLEMENTED["out_of_universe_fill"] == rl_env.OUT_OF_UNIVERSE_FILL
+
+
+@pytest.mark.parametrize("grid", [[0, 1, 0.5, 2], [0, 0.5, 0.5, 2], [2, 1, 0.5, 0]])
+def test_lambda_grid_must_be_ascending(cfg, grid):
+    """select_lambda는 동률이면 격자에서 앞선 λ를 고른다. '동률이면 작은 λ'(DEC-21 (f))가 되려면 오름차순이어야 한다."""
+    bad = copy.deepcopy(cfg)
+    bad["portfolio"]["rl"]["lambda_search"]["grid"] = grid
+    with pytest.raises(ValueError, match="오름차순"):
+        RLParams.from_prereg(bad)
+
+
 def test_subset_matches_configs_prereg(cfg):
     path = ROOT / "configs" / "prereg.yaml"
     if path.stat().st_size == 0:
         pytest.skip("configs/prereg.yaml이 아직 비어 있다 (작업 PM-07)")
     real = load_prereg(path)
-    for section in ("calendar", "data", "costs", "execution", "splits", "portfolio", "risk_layer"):
+    for section in ("calendar", "data", "labels", "costs", "execution", "splits", "portfolio", "risk_layer"):
         expected, actual = copy.deepcopy(cfg[section]), copy.deepcopy(real[section])
         if section == "risk_layer":  # B-02에서 채우는 값만 다를 수 있다
             expected.pop("vol_target_annual")

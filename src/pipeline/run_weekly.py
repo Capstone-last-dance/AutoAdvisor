@@ -19,6 +19,7 @@ from __future__ import annotations
 import argparse
 import importlib
 import logging
+import re
 import sys
 import traceback
 from collections.abc import Callable, Sequence
@@ -28,7 +29,7 @@ from pathlib import Path
 import pandas as pd
 
 from src.common import io
-from src.pipeline import forward_test
+from src.pipeline import forward_test, runlog
 
 PROCESSED_TABLES = (
     "prices", "index", "tickers", "status", "universe", "delisted", "delisted_reused", "sector", "disclosures", "news_daily", "news",
@@ -125,8 +126,32 @@ def forward_test_commit(ctx: StepContext) -> None:
         return
     if ctx.source_commit is None:
         raise forward_test.ForwardTestError("forward test 커밋에는 --source-commit이 필요하다 (DEC-04)")
-    commit_hash = forward_test.record(ctx.date, source_commit=ctx.source_commit)
+    deviations = ctx.memory.get("deviations") or []   # 예: M9가 없어 쿨다운 없이 기록한 주 (M4·M8)
+    for note in deviations:  # 상세 사유(예외 문장 포함)는 로컬 로그에만 남긴다
+        ctx.log.warning("7단계: 기록 시 이탈 사항 상세: %s", note)
+    commit_hash = forward_test.record(ctx.date, source_commit=ctx.source_commit, memo=deviation_memo(ctx.date, deviations))
     ctx.log.info("7단계: 신호 커밋 %s를 forward_log.csv에 기록하고 push했다", commit_hash)
+
+
+# 커밋 메시지는 push되어 공개된다. 이탈 문장에는 예외 메시지(로컬 경로 등)가 섞일 수 있어
+# 정해진 사유로만 바꿔 쓰고, 상세는 logs/{date}.log에 둔다 (PM #38 리뷰)
+_DEVIATION_REASONS = (
+    (re.compile(r"M9 쿨다운 없이 계산"), "M9 쿨다운 없이 계산 (PM 11/9 결정)"),
+    (re.compile(r"M9 체결 지도 없이 계산"), "M9 체결 지도 없이 계산 (PM 11/9 결정)"),
+)
+_OTHER_DEVIATION = "그 밖의 이탈"
+
+
+def deviation_memo(date: str, deviations: Sequence[str]) -> str | None:
+    """이탈 문장 목록을 공개 커밋용 메모로 바꾼다. 이탈이 없으면 None."""
+    if not deviations:
+        return None
+    reasons: list[str] = []
+    for note in deviations:
+        reason = next((r for pattern, r in _DEVIATION_REASONS if pattern.search(str(note))), _OTHER_DEVIATION)
+        if reason not in reasons:
+            reasons.append(reason)
+    return "\n".join([f"기록 시 이탈 사항 (상세는 실행 로그 logs/{date}.log):", *(f"- {r}" for r in reasons)])
 
 
 def _no_stub(ctx: StepContext) -> None:
@@ -137,9 +162,9 @@ def _no_stub(ctx: StepContext) -> None:
 STEPS: tuple[Step, ...] = (
     Step(1, "M1", "데이터 갱신", None, _stub_tables(*PROCESSED_TABLES, dated=False)),
     Step(2, "M2", "피처 계산", None, _stub_tables("features", dated=True)),
-    Step(3, "M3a·M3b", "급락 확률·순위 점수", None, _stub_tables("signals", dated=True)),
-    Step(4, "M4", "원시 목표 비중 w_raw", None, _stub_w_raw),
-    Step(5, "M8", "리스크 레이어", None, _stub_tables("positions", dated=True)),
+    Step(3, "M3a·M3b", "급락 확률·순위 점수", "src.models.signals:m3_step", _stub_tables("signals", dated=True)),
+    Step(4, "M4", "원시 목표 비중 w_raw", "src.portfolio.weekly:m4_step", _stub_w_raw),
+    Step(5, "M8", "리스크 레이어", "src.portfolio.weekly:m8_step", _stub_tables("positions", dated=True)),
     Step(6, "M6", "근거 요약", None, _stub_evidence),
     Step(7, "M7", "forward test 커밋", forward_test_commit, _no_stub),
 )
@@ -186,32 +211,16 @@ def run(date: str, steps: Sequence[Step] = STEPS, source_commit: str | None = No
         except Exception as exc:  # 어떤 오류든 이후 단계를 막는다
             log.error("%s: 실패 (%s: %s)\n%s", label, type(exc).__name__, exc, traceback.format_exc())
             log.error("주간 실행 중단: %s 이후 단계는 실행하지 않았다", label)
-            _close_logger(log)
+            runlog.close_log(log)
             return 1
 
     log.info("주간 실행 완료 (스텁 사용: %s)", "예, " + ", ".join(ctx.stubbed) if ctx.uses_stub else "아니오")
-    _close_logger(log)
+    runlog.close_log(log)
     return 0
 
 
 def _setup_logger(date: str) -> logging.Logger:
-    log_path = io.ROOT / "logs" / f"{date}.log"
-    log_path.parent.mkdir(parents=True, exist_ok=True)
-    log = logging.getLogger(f"run_weekly.{date}")
-    log.setLevel(logging.INFO)
-    log.propagate = False
-    _close_logger(log)
-    fmt = logging.Formatter("%(asctime)s %(levelname)s %(message)s")
-    for handler in (logging.FileHandler(log_path, encoding="utf-8"), logging.StreamHandler(sys.stderr)):
-        handler.setFormatter(fmt)
-        log.addHandler(handler)
-    return log
-
-
-def _close_logger(log: logging.Logger) -> None:
-    for handler in list(log.handlers):
-        handler.close()
-        log.removeHandler(handler)
+    return runlog.open_log(f"run_weekly.{date}", io.ROOT / "logs" / f"{date}.log")
 
 
 def main(argv: Sequence[str] | None = None) -> int:
