@@ -18,6 +18,7 @@ from streamlit.testing.v1 import AppTest
 from src.common import io
 from src.pipeline.make_dashboard_sample import SIGNAL_DATES, write_sample
 from src.pipeline.make_dashboard_sample import main as sample_main
+from src.pipeline.run_weekly import empty_frame
 from tests.common.test_io import sample
 
 REPO_DIR = Path(__file__).resolve().parents[2]
@@ -124,7 +125,7 @@ class AlertTimingTest(RootTest):
     def setUp(self):
         super().setUp()
         write_sample(self.tmp)
-        (self.tmp / "alerts").joinpath("2026-11-11.parquet").unlink()
+        self.alert_empty("2026-11-11")
         self.top = io_read(self.tmp, "signals", date=self.SIGNAL).sort_values("rank")["ticker"].iloc[0]
 
     def alert(self, day, available, ticker=None):
@@ -139,7 +140,15 @@ class AlertTimingTest(RootTest):
                 "report_nm": ["샘플 공시"],
                 "rcept_dt": pd.to_datetime([pd.NaT]).tz_localize(ui.KST),
                 "available_at": pd.to_datetime([available]).tz_localize(ui.KST),
+                "generated_at": pd.to_datetime([available]).tz_localize(ui.KST),
             }), date=day)
+        finally:
+            io.ROOT = saved
+
+    def alert_empty(self, day):
+        saved, io.ROOT = io.ROOT, self.tmp
+        try:
+            io.write_table("alerts", empty_frame("alerts"), date=day)
         finally:
             io.ROOT = saved
 
@@ -151,7 +160,31 @@ class AlertTimingTest(RootTest):
         self.assertIn(self.top, set(self.candidates()["종목코드"]))
         at = self.open(APP / "pages" / "2_alerts.py")
         self.assertEqual(len(at.dataframe), 0)
-        self.assertEqual(at.info[0].value, "최근 20거래일 경보가 없습니다.")
+        self.assertEqual(len(at.warning), 0)
+        self.assertEqual(at.info[0].value, "최근 20거래일 확정 경보 0건입니다.")
+        self.assertEqual(self.open(APP / "Home.py").metric[1].value, "0건")
+
+    def test_missing_day_is_not_zero(self):
+        # 범위 안 달력일에 파일이 없으면 0건이 아니라 미수집이다 (PM #50 리뷰)
+        (self.tmp / "alerts" / "2026-11-08.parquet").unlink()                # 일요일
+        at = self.open(APP / "pages" / "2_alerts.py")
+        self.assertEqual(len(at.info), 0)
+        self.assertIn("미수집", at.warning[0].value)
+        self.assertIn("2026-11-08", at.warning[0].value)
+        self.assertEqual(self.open(APP / "Home.py").metric[1].value, "미수집")
+
+    def test_unreadable_file_is_not_zero(self):
+        self.garbage("alerts/2026-11-09.parquet")
+        at = self.open(APP / "pages" / "2_alerts.py")
+        self.assertEqual(len(at.info), 0)
+        self.assertIn("읽지 못한 경보 파일", at.warning[0].value)
+
+    def test_missing_day_still_shows_found_alerts(self):
+        (self.tmp / "alerts" / "2026-11-08.parquet").unlink()
+        self.alert("2026-11-10", "2026-11-10 10:00:00")
+        at = self.open(APP / "pages" / "2_alerts.py")
+        self.assertIn("미수집", at.warning[0].value)
+        self.assertEqual(len(at.dataframe[0].value), 1)
 
     def test_alert_inside_window_applies(self):
         self.alert("2026-10-19", "2026-10-19 10:00:00")              # 11/13부터 세어 20번째 거래일
@@ -166,7 +199,9 @@ class AlertTimingTest(RootTest):
             io.ROOT = self.tmp
             index = io.read_table("index")
             io.write_table("index", index[index["date"] != pd.Timestamp("2026-11-12")])
-            self.assertEqual(ui.alert_window(3, until=self.SIGNAL).files, ["2026-11-10", "2026-11-13"])
+            window = ui.alert_window(3, until=self.SIGNAL)
+            self.assertEqual(window.files, ["2026-11-10", "2026-11-11", "2026-11-12", "2026-11-13"])  # 11/12는 거래일이 아니어도 달력일로 든다
+            self.assertEqual(window.missing, ())
         finally:
             io.ROOT = saved
 
