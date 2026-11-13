@@ -1,4 +1,7 @@
+import json
+import logging
 import math
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
@@ -6,7 +9,8 @@ import pytest
 
 from src.data.calendar import signal_dates
 from src.data.schemas import validate
-from src.models.signals import generate_signals, load_final, save_final, train_final
+from src.models import signals as signals_module
+from src.models.signals import generate_signals, load_final, m3_step, save_final, train_final
 
 DAYS = pd.bdate_range("2010-01-04", "2026-10-30")
 SIG = pd.DatetimeIndex(signal_dates(DAYS))
@@ -95,3 +99,115 @@ def test_missing_date_and_missing_feature_raise(trained):
         generate_signals("2026-10-31", feat, models, "v")
     with pytest.raises(ValueError, match="피처가 입력에 없다"):
         generate_signals("2026-10-30", feat.drop(columns=["noise"]), models, "v")
+
+
+# ---------------------------------------------------------------------------
+# run_weekly 3단계 (m3_step)
+# ---------------------------------------------------------------------------
+
+class _FakeCtx:
+    """D의 StepContext 중 3단계가 쓰는 부분만 흉내 낸다 (run_weekly.py는 쓰지 않는다)."""
+
+    def __init__(self, date, tables, stub_tables=()):
+        self.date = date
+        self.stub_tables = set(stub_tables)
+        self._tables = tables
+        self.written = {}
+        self.log = logging.getLogger("test.m3_step")
+
+    def read_table(self, name, date=None):
+        return self._tables[name]
+
+    def write_table(self, name, df, date=None):
+        self.written[name] = (date, df)
+        return f"{name}/{date}.parquet"
+
+
+def _universe(date, tickers):
+    return pd.DataFrame({"date": pd.Timestamp(date), "ticker": list(tickers),
+                         "mcap_rank": range(1, len(tickers) + 1), "in_universe": True})
+
+
+def _prices_to(date, n_tk=N_TK, seed=5):
+    """date까지의 일별 시세(long). 베이스라인이 mom_12_1·vol_60을 계산할 만큼 길게 만든다."""
+    rng = np.random.default_rng(seed)
+    idx = pd.bdate_range(end=pd.Timestamp(date), periods=400)
+    cols = [f"{i:06d}" for i in range(n_tk)]
+    close = pd.DataFrame(100 * np.exp(np.cumsum(rng.normal(0, 0.02, (len(idx), n_tk)), axis=0)), index=idx, columns=cols)
+    long = close.stack().rename("close").reset_index()
+    long.columns = ["date", "ticker", "close"]
+    return close, long
+
+
+def test_m3_step_before_ml_date_uses_baseline():
+    t = "2026-11-20"   # positions는 이 날부터지만 신호는 아직 베이스라인이다 (6.8절)
+    close, prices = _prices_to(t)
+    ctx = _FakeCtx(t, {"prices": prices, "universe": _universe(t, close.columns)})
+    m3_step(ctx)
+    date, df = ctx.written["signals"]
+    assert date == t
+    validate("signals", df)
+    assert (df["model_version"] == "baseline").all()
+    assert sorted(df["ticker"]) == sorted(close.columns)
+
+
+def test_m3_step_from_ml_date_uses_final_models(trained, tmp_path, monkeypatch):
+    feat, _, models = trained
+    t = "2026-11-27"
+    x = feat[feat["date"] == feat["date"].max()].assign(date=pd.Timestamp(t))
+    directory = tmp_path / "final_20261127"
+    save_final(models, directory)
+    monkeypatch.setattr(signals_module, "FINAL_MODEL_DIR", directory)
+    ctx = _FakeCtx(t, {"features": x, "universe": _universe(t, x["ticker"])})
+    m3_step(ctx)
+    date, df = ctx.written["signals"]
+    assert date == t
+    validate("signals", df)
+    assert (df["model_version"] == "final_20261127").all()   # "baseline"이 아니어야 D가 ML 기록으로 가른다
+    pd.testing.assert_frame_equal(df, generate_signals(t, x, load_final(directory), "final_20261127"))
+
+
+def test_m3_step_rejects_signals_that_differ_from_universe(trained, tmp_path, monkeypatch):
+    feat, _, models = trained
+    t = "2026-11-27"
+    x = feat[feat["date"] == feat["date"].max()].assign(date=pd.Timestamp(t))
+    save_final(models, tmp_path / "final_x")
+    monkeypatch.setattr(signals_module, "FINAL_MODEL_DIR", tmp_path / "final_x")
+    universe = pd.concat([_universe(t, x["ticker"]), _universe(t, ["999999"])], ignore_index=True)
+    ctx = _FakeCtx(t, {"features": x, "universe": universe})
+    with pytest.raises(ValueError, match="U_t와 다르다"):
+        m3_step(ctx)
+    assert "signals" not in ctx.written   # 틀린 파일을 쓰고 나서 멈추면 안 된다
+
+
+def test_m3_step_writes_empty_stub_when_inputs_are_stubbed(monkeypatch):
+    monkeypatch.setattr(signals_module, "FINAL_MODEL_DIR", Path("/없는경로/final"))   # 모델을 읽지 않고 끝나야 한다
+    ctx = _FakeCtx("2026-11-27", {}, stub_tables={"features"})
+    m3_step(ctx)
+    date, df = ctx.written["signals"]
+    assert date == "2026-11-27" and df.empty
+    assert list(df.columns) == ["date", "ticker", "rank_score", "rank", "crash_prob", "crash_flag", "model_version"]
+
+
+def test_m3_step_rejects_final_model_named_baseline(trained, tmp_path, monkeypatch):
+    feat, _, models = trained
+    directory = tmp_path / "baseline"
+    save_final(models, directory)
+    monkeypatch.setattr(signals_module, "FINAL_MODEL_DIR", directory)
+    x = feat[feat["date"] == feat["date"].max()].assign(date=pd.Timestamp("2026-11-27"))
+    ctx = _FakeCtx("2026-11-27", {"features": x, "universe": _universe("2026-11-27", x["ticker"])})
+    with pytest.raises(ValueError, match="model_version"):
+        m3_step(ctx)
+
+
+def test_save_final_records_weight_hashes(trained, tmp_path):
+    import hashlib
+    from src.models.signals import final_sha256
+    _, _, models = trained
+    d = tmp_path / "final"
+    save_final(models, d)
+    recorded = json.loads((d / "final_sha256.json").read_text(encoding="utf-8"))
+    assert set(recorded) == {"final_gate.txt", "final_ranker.txt", "final_aux.joblib"}   # meta와 해시 파일은 뺀다
+    for name, digest in recorded.items():
+        assert hashlib.sha256((d / name).read_bytes()).hexdigest() == digest
+    assert recorded == final_sha256(d)

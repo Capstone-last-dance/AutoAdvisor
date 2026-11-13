@@ -31,7 +31,7 @@
 | A-06 | A 김윤하 | 11/22 | 대기 | | |
 | A-07 | A 김윤하 | 11/22 | 대기 | | |
 | A-08 | A 김윤하 | 11/27 | 대기 | | |
-| A-09 | A 김윤하 | 11/30 | 대기 | | |
+| A-09 | A 김윤하 | 11/30 | 완료 | src/models/ranker.py(train_ranker); tests/models/test_ranker.py | `train_ranker(h, exclude_features)`는 h=1·5·20, exclude_features 옵션 모두 이미 공개돼 있었음. 실데이터(C 공식 라벨·실제 종료일 purge, 폴드 2016)로 셋 다 오류 없이 실행됨을 확인(검증 rank IC: h=1 0.0545 / h=5 0.0517 / h=20 0.0814; exclude_features로 mom_12_1 제외 시 0.0814→0.0768로 하락해 옵션이 실제 반영됨을 확인). 합성 데이터 기반 회귀 테스트 4개 추가(파라미터화 h=1·5·20 + exclude_features), `pytest tests` 744 passed |
 | A-10 | A 김윤하 | 12/7 | 대기 | | |
 | A-11 | A 김윤하 | 기한 없음 | 대기 | | |
 | B-01 | B 조윤상 | 11/1 | 완료 | docs/design_B.md; src/portfolio/; [PR #4](https://github.com/Capstone-last-dance/AutoAdvisor/pull/4) | M4·M8 설계와 PPO 골격. 합성 입력으로 학습 루프 테스트 통과, A 리뷰 후 병합 |
@@ -39,7 +39,7 @@
 | B-03 | B 조윤상 | 11/13 | 완료 | src/portfolio/buffer_rule.py; tests/portfolio/test_buffer_rule.py; [PR #13](https://github.com/Capstone-last-dance/AutoAdvisor/pull/13) | 단계 1~5 단위 테스트 통과. PR #8 병합 뒤 main에서 C의 M5 위 합성 시장 실행 테스트 통과(건너뛰지 않음). A 승인. 실제 신호(A-04) 실행은 B-05에서 확인 |
 | B-04 | B 조윤상 | 11/16 | 완료 | src/portfolio/risk_layer.py; src/portfolio/market_state_report.py; tests/portfolio/test_risk_layer.py; tests/portfolio/test_market_state_report.py; reports/20261104_B_m8_states/; [PR #13](https://github.com/Capstone-last-dance/AutoAdvisor/pull/13) | 불변식·경계 사례 테스트 통과, 2011~2025년 E_t·regime_mc 그림(prereg.yaml 초안 기준). A 승인. 11/9 공식 사전등록에서 쓰는 키가 바뀌면 새 run_id로 다시 만듦 |
 | B-05 | B 조윤상 | 11/16 | 진행 중 | src/portfolio/engine_adapter.py; src/portfolio/env_check.py; src/portfolio/env_check_report.py; tests/portfolio/test_engine_adapter.py; tests/portfolio/test_env_check.py; tests/portfolio/test_env_check_report.py; reports/20261110_B_env_check/; docs/design_B.md 5.1절; [PR #21](https://github.com/Capstone-last-dance/AutoAdvisor/pull/21); [PR #36](https://github.com/Capstone-last-dance/AutoAdvisor/pull/36) | 9.3절 표 → C 엔진 어댑터(DEC-24~28 반영), A 승인(PR #21). A 베이스라인 신호(PR #35)로 완료 기준 (1) 781개 신호일 끝까지 실행, (2) 버퍼 규칙과 체결·비용·NAV 차이 0 통과 (reports/20261110_B_env_check/, 입력 파일 SHA-256 기록). 리포트 코드·결과의 A 리뷰 남음 (PR #36) |
-| B-06 | B 조윤상 | 11/23 | 대기 | | |
+| B-06 | B 조윤상 | 11/23 | 진행 중 | src/portfolio/rl_fold_report.py; src/portfolio/params.py; tests/portfolio/test_rl_fold_report.py; reports/20261110_B_rl_y2016_v2/; docs/design_B.md 3.4절; [PR #47](https://github.com/Capstone-last-dance/AutoAdvisor/pull/47) | 폴드 하나의 λ 탐색·PPO 학습 실행과 R-10 기록 구현(A make_folds 폴드, h = 20 purge, portfolio.rl.env 8개 검사). 폴드 2016 베이스라인 신호 리허설에서 6.5절 λ 선택 절차가 끝까지 돌았다(λ = 0, 시드 0 본 학습 300,000스텝, 약 14분). 체크포인트는 팀 드라이브, metrics.json에 지문 (PM 11/10). 다시 실행해도 가중치 지문이 같음. A 리뷰 남음 |
 | B-07 | B 조윤상 | 11/30 | 대기 | | |
 | B-08 | B 조윤상 | 12/7 | 대기 | | |
 | B-09 | B 조윤상 | 12/7 | 대기 | | |

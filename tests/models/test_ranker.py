@@ -159,3 +159,40 @@ def test_saved_model_reproduces_predictions(run, tmp_path, folder):
     te = feat[feat["date"].dt.year == 2016].reset_index(drop=True)
     np.testing.assert_allclose(booster.predict(te[aux["features"]]), r.predictions["rank_score"].to_numpy(), atol=1e-12)
     np.testing.assert_allclose(aux["ridge"].predict(te[aux["features"]]), r.predictions["b3_score"].to_numpy(), atol=1e-12)
+
+
+def _data_all_h(seed=0, n_tk=40):
+    """A-09: h = 1, 5, 20 라벨이 모두 있는 데이터(`_data()`는 h = 1을 일부러 빼 뒀다, 다른 테스트가 그 부재로
+    에러 경로를 확인한다)."""
+    rng = np.random.default_rng(seed)
+    dates = pd.bdate_range("2012-01-01", "2016-12-31", freq="W-FRI")
+    rows = []
+    for d in dates:
+        f = pd.DataFrame({"date": d, "ticker": [f"{i:06d}" for i in range(n_tk)]})
+        for c in ["mom_12_1", "rev_1m", "noise_a", "noise_b"]:
+            f[c] = rng.permutation(n_tk) / (n_tk - 1)
+        f["mom_12_1_na"] = np.int8(0)
+        rows.append(f)
+    feat = pd.concat(rows, ignore_index=True)
+    base = feat[["date", "ticker"]]
+    labs = []
+    for h in (1, 5, 20):
+        er = rng.normal(size=len(feat))
+        labs.append(base.assign(h=np.int8(h), er=er, y_rank=pd.Series(er).groupby(feat["date"]).rank(pct=True)))
+    return feat, pd.concat(labs, ignore_index=True)
+
+
+@pytest.mark.parametrize("h", [1, 5, 20])
+def test_a09_train_ranker_runs_for_h_1_5_20(h):
+    """A-09 완료 기준: h = 1, 5, 20으로 실행 확인."""
+    feat, lab = _data_all_h()
+    r = _run(feat, lab, h=h)
+    assert r.h == h and len(r.predictions) > 0 and r.predictions["date"].dt.year.eq(2016).all()
+
+
+def test_a09_exclude_features_runs_for_h_1_5_20():
+    """A-09 완료 기준: 피처 제외 옵션으로 실행 확인(기여도 실험, PM-12)."""
+    feat, lab = _data_all_h()
+    for h in (1, 5, 20):
+        r = _run(feat, lab, h=h, exclude_features=["mom_12_1", "mom_12_1_na"])
+        assert "mom_12_1" not in r.features and len(r.predictions) > 0

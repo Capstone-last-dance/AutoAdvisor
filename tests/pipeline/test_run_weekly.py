@@ -9,6 +9,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 import pandas as pd
 
@@ -45,10 +46,10 @@ class EmptyFrameTest(unittest.TestCase):
 
 
 class AllStubRunTest(TempRootTest):
-    """지금처럼 연결된 모듈이 없으면 모든 단계를 스텁으로 대신하고 정상 종료한다."""
+    """연결된 모듈이 없으면 모든 단계를 스텁으로 대신하고 정상 종료한다."""
 
     def test_all_stub_run(self):
-        self.assertEqual(rw.run(DAY), 0)
+        self.assertEqual(rw.run(DAY, with_entries(s1=None, s2=None, s3=None, s4=None, s5=None, s6=None)), 0)
         stub = self.tmp / "_stub"
         for name in rw.PROCESSED_TABLES:
             self.assertTrue((stub / "data" / "processed" / f"{name}.parquet").exists(), name)
@@ -103,6 +104,49 @@ class FailureTest(TempRootTest):
         log = self.log_text()
         self.assertIn("7단계 M7 forward test 커밋: 실패", log)
         self.assertIn("--source-commit", log)
+
+
+class ForwardCommitMemoTest(unittest.TestCase):
+    def ctx(self, **memory):
+        return rw.StepContext(date=DAY, source_commit="abc", memory=memory)
+
+    NOTES = [
+        f"{DAY}: M9 쿨다운 없이 계산했다 (날짜별 경보 파일이 하나도 없다: C:\\Users\\some one\\My Proj\\alerts). "
+        "PM 11/9 결정에 따라 deviation log에 남긴다",
+        f"{DAY}: M9 체결 지도 없이 계산했다 (/home/some one/proj/x.py). PM 11/9 결정에 따라 deviation log에 남긴다",
+        f"{DAY}: M9 쿨다운 없이 계산했다 (함수가 연결되지 않았다). PM 11/9 결정에 따라 deviation log에 남긴다",
+        "알 수 없는 이탈: D:\\secret folder\\a b.txt",
+    ]
+
+    def test_commit_memo_has_fixed_reasons_only(self):
+        with mock.patch.object(rw.forward_test, "record", return_value="h") as record:
+            rw.forward_test_commit(self.ctx(deviations=self.NOTES))
+        self.assertEqual(record.call_args.kwargs["memo"],
+                         f"기록 시 이탈 사항 (상세는 실행 로그 logs/{DAY}.log):\n"
+                         "- M9 쿨다운 없이 계산 (PM 11/9 결정)\n"
+                         "- M9 체결 지도 없이 계산 (PM 11/9 결정)\n"
+                         "- 그 밖의 이탈")
+
+    def test_details_stay_in_local_log(self):
+        ctx = self.ctx(deviations=self.NOTES)
+        with mock.patch.object(rw.forward_test, "record", return_value="h"), \
+                self.assertLogs(ctx.log, level="WARNING") as logs:
+            rw.forward_test_commit(ctx)
+        self.assertIn("some one", "\n".join(logs.output))
+
+    def test_no_memo_without_deviations(self):
+        for memory in ({}, {"deviations": []}):
+            with self.subTest(memory=memory), mock.patch.object(rw.forward_test, "record", return_value="h") as record:
+                rw.forward_test_commit(self.ctx(**memory))
+                self.assertIsNone(record.call_args.kwargs["memo"])
+
+
+class StepsTest(unittest.TestCase):
+    def test_connected_entries(self):
+        entries = {s.no: s.entry for s in rw.STEPS}
+        self.assertEqual(entries[3], "src.models.signals:m3_step")
+        self.assertEqual(entries[4], "src.portfolio.weekly:m4_step")
+        self.assertEqual(entries[5], "src.portfolio.weekly:m8_step")
 
 
 class StubPropagationTest(TempRootTest):

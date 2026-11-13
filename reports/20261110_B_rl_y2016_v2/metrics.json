@@ -1,0 +1,216 @@
+{
+  "run_id": "20261110_B_rl_y2016_v2",
+  "task": "B-06",
+  "rehearsal": {
+    "signals": "A baseline_signals (ML 신호 전, B-06)",
+    "all_prereg_seeds": false
+  },
+  "criteria": {
+    "lambda_selection_ran_to_the_end": true,
+    "every_lambda_trained": true,
+    "eval_logs_and_checkpoints_complete": true,
+    "chosen_lambda_follows_dec21_f": true
+  },
+  "lambda_search": {
+    "grid": [
+      0.0,
+      0.5,
+      1.0,
+      2.0
+    ],
+    "seed": 0,
+    "total_timesteps": 100000,
+    "eval_every_steps": 10000,
+    "rule": "max_checkpoint_val_ir_then_smaller_lambda",
+    "chosen_lambda": 0.0,
+    "per_lambda": [
+      {
+        "lambda": 0.0,
+        "best_val_ir": 0.8562556703514093,
+        "best_timesteps": 40000,
+        "eval_steps_complete": true,
+        "n_evals": 10,
+        "finite_evals": 10,
+        "checkpoint": true
+      },
+      {
+        "lambda": 0.5,
+        "best_val_ir": 0.8308699576265538,
+        "best_timesteps": 10000,
+        "eval_steps_complete": true,
+        "n_evals": 10,
+        "finite_evals": 10,
+        "checkpoint": true
+      },
+      {
+        "lambda": 1.0,
+        "best_val_ir": 0.8410511508509657,
+        "best_timesteps": 20000,
+        "eval_steps_complete": true,
+        "n_evals": 10,
+        "finite_evals": 10,
+        "checkpoint": true
+      },
+      {
+        "lambda": 2.0,
+        "best_val_ir": 0.826238271181093,
+        "best_timesteps": 50000,
+        "eval_steps_complete": true,
+        "n_evals": 10,
+        "finite_evals": 10,
+        "checkpoint": true
+      }
+    ]
+  },
+  "main_training": {
+    "lambda": 0.0,
+    "seeds": [
+      0
+    ],
+    "prereg_seeds": [
+      0,
+      1,
+      2,
+      3,
+      4
+    ],
+    "all_prereg_seeds": false,
+    "total_timesteps_per_seed": 300000,
+    "per_seed": [
+      {
+        "seed": 0,
+        "best_val_ir": 0.8562556703514093,
+        "best_timesteps": 40000,
+        "eval_steps_complete": true,
+        "n_evals": 30,
+        "finite_evals": 30,
+        "checkpoint": true
+      }
+    ]
+  },
+  "seconds": {
+    "lambda_search": 454.06228459998965,
+    "main_training": 335.7657406000653,
+    "prepare": 30.050295799970627
+  },
+  "checkpoints": {
+    "storage": "best.zip은 git에 넣지 않고 팀 드라이브 20261110_B_rl_y2016_v2/ 폴더에 둔다 (PM 11/10). 드라이브 파일이 정본이고 sha256으로 대조한다",
+    "policy_sha256": "정책 파라미터 값만의 지문. 파일 sha256은 저장 시각이 들어가 다시 학습하면 달라지므로 같은 가중치인지는 이것으로 비교한다",
+    "files": {
+      "lambda_0.5/best.zip": {
+        "bytes": 761778,
+        "sha256": "5229d56452950e5c7794b304deee60a02ed9f9842e16fe4a189b203556e16b25",
+        "policy_sha256": "75d200a739d336eba4d2ae2be469485993204f249cd56ff0f6d2013208656e20"
+      },
+      "lambda_0/best.zip": {
+        "bytes": 761779,
+        "sha256": "c71c41665682b983690c2b63ae64f36298c77715ede0162fcff15179027ffe23",
+        "policy_sha256": "311077742f4adec343a77ef0d34962c7fc48ee6b8d343a3ca090fc81f74e39be"
+      },
+      "lambda_1/best.zip": {
+        "bytes": 761778,
+        "sha256": "53fd096cca7e8f08883074a077c82e72882733b90676c21bbff0d5fb799222b8",
+        "policy_sha256": "a714000c27c1708c60d5c3ca04bf8986629d4695412058fb64c1a3ffcffba6e0"
+      },
+      "lambda_2/best.zip": {
+        "bytes": 761779,
+        "sha256": "24e4f9e7720d6eef59e2b4690b63fadb4c7c2e83d7021b72f4640ab57bb0e80f",
+        "policy_sha256": "c0e7aea052877dac4db2fa1a4fb5e4c347af2936b00979a42f51a0446a280664"
+      },
+      "seed_0/best.zip": {
+        "bytes": 761790,
+        "sha256": "da9699921a779df93c753f584bfba0a87bfebc347d55312ca4625f6aed2cba97",
+        "policy_sha256": "311077742f4adec343a77ef0d34962c7fc48ee6b8d343a3ca090fc81f74e39be"
+      }
+    }
+  },
+  "fold": {
+    "test_year": 2016,
+    "train": {
+      "n": 152,
+      "first": "2011-01-07",
+      "last": "2013-11-29",
+      "purged": 4
+    },
+    "val": {
+      "n": 101,
+      "first": "2014-01-03",
+      "last": "2015-12-04",
+      "purged": 4
+    },
+    "test": {
+      "n": 52,
+      "first": "2016-01-08",
+      "last": "2016-12-29"
+    },
+    "purge": {
+      "h": 20,
+      "end_dates": "명목 t+1+h 거래일 (C 실제 라벨 종료일 미반영)"
+    }
+  },
+  "m9": "쿨다운·이벤트 청산 없음 (M9 백테스트 경보 전)",
+  "ir_function": "src.backtest.metrics.validation_ir",
+  "universe_size": {
+    "mean": 378.7193675889328,
+    "min": 321,
+    "max": 455
+  },
+  "inputs": {
+    "prices": {
+      "path": "data/processed/prices.parquet",
+      "rows": 9345272,
+      "sha256": "e735be46c5ca1685f922d0c8ee78f2129d8c8256bb6cfd9181723ccd0b01b5a5"
+    },
+    "status": {
+      "path": "data/processed/status.parquet",
+      "rows": 9345272,
+      "sha256": "40812ae37f997ef5dd0b42fc2f453a15839cd9d0f4967d1b9d37fdad7e7363b3"
+    },
+    "index": {
+      "path": "data/processed/index.parquet",
+      "rows": 4146,
+      "sha256": "ce9ffb646c4723fe067c76eaba90a526683444369ac7ab43e53684e662e9300e"
+    },
+    "delisted": {
+      "path": "data/processed/delisted.parquet",
+      "rows": 932,
+      "sha256": "fc14a9183780605617f72fa784f785b4ae0635fbbef46c0d7225cc539478a54c"
+    },
+    "delisted_reused": {
+      "path": "data/processed/delisted_reused.parquet",
+      "rows": 2,
+      "sha256": "a73192de4525b05e626bd24bff5dc30e205546d6ed963bbaf5f9c1ff7ce80a25"
+    },
+    "universe": {
+      "path": "data/processed/universe.parquet",
+      "rows": 413000,
+      "sha256": "b2b892af78a83bb773b804ba3cacf673efa4f5734a8d144b1384ffce36462758"
+    },
+    "sector": {
+      "path": "data/processed/sector.parquet",
+      "rows": 3701,
+      "sha256": "e2f5ab4f5dc20a65d33c7368720f995059b2d65076a2e327246b6bdbc12fdd99"
+    }
+  },
+  "generated": {
+    "signals": {
+      "source": "src.models.baseline.baseline_signals",
+      "rows": 95816,
+      "sha256": "b0d69cfcfb0fa43ef68ea6726ff33d11aaacb23814886268d2855c1d0dab217b"
+    },
+    "features": {
+      "source": "src.features.price_features + B market_state_table (regime_mc)",
+      "rows": 95816,
+      "sha256": "33ce2326fec9ed94ede0ad9a3c7dd68f2d6fc501542cd7daa893a2eeb60292ae"
+    }
+  },
+  "versions": {
+    "python": "3.12.10",
+    "stable_baselines3": "2.9.2",
+    "torch": "2.15.0+cpu",
+    "gymnasium": "1.4.0",
+    "numpy": "2.5.4",
+    "pandas": "3.1.0"
+  },
+  "device": "cpu"
+}
