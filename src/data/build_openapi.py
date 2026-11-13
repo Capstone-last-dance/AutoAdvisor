@@ -229,14 +229,21 @@ def m1_step(ctx) -> None:
     옮긴다 — 0행으로 비우지 않는다. issue #5에 1단계를 1a(A)/1b(PM)로 쪼갤지 올렸으나, PM이
     2026-11-13에 "번호는 쪼개지 않고, 기존 공시·뉴스 표는 보존"으로 정리했다. 결측 보완이 끝난
     공시·뉴스 피처 파일이 오면 PM 쪽 수집 경로가 그 표를 직접 갱신하고, 이 단계는 그걸 그대로
-    읽어서 옮기기만 한다. PM 표가 아직 한 번도 안 만들어졌으면(파일 없음) `io.read_table`이
-    `FileNotFoundError`를 내 멈춘다 — 그때는 PM에게 알린다."""
+    읽어서 옮기기만 한다. **PM 표가 아직 한 번도 안 만들어졌으면(파일 없음) 건너뛰고 경고만
+    남긴다**(PM 리뷰 2026-11-13) — 이 단계 뒤에 그 표를 읽는 단계가 아직 없어서, 여기서 멈추면
+    11/20 forward test 기록까지 못 간다. `sector`는 A 자신의 정적 표라 없으면 그대로 예외를 낸다."""
     raw = ROOT / "data" / "raw" / COLLECT_SNAPSHOT
     out = build_all(raw, date.fromisoformat(COLLECT_START), date.fromisoformat(ctx.date))
     for name in ("prices", "index", "tickers", "status", "universe", "delisted", "delisted_reused"):
         ctx.write_table(name, out[name])
-    for name in ("sector",) + _PM_TABLES:
-        ctx.write_table(name, ctx.read_table(name))
+    ctx.write_table("sector", ctx.read_table("sector"))
+    for name in _PM_TABLES:
+        try:
+            table = ctx.read_table(name)
+        except FileNotFoundError:
+            ctx.log.warning("1단계: PM 표 %s가 아직 없어 건너뛴다 (issue #5)", name)
+            continue
+        ctx.write_table(name, table)
 
 
 def main(argv=None):
