@@ -6,6 +6,7 @@ DASHBOARD_DATA_ROOT를 지정하면 그 폴더의 데이터를 보여준다 (샘
 
 from __future__ import annotations
 
+import logging
 import os
 import sys
 from pathlib import Path
@@ -20,8 +21,10 @@ if str(REPO) not in sys.path:
     sys.path.insert(0, str(REPO))
 
 from src.common import io  # noqa: E402
+from src.events import alerts as m9  # noqa: E402
 
 KST = "Asia/Seoul"
+_log = logging.getLogger("dashboard")
 CANDIDATE_COUNT = 20
 REPO_ROOT = io.ROOT
 
@@ -78,7 +81,9 @@ def read(name: str, date: str | None = None) -> pd.DataFrame | None:
     try:
         return _read_table(str(io.ROOT), name, date, mtime)
     except Exception as exc:  # 부분 파일 등 어떤 읽기 오류든 페이지를 멈추지 않는다
-        st.error(f"{name} 파일을 읽지 못해 표시하지 않습니다.\n\n{exc}")
+        _log.exception("%s %s 읽기 실패", name, date)  # 예외 문장(로컬 경로 등)은 화면에 쓰지 않는다
+        where = f"({date})" if date else ""
+        st.error(f"{name} 파일{where}을 읽지 못해 표시하지 않습니다 ({type(exc).__name__}).")
         return None
 
 
@@ -89,7 +94,8 @@ def read_evidence(date: str) -> list[dict]:
     try:
         return _read_evidence(str(io.ROOT), date, mtime)
     except Exception as exc:  # 부분 파일 등 어떤 읽기 오류든 페이지를 멈추지 않는다
-        st.error(f"evidence 파일을 읽지 못해 표시하지 않습니다.\n\n{exc}")
+        _log.exception("evidence %s 읽기 실패", date)
+        st.error(f"evidence 파일({date})을 읽지 못해 표시하지 않습니다 ({type(exc).__name__}).")
         return []
 
 
@@ -116,12 +122,6 @@ def trigger_names() -> dict[str, str]:
 def cooldown_days() -> int:
     with open(REPO / "configs" / "prereg.yaml", encoding="utf-8") as f:
         return int(yaml.safe_load(f)["events"]["cooldown_trading_days"])
-
-
-@st.cache_data(show_spinner=False)
-def _signal_cutoff_time() -> str:
-    with open(REPO / "configs" / "prereg.yaml", encoding="utf-8") as f:
-        return yaml.safe_load(f)["calendar"]["signal_cutoff_time"]
 
 
 def alert_window(count: int, until: str | None = None) -> AlertWindow | None:
@@ -168,18 +168,23 @@ def load_alerts(days: list[str]) -> tuple[pd.DataFrame | None, bool]:
     return (pd.concat(frames, ignore_index=True) if frames else None), all(df is not None for df in loaded)
 
 
-def cooldown_tickers(days: list[str], signal_date: str) -> set[str] | None:
-    """days의 경보 중 신호일 컷오프 전에 이용 가능했던 경보의 종목 (available_at < cutoff_at, 6.10절).
+def m9_cooldown(signal_date: str) -> set[str] | None:
+    """M9 `cooldown_at`: 신호일 t의 다음 거래일에 신규 진입이 금지된 종목 (6.10절).
 
-    경보 파일을 하나라도 읽지 못하면 None이다.
+    경보를 확정할 수 없으면 정해진 문구로 오류를 표시하고 None을 돌려준다. 예외 문장에는 로컬 경로가 들어갈 수
+    있어 화면에 쓰지 않고 서버 로그에만 남긴다 (Q-16, 클라우드 배포).
     """
-    alerts, complete = load_alerts(days)
-    if not complete:
-        return None
-    if alerts is None:
-        return set()
-    cutoff = pd.Timestamp(f"{signal_date} {_signal_cutoff_time()}", tz=KST)
-    return set(alerts.loc[alerts["available_at"] < cutoff, "ticker"])
+    try:
+        return m9.cooldown_at(signal_date)
+    except m9.AlertsNotStarted:
+        st.error("경보 파일이 아직 하나도 없습니다. 일간 경보(M9)를 먼저 실행해야 합니다.")
+    except m9.AlertsNotCollected:
+        st.error(f"{signal_date}까지 쿨다운 계산에 필요한 날짜 중 경보 파일이 없는 날이 있습니다 (미수집). "
+                 "일간 경보를 먼저 실행해야 합니다.")
+    except Exception as exc:  # 손상된 파일 등 어떤 오류든 페이지를 멈추지 않는다
+        _log.exception("M9 cooldown_at(%s) 실패", signal_date)
+        st.error(f"M9 쿨다운을 계산하지 못했습니다 ({type(exc).__name__}).")
+    return None
 
 
 def entry_candidates(signals: pd.DataFrame, cooldown: set[str]) -> pd.DataFrame:
