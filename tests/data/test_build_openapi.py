@@ -207,20 +207,20 @@ def _canned_out():
     return {name: pd.DataFrame({"name": [name]}) for name in a_tables}
 
 
-def test_m1_step_writes_a_tables_empty_pm_tables_and_passes_sector_through(monkeypatch):
+def test_m1_step_writes_a_tables_and_passes_sector_and_pm_tables_through(monkeypatch):
     from src.data import build_openapi
 
     out = _canned_out()
     monkeypatch.setattr(build_openapi, "build_all", lambda raw, start, end: out)
     sector = pd.DataFrame({"name": ["sector"]})
-    ctx = _FakeCtx("2026-11-13", {"sector": sector})
+    pm_tables = {name: pd.DataFrame({"name": [name]}) for name in build_openapi._PM_TABLES}
+    ctx = _FakeCtx("2026-11-13", {"sector": sector, **pm_tables})
 
     build_openapi.m1_step(ctx)
 
     for name, df in out.items():
         pd.testing.assert_frame_equal(ctx.written[name], df)
     pd.testing.assert_frame_equal(ctx.written["sector"], sector)   # 다시 받지 않고 그대로 옮김 (DEC-23)
-    for name in build_openapi._PM_TABLES:
-        assert ctx.written[name].empty
-        from src.common import io
-        io.validate(name, ctx.written[name])   # 9.3절 스키마를 만족하는 0행
+    for name, df in pm_tables.items():
+        # sector와 같은 방식으로 기존 표를 그대로 옮긴다 — 0행으로 비우지 않는다 (2026-11-13 PM 결정)
+        pd.testing.assert_frame_equal(ctx.written[name], df)
