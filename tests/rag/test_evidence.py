@@ -147,19 +147,22 @@ def test_targets_cooldown_rank_limit_and_alert_window(inputs, client_factory):
         "rank": range(1, 25), "crash_flag": [1] + [0] * 23,
     }).iloc[::-1]
     alerts["2026-02-11"] = alerts_frame([(ticker(2), "2026-02-11 23:59:59")])
-    alerts[PREVIOUS] = alerts_frame([
+    previous_alerts = alerts_frame([
         (ticker(990003), f"{PREVIOUS} 15:29:59"),
         (ticker(1), f"{PREVIOUS} 15:30:00"),
+        (ticker(990004), f"{PREVIOUS} 15:30:00"),
         (ticker(3), f"{PREVIOUS} 15:30:00"),
+        (ticker(990005), f"{PREVIOUS} 15:30:00"),
     ])
-    # 3번 종목은 경보 창에는 있지만 기록 마감 정각에 생성되어 M9 쿨다운에서는 제외된다.
-    alerts[PREVIOUS].loc[2, "generated_at"] = pd.Timestamp("2026-02-23 09:00", tz=m9.KST)
+    deadline = pd.Timestamp(RECORD_DEADLINE).tz_convert(m9.KST)
+    for row, seconds in enumerate((-1, 0, 1), start=2):
+        previous_alerts.loc[row, "generated_at"] = deadline + pd.Timedelta(seconds=seconds)
+    alerts[PREVIOUS] = previous_alerts.iloc[:3]
     alerts[T] = alerts_frame([
         (ticker(990001), f"{T} 15:29:59"),
         (ticker(990002), f"{T} 15:30:00"),
     ])
     assert ticker(2) in m9.cooldown_at(T)
-    assert ticker(3) not in m9.cooldown_at(T)
     archive_filings(client_factory)
 
     evidence.m6_step(StepContext(T))
@@ -167,13 +170,21 @@ def test_targets_cooldown_rank_limit_and_alert_window(inputs, client_factory):
     records = io.read_evidence(T)
     assert {row["ticker"]: row["signal_type"] for row in records} == {
         ticker(1): "crash",
-        ticker(3): "alert",
-        **{ticker(n): "rank" for n in range(4, 23)},
+        **{ticker(n): "rank" for n in range(3, 23)},
         ticker(990001): "alert",
+        ticker(990004): "alert",
     }
-    assert len(records) == 22
+    assert len(records) == 23
     assert all(row["summary"] == "최근 20거래일 공시: 조회된 근거가 없습니다." for row in records)
     assert all(row["sources"] == [] for row in records)
+
+    # 같은 available_at의 경보가 기록 마감 정각과 직후에 추가돼도 과거 근거는 같다.
+    alerts[PREVIOUS] = previous_alerts
+    cooldown = m9.cooldown_at(T)
+    assert ticker(990004) in cooldown
+    assert {ticker(3), ticker(990005)}.isdisjoint(cooldown)
+    evidence.m6_step(StepContext(T))
+    assert io.read_evidence(T) == records
 
 
 def test_mixed_iso_observation_times_keep_latest_before_deadline(inputs, client_factory):
