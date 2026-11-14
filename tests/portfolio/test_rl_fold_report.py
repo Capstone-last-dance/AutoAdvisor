@@ -18,7 +18,7 @@ from stable_baselines3.common.save_util import save_to_zip_file
 
 from src.models.splits import Fold, make_folds
 from src.portfolio import rl_fold_report as report
-from src.portfolio.params import LambdaSearchParams
+from src.portfolio.params import LambdaSearchParams, load_prereg
 from src.portfolio.rl_data import build_snapshots
 from src.portfolio.rl_train import TrainResult
 from tests.portfolio.conftest import VOL_TARGET_FOR_TESTS
@@ -226,7 +226,10 @@ def synthetic(market):
     return tables, kept
 
 
-def test_main_writes_the_run_folder_once(synthetic, cfg, tmp_path, monkeypatch):
+def _main_setup(synthetic, cfg, tmp_path, monkeypatch, run_id="20261110_B_test"):
+    """main을 합성 시장으로 돌리는 준비. 공용 표는 메모리에서 읽고, run_id·date 파일은 tmp_path의 io로 읽는다.
+    합성 시장(3년)은 4.7절 폴드를 만들 수 없어 fold_split을 고정 폴드로 바꾼다. 실제 라벨 종료일을 넘기면
+    (지연 purge를 흉내 내어) 학습 마지막 신호일 하나를 더 뺀다."""
     tables, kept = synthetic
     c = copy.deepcopy(cfg)
     c["risk_layer"]["vol_target_annual"] = VOL_TARGET_FOR_TESTS
@@ -234,23 +237,37 @@ def test_main_writes_the_run_folder_once(synthetic, cfg, tmp_path, monkeypatch):
     config.write_text(yaml.safe_dump(c, allow_unicode=True), encoding="utf-8")
     dates = kept.signal_dates
     by_date = {pd.Timestamp(d): g for d, g in kept.signals.groupby(pd.to_datetime(kept.signals["date"]))}
+    real_read = report.io.read_table
+
+    def read_table(name, date=None, run_id=None, stub=False):
+        if date is None and run_id is None and not stub:
+            return tables[name]
+        return real_read(name, date=date, run_id=run_id, stub=stub)
 
     def commit():
-        assert not (tmp_path / "reports" / "20261110_B_test").exists()  # 결과 폴더가 새 파일 목록에 들지 않게
+        assert not (tmp_path / "reports" / run_id).exists()  # 결과 폴더가 새 파일 목록에 들지 않게
         return "abc\n"
 
+    def split(dates_, days, year, cfg_, actual_end_dates=None):
+        train = dates[:95] if actual_end_dates else dates[:96]
+        return Fold(year, pd.DatetimeIndex(train), pd.DatetimeIndex(dates[100:150]), pd.DatetimeIndex(dates[150:]))
+
     monkeypatch.setattr(report, "ROOT", tmp_path)
+    monkeypatch.setattr(report.io, "ROOT", tmp_path)
     monkeypatch.setattr(report, "TABLES", tuple(tables))
-    monkeypatch.setattr(report.io, "read_table", lambda name: tables[name])
+    monkeypatch.setattr(report.io, "read_table", read_table)
     monkeypatch.setattr(report, "_a_signal_function", lambda: lambda close, tickers, t: by_date[t])
     monkeypatch.setattr(report, "feature_table", lambda prices, bm, members, risk: kept.features)
     monkeypatch.setattr(report, "input_fingerprints", lambda t, root: {n: {"rows": len(df)} for n, df in t.items()})
     monkeypatch.setattr(report, "_git_commit", commit)
     monkeypatch.setattr(report, "LAST_SIGNAL_DATE", dates[-2])  # 합성 시장의 마지막 주는 주 중간에서 끝난다
-    monkeypatch.setattr(report, "fold_split", lambda dates_, days, year, cfg_: Fold(
-        year, pd.DatetimeIndex(dates[:96]), pd.DatetimeIndex(dates[100:150]), pd.DatetimeIndex(dates[150:])))
+    monkeypatch.setattr(report, "fold_split", split)
     _fake_training(monkeypatch, {0.0: 0.1, 0.5: 0.3, 1.0: 0.3, 2.0: 0.2})
+    return config, dates, kept
 
+
+def test_main_writes_the_run_folder_once(synthetic, cfg, tmp_path, monkeypatch):
+    config, dates, _ = _main_setup(synthetic, cfg, tmp_path, monkeypatch)
     args = ["--run-id", "20261110_B_test", "--fold", "2016", "--main-seeds", "0", "--config", str(config)]
     out = report.main(args)
     assert sorted(p.name for p in out.iterdir()) == [
@@ -259,9 +276,11 @@ def test_main_writes_the_run_folder_once(synthetic, cfg, tmp_path, monkeypatch):
     m = json.loads((out / "metrics.json").read_text(encoding="utf-8"))
     assert m["task"] == "B-06" and m["criteria"]["lambda_selection_ran_to_the_end"]
     assert m["lambda_search"]["chosen_lambda"] == 0.5 and m["main_training"]["seeds"] == [0]
-    assert m["rehearsal"]["all_prereg_seeds"] is False and "baseline" in m["rehearsal"]["signals"]
+    assert m["main_training"]["all_prereg_seeds"] is False and "baseline" in m["signals"]["source"]
     assert m["fold"]["train"] == {"n": 96, "first": dates[0], "last": dates[95], "purged": m["fold"]["train"]["purged"]}
-    assert m["fold"]["purge"]["h"] == 20 and "M9" in m["m9"] and m["device"] == "cpu"
+    assert m["fold"]["purge"]["h"] == 20 and "명목" in m["fold"]["purge"]["end_dates"]
+    assert "delay_purged" not in m["fold"]["purge"] and m["label_end_dates"] is None
+    assert m["m9"]["applied"] is False and "M9" in m["m9"]["note"] and m["device"] == "cpu"
     assert set(m["versions"]) >= {"stable_baselines3", "torch", "gymnasium"}
     assert m["universe_size"]["min"] > 0
     files = m["checkpoints"]["files"]
@@ -276,3 +295,95 @@ def test_main_writes_the_run_folder_once(synthetic, cfg, tmp_path, monkeypatch):
         report.main(["--run-id", "20261110_A_test", "--fold", "2016", "--config", str(config)])
     with pytest.raises(SystemExit, match="사전등록 시드"):
         report.main(["--run-id", "20261110_B_test2", "--fold", "2016", "--main-seeds", "0,7", "--config", str(config)])
+
+
+def _write_ml_signals(kept, train, val, run_id):
+    """합성 신호를 A의 폴드별 ML 신호 파일 형식(학습 = 교차 적합, 검증 = 폴드 모델)으로 쓴다."""
+    sig = kept.signals.assign(date=pd.to_datetime(kept.signals["date"]))
+    day = sig["date"].dt.strftime("%Y-%m-%d")
+    sig = sig[day.isin(set(train) | set(val))].copy()
+    sig["model_version"] = np.where(day[sig.index].isin(set(val)), "x_fold", "x_cross")
+    sig = sig.astype({"rank": "int32", "crash_flag": "int8"}).reset_index(drop=True)
+    return report.io.write_table("signals", sig, run_id=run_id), sig
+
+
+def _write_end_dates(path, dates):
+    d = pd.DatetimeIndex(pd.to_datetime(dates[:150]))
+    df = pd.DataFrame({"date": d, "ticker": "000001", "h": 20, "nominal_end": d + pd.Timedelta(days=28)})
+    df["actual_end"] = df["nominal_end"]
+    df.loc[94, "actual_end"] += pd.Timedelta(days=60)  # 거래정지로 늦어진 라벨
+    df.to_parquet(path, index=False)
+
+
+def _write_alerts(kept, day, run_id):
+    """day 10:00 KST에 나온 경보 하나 (U_t 첫 종목)."""
+    u = kept.universe
+    ticker = sorted(u.loc[(pd.to_datetime(u["date"]) == pd.Timestamp(day)) & u["in_universe"].astype(bool), "ticker"])[0]
+    at = pd.Series(pd.DatetimeIndex([pd.Timestamp(day) + pd.Timedelta(hours=10)]).tz_localize("Asia/Seoul"))
+    at = at.astype(pd.DatetimeTZDtype("ns", "Asia/Seoul"))
+    alerts = pd.DataFrame({"date": [pd.Timestamp(day)], "ticker": [ticker], "trigger_type": ["T1"],
+                           "rcept_no": ["20110101000001"], "report_nm": ["테스트 공시"], "rcept_dt": at, "available_at": at})
+    if "generated_at" in report.io.SCHEMAS["alerts"]:  # D #50부터 필수. 백테스트 파일은 available_at과 같다 (PM #51)
+        alerts["generated_at"] = at
+    report.io.write_table("alerts", alerts, run_id=run_id)
+    return ticker
+
+
+def test_main_b07_reads_ml_signals_actual_end_dates_and_m9(synthetic, cfg, tmp_path, monkeypatch):
+    """B-07 입력: A 폴드별 ML 신호 파일, C 실제 라벨 종료일 purge, PM 백테스트 경보 (쿨다운 마스킹 + 엔진 청산)."""
+    config, dates, kept = _main_setup(synthetic, cfg, tmp_path, monkeypatch, run_id="20261111_B_wf_y2016")
+    tables, _ = synthetic
+    path, sig = _write_ml_signals(kept, dates[:95], dates[100:150], "20261110_A_rlsig_y2016")
+    _write_end_dates(tmp_path / "end_dates.parquet", dates)
+    ticker = _write_alerts(kept, dates[30], "20261110_PM_bt")
+    days = pd.DatetimeIndex(sorted(pd.to_datetime(tables["index"]["date"]).unique()))
+    monkeypatch.setattr("src.events.alerts.load_trading_days", lambda: days)
+    seen = {}
+    real_snaps, real_engine = report.build_snapshots, report.build_engine
+    monkeypatch.setattr(report, "build_snapshots", lambda *a, **k: seen.setdefault("snaps", real_snaps(*a, **k)))
+    monkeypatch.setattr(report, "build_engine", lambda inputs, c, **kw: seen.setdefault("kw", kw) and real_engine(inputs, c, **kw))
+
+    out = report.main(["--run-id", "20261111_B_wf_y2016", "--fold", "2016", "--main-seeds", "0", "--config", str(config),
+                       "--signals-run-id", "20261110_A_rlsig", "--label-end-dates", str(tmp_path / "end_dates.parquet"),
+                       "--m9-alerts-run-id", "20261110_PM_bt"])
+    m = json.loads((out / "metrics.json").read_text(encoding="utf-8"))
+    assert m["task"] == "B-07" and m["criteria"]["lambda_selection_ran_to_the_end"]
+    s = m["signals"]
+    assert (s["run_id"], s["path"], s["rows"]) == ("20261110_A_rlsig_y2016", "signals/wf_20261110_A_rlsig_y2016.parquet", len(sig))
+    assert s["sha256"] == hashlib.sha256(path.read_bytes()).hexdigest()
+    assert s["model_version"] == {"train": {"x_cross": int((sig["model_version"] == "x_cross").sum())},
+                                  "val": {"x_fold": int((sig["model_version"] == "x_fold").sum())}}
+    assert m["label_end_dates"]["sha256"] == hashlib.sha256((tmp_path / "end_dates.parquet").read_bytes()).hexdigest()
+    assert m["fold"]["train"]["n"] == 95 and m["fold"]["purge"]["delay_purged"] == {"train": 1, "val": 0}
+    assert "실제 라벨 종료일" in m["fold"]["purge"]["end_dates"]
+
+    # M9: 경보 다음 거래일부터 cooldown_trading_days 동안 신규 진입 금지, 그 첫날 이벤트 청산
+    n_cool = int(load_prereg()["events"]["cooldown_trading_days"])  # load_book은 configs/prereg.yaml을 읽는다
+    start = days[days.get_loc(pd.Timestamp(dates[30])) + 1].strftime("%Y-%m-%d")
+    assert m["m9"] == {"applied": True, "alerts_run_id": "20261110_PM_bt", "path": "alerts/wf_20261110_PM_bt.parquet",
+                       "sha256": m["m9"]["sha256"], "alerts": 1, "cooldown_days": n_cool, "event_liquidations": 1}
+    assert seen["kw"]["event_liquidations"] == {start: frozenset({ticker})} and len(seen["kw"]["cooldowns"]) == n_cool
+    snap = {sn.date: sn for sn in seen["snaps"]}
+    assert snap[dates[31]].cooldown[snap[dates[31]].index[ticker]]  # 다음 신호일 체결도 쿨다운 안
+    assert not snap[dates[60]].cooldown.any()
+
+
+def test_main_b07_stops_when_a_signals_use_other_dates(synthetic, cfg, tmp_path, monkeypatch):
+    """A 파일이 명목 purge 신호일(학습 96개)인데 B는 실제 종료일 purge(95개)면 결과 폴더를 만들기 전에 멈춘다."""
+    config, dates, kept = _main_setup(synthetic, cfg, tmp_path, monkeypatch, run_id="20261111_B_wf_y2016")
+    _write_ml_signals(kept, dates[:96], dates[100:150], "20261110_A_bad_y2016")
+    _write_end_dates(tmp_path / "end_dates.parquet", dates)
+    with pytest.raises(ValueError, match="학습·검증 신호일과 다르다"):
+        report.main(["--run-id", "20261111_B_wf_y2016", "--fold", "2016", "--config", str(config),
+                     "--signals-run-id", "20261110_A_bad", "--label-end-dates", str(tmp_path / "end_dates.parquet")])
+    assert not (tmp_path / "reports" / "20261111_B_wf_y2016").exists()
+
+
+def test_main_b07_needs_actual_label_end_dates(synthetic, cfg, tmp_path, monkeypatch):
+    """A ML 신호를 명목 purge로 돌리지 않는다 (A #47 리뷰, DEC-09 (3)). 표를 읽기 전에 멈춘다."""
+    config, dates, kept = _main_setup(synthetic, cfg, tmp_path, monkeypatch, run_id="20261111_B_wf_y2016")
+    monkeypatch.setattr(report.io, "read_table", lambda *a, **k: pytest.fail("표를 읽었다"))
+    with pytest.raises(SystemExit, match="--label-end-dates"):
+        report.main(["--run-id", "20261111_B_wf_y2016", "--fold", "2016", "--config", str(config),
+                     "--signals-run-id", "20261110_A_rlsig"])
+    assert not (tmp_path / "reports" / "20261111_B_wf_y2016").exists()

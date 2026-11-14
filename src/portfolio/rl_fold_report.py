@@ -1,13 +1,21 @@
-"""작업 B-06: 폴드 하나의 λ 탐색과 PPO 학습(6.5절)을 돌려 reports/{run_id}/에 남긴다 (R-10).
+"""작업 B-06·B-07: 폴드 하나의 λ 탐색과 PPO 학습(6.5절)을 돌려 reports/{run_id}/에 남긴다 (R-10).
 
+    # B-06 리허설 (A 베이스라인 신호, 명목 purge, M9 없음)
     python -m src.portfolio.rl_fold_report --run-id 20261110_B_rl_y2016 --fold 2016 --main-seeds 0
+    # B-07 폴드 학습 (A ML 신호, C 실제 라벨 종료일, M9 백테스트 경보)
+    python -m src.portfolio.rl_fold_report --run-id 20261111_B_rlwf_y2016 --fold 2016 \
+        --signals-run-id 20261110_A_rlsig --label-end-dates {C 인계본}/end_dates.parquet --m9-alerts-run-id {PM run_id}
 
 - 폴드 분할: A의 `src.models.splits.make_folds` (4.7절). A-06·A-07과 같은 학습·검증 신호일을 쓴다.
-  purge는 h = labels.main_horizon_days(20)다 (DEC-21 (g)). C의 실제 라벨 종료일(DEC-09 (3))은 아직 공개 표가
-  없어 명목 t+1+h로 자른다. 그렇게 했다고 metrics.json에 적는다.
-- 신호: ML 신호(A-06·A-07, DEC-08 폴드별 wf 파일)가 나오기 전에는 A의 베이스라인 신호로 리허설한다 (B-06).
-  베이스라인은 규칙 기반이라 학습 구간에서도 교차 적합이 필요 없다.
-- 피처·엔진·M9는 B-05 리포트(env_check_report)와 같다. M9 쿨다운·이벤트 청산은 비운다 (M9 백테스트 경보 전).
+  purge는 h = labels.main_horizon_days(20)다 (DEC-21 (g)). --label-end-dates를 주면 C의 실제 라벨 종료일로
+  자른다 (DEC-09 (3) 변경: 그 신호일의 라벨 하나라도 다음 구간 첫 신호일 이상에서 끝나면 신호일 전체를 뺀다).
+  안 주면 명목 t+1+h로 자르고 그렇게 했다고 metrics.json에 적는다. 지연 때문에 더 빠진 신호일 수를 구간마다 적는다.
+- 신호: --signals-run-id를 주면 A의 폴드별 ML 신호 `signals/wf_{값}_y{Y}.parquet`(DEC-08)를 io로 읽는다.
+  학습 연도는 교차 적합, 검증 연도는 폴드 Y 모델의 예측이다. 파일의 신호일이 B의 폴드 학습·검증 신호일과
+  다르면 멈춘다 (A와 B가 같은 purge를 썼는지). 안 주면 A의 베이스라인 신호로 리허설한다 (B-06).
+- M9: --m9-alerts-run-id를 주면 PM의 백테스트 경보 `alerts/wf_{값}.parquet`로 신호일 쿨다운(행동 해석의
+  마스킹)과 엔진의 체결일 쿨다운·이벤트 청산을 넣는다 (`src.events.alerts.load_book`). 안 주면 비운다.
+- 피처·엔진은 B-05 리포트(env_check_report)와 같다.
 - 학습 환경: 폴드 학습 신호일, episode="random". 검증 환경: 폴드 검증 신호일, episode="full".
   둘 다 2011~2025 신호일 달력을 넘겨 purge로 빠진 신호일을 건너뛰는 스텝을 만들지 않는다 (DEC-21 (g)).
   검증 IR은 C의 `validation_ir`(M5)다.
@@ -41,7 +49,7 @@ import pandas as pd
 
 from src.backtest.metrics import validation_ir
 from src.common import io
-from src.models.splits import Fold, make_folds
+from src.models.splits import Fold, label_end_dates, make_folds
 from src.portfolio.engine_adapter import build_engine, engine_inputs
 from src.portfolio.env_check_report import (
     FIRST_SIGNAL_DATE,
@@ -96,6 +104,78 @@ def fold_split(
         actual_end_dates=actual_end_dates,
     )
     return fold
+
+
+def _file_sha256(path: Path) -> str:
+    return hashlib.sha256(Path(path).read_bytes()).hexdigest()
+
+
+def read_label_end_dates(path: Path, h: int = PURGE_H) -> dict:
+    """C 라벨 인계본의 end_dates(date, ticker, h, nominal_end, actual_end) → 신호일별 가장 늦은 라벨 종료일.
+    A-06·A-07과 같은 변환(`splits.label_end_dates`)이다. 9.3절 공용 표가 아니라 인계 파일이라 경로로 읽는다."""
+    return label_end_dates(pd.read_parquet(path), h)
+
+
+def ml_signal_table(run_id: str, fold: Fold) -> pd.DataFrame:
+    """폴드 Y의 학습·검증 구간 ML 신호 `signals/wf_{run_id}.parquet` (A-06·A-07, DEC-08).
+
+    신호일 집합이 B의 폴드 학습·검증 신호일과 같아야 한다. 다르면 A와 B의 purge 기준이 다른 것이라 멈춘다.
+    날짜마다 종목이 U_t와 같은지는 build_snapshots가 본다."""
+    signals = io.read_table("signals", run_id=run_id)
+    want = set(_iso(fold.train)) | set(_iso(fold.val))
+    got = set(_iso(pd.unique(signals["date"])))
+    if got != want:
+        missing, extra = sorted(want - got), sorted(got - want)
+        raise ValueError(
+            f"signals/wf_{run_id}: 폴드 {fold.test_year}의 학습·검증 신호일과 다르다 "
+            f"(없는 신호일 {len(missing)}개 {missing[:3]}, 남는 신호일 {len(extra)}개 {extra[:3]}). "
+            "A와 같은 purge 기준(C 실제 라벨 종료일, --label-end-dates)인지 확인한다"
+        )
+    return signals
+
+
+def ml_signal_summary(signals: pd.DataFrame, run_id: str, fold: Fold) -> dict[str, Any]:
+    """metrics.json의 signals: 파일 SHA-256과 구간별 model_version 행 수 (학습 = 교차 적합, 검증 = 폴드 모델)."""
+    day = pd.to_datetime(signals["date"]).dt.strftime("%Y-%m-%d")
+    segment = np.where(day.isin(set(_iso(fold.val))), "val", "train")
+    counts = signals.groupby([segment, signals["model_version"].astype(str)]).size()
+    path = io.ROOT / "signals" / f"wf_{run_id}.parquet"
+    return {
+        "source": "A ML 신호 (A-06·A-07, DEC-08)", "run_id": run_id, "path": path.relative_to(io.ROOT).as_posix(),
+        "rows": len(signals), "sha256": _file_sha256(path),
+        "model_version": {s: {v: int(n) for v, n in counts[s].items()} for s in ("train", "val") if s in counts},
+    }
+
+
+@dataclass(frozen=True)
+class M9Schedule:
+    cooldown_at: Callable[[str], Any]  # 신호일 t → t+1 신규 진입 금지 종목 (행동 해석의 마스킹)
+    cooldowns: Mapping[str, frozenset[str]] | None  # 엔진: 체결일 → 매수 금지 종목
+    liquidations: Mapping[str, frozenset[str]] | None  # 엔진: 체결일 → 이벤트 청산 종목
+    record: dict[str, Any]
+
+
+M9_NONE_NOTE = ("쿨다운·이벤트 청산 없음 (M9 백테스트 경보 전). 6.5절 설계와 달라 판정 실행이면 PM 결정과 "
+                "deviation 기록이 필요하다")
+
+
+def m9_schedule(run_id: str | None, first_signal: str, last_signal: str) -> M9Schedule:
+    """PM의 백테스트 경보(`alerts/wf_{run_id}.parquet`)로 만든 M9 일정. run_id가 없으면 빈 일정이다.
+
+    엔진 일정은 첫 신호일 다음 거래일부터 마지막 신호일까지 한 번에 만든다. 체결일 d의 일정에는 d 전에
+    시작한 경보만 들어가므로 뒤 경보를 미리 알아도 앞 체결이 바뀌지 않는다."""
+    if run_id is None:
+        return M9Schedule(lambda d: (), None, None, {"applied": False, "note": M9_NONE_NOTE})
+    from src.events.alerts import load_book
+
+    book = load_book(run_id)
+    cooldowns, liquidations = book.engine_alerts(first_signal, last_signal)
+    path = io.ROOT / "alerts" / f"wf_{run_id}.parquet"
+    return M9Schedule(book.cooldown_at, cooldowns, liquidations, {
+        "applied": True, "alerts_run_id": run_id, "path": path.relative_to(io.ROOT).as_posix(),
+        "sha256": _file_sha256(path), "alerts": len(book.tickers), "cooldown_days": len(cooldowns),
+        "event_liquidations": sum(len(v) for v in liquidations.values()),
+    })
 
 
 @dataclass(frozen=True)
@@ -241,18 +321,21 @@ def _span(dates: Sequence[str]) -> dict[str, Any]:
     return {"n": len(dates), "first": dates[0], "last": dates[-1]}
 
 
-def fold_summary(fold: Fold, dates: Sequence[str], purge_end_dates: str) -> dict[str, Any]:
-    """폴드 신호일과 purge로 빠진 수."""
+def fold_summary(fold: Fold, dates: Sequence[str], purge_end_dates: str, nominal: Fold | None = None) -> dict[str, Any]:
+    """폴드 신호일과 purge로 빠진 수. nominal(명목 종료일 폴드)을 주면 실제 종료일 때문에 더 빠진 수도 적는다."""
     sig = pd.DatetimeIndex(pd.to_datetime(list(dates)))
     y = int(fold.test_year)
     train_years = sig[(sig.year >= sig.year.min()) & (sig.year <= y - 3)]
     val_years = sig[(sig.year >= y - 2) & (sig.year <= y - 1)]
+    purge: dict[str, Any] = {"h": PURGE_H, "end_dates": purge_end_dates}
+    if nominal is not None:  # DEC-09 (3) 변경: 지연 때문에 추가로 빠진 신호일 수를 구간마다 보고한다
+        purge["delay_purged"] = {"train": len(nominal.train) - len(fold.train), "val": len(nominal.val) - len(fold.val)}
     return {
         "test_year": y,
         "train": {**_span(_iso(fold.train)), "purged": len(train_years) - len(fold.train)},
         "val": {**_span(_iso(fold.val)), "purged": len(val_years) - len(fold.val)},
         "test": _span(_iso(fold.test)),
-        "purge": {"h": PURGE_H, "end_dates": purge_end_dates},
+        "purge": purge,
     }
 
 
@@ -277,15 +360,25 @@ def _seeds(text: str | None, rl: RLParams) -> list[int]:
 
 
 def main(argv: Sequence[str] | None = None) -> Path:
-    ap = argparse.ArgumentParser(description="B-06 폴드 하나의 λ 탐색과 PPO 학습 (베이스라인 신호 리허설)")
+    ap = argparse.ArgumentParser(description="B-06·B-07 폴드 하나의 λ 탐색과 PPO 학습")
     ap.add_argument("--run-id", required=True, help="{YYYYMMDD}_B_{짧은설명}")
     ap.add_argument("--fold", type=int, required=True, help="폴드 Y = 시험 연도 (splits.walk_forward_test_years)")
     ap.add_argument("--main-seeds", default=None,
                     help="본 학습 시드 (쉼표 구분, 빈 문자열이면 본 학습 안 함). 기본은 portfolio.rl.seeds 전부")
     ap.add_argument("--config", default=str(PREREG_PATH), help="부록 1 설정 (기본 configs/prereg.yaml)")
+    ap.add_argument("--signals-run-id", default=None,
+                    help="A 폴드별 ML 신호 run_id 앞부분 (signals/wf_{값}_y{Y}.parquet). 없으면 베이스라인 신호 (B-06)")
+    ap.add_argument("--label-end-dates", default=None,
+                    help="C 라벨 인계본의 end_dates.parquet. 주면 실제 라벨 종료일로 purge한다 (DEC-09 (3))")
+    ap.add_argument("--m9-alerts-run-id", default=None,
+                    help="M9 백테스트 경보 run_id (alerts/wf_{값}.parquet). 없으면 쿨다운·이벤트 청산 없음")
     args = ap.parse_args(argv)
     if not RUN_ID_RE.match(args.run_id):
         raise SystemExit(f"run_id는 '{{YYYYMMDD}}_B_{{짧은설명}}' 형식이어야 한다: {args.run_id!r}")
+    if args.signals_run_id is not None and args.label_end_dates is None:
+        # A 폴드별 신호는 C 실제 라벨 종료일 purge 기준이다. 명목 purge로는 신호일이 맞지 않는다 (A #47 리뷰)
+        raise SystemExit("--signals-run-id(A ML 신호)를 쓰면 --label-end-dates(C end_dates.parquet)도 줘야 한다 "
+                         "(DEC-09 (3): A·B·C가 같은 실제 라벨 종료일 purge 신호일을 쓴다)")
     out = ROOT / "reports" / args.run_id
     if out.exists():
         raise SystemExit(f"{out}가 이미 있다. 결과를 덮어쓰지 않는다 (R-11)")
@@ -293,22 +386,34 @@ def main(argv: Sequence[str] | None = None) -> Path:
     cfg = load_prereg(cfg_path)
     rl, risk = RLParams.from_prereg(cfg), RiskLayerParams.from_prereg(cfg)
     seeds = _seeds(args.main_seeds, rl)
-    signal_fn = _a_signal_function()
+    ml = args.signals_run_id is not None
+    signal_fn = None if ml else _a_signal_function()
 
     start = perf_counter()
     tables = {name: io.read_table(name) for name in TABLES}
     bm = kospi200(tables["index"])
     dates = signal_dates(tables["universe"], bm.index, FIRST_SIGNAL_DATE, LAST_SIGNAL_DATE)
-    fold = fold_split(dates, bm.index, args.fold, cfg)
+    ends = None if args.label_end_dates is None else read_label_end_dates(Path(args.label_end_dates))
+    fold = fold_split(dates, bm.index, args.fold, cfg, actual_end_dates=ends)
+    nominal = None if ends is None else fold_split(dates, bm.index, args.fold, cfg)
     needed = sorted(set(_iso(fold.train)) | set(_iso(fold.val)))
     members = members_by_date(tables["universe"], needed)
-    union = sorted({tk for tickers in members.values() for tk in tickers})
-    signals = baseline_signal_table(_pivot(tables["prices"], "close", union), members, signal_fn)
+    if ml:
+        signal_run = f"{args.signals_run_id}_y{args.fold}"
+        signals = ml_signal_table(signal_run, fold)
+        signal_record = ml_signal_summary(signals, signal_run, fold)
+    else:
+        union = sorted({tk for tickers in members.values() for tk in tickers})
+        signals = baseline_signal_table(_pivot(tables["prices"], "close", union), members, signal_fn)
+        signal_record = {"source": "src.models.baseline.baseline_signals (ML 신호 전 리허설, B-06)",
+                         "rows": len(signals), "sha256": content_sha256(signals)}
     features = feature_table(tables["prices"], bm, members, risk)
     inputs = engine_inputs(*(tables[n] for n in ENGINE_TABLES))
+    m9 = m9_schedule(args.m9_alerts_run_id, dates[0], dates[-1])
     snaps = build_snapshots(needed, signals, features, tables["universe"], tables["sector"], inputs.bm_close,
-                            lambda d: (), risk)
-    envs = fold_envs(fold, snaps, build_engine(inputs, cfg), rl, risk, dates)
+                            m9.cooldown_at, risk)
+    engine = build_engine(inputs, cfg, cooldowns=m9.cooldowns, event_liquidations=m9.liquidations)
+    envs = fold_envs(fold, snaps, engine, rl, risk, dates)
     prepare_seconds = perf_counter() - start
 
     commit = _git_commit()  # 결과 폴더를 만들기 전에 (R-10)
@@ -318,10 +423,18 @@ def main(argv: Sequence[str] | None = None) -> Path:
 
     result = run_fold(envs, rl, validation_ir, out, seeds)
     result["seconds"]["prepare"] = prepare_seconds
+    if ends is None:
+        purge_note = "명목 t+1+h 거래일 (C 실제 라벨 종료일 미반영)"
+        label_record = None
+    else:
+        purge_note = "C 실제 라벨 종료일 (DEC-09 (3) 변경, 신호일 단위)"
+        label_record = {"path": Path(args.label_end_dates).name, "sha256": _file_sha256(Path(args.label_end_dates)),
+                        "signal_days": len(ends)}
     metrics = {
         "run_id": args.run_id,
-        "task": "B-06",
-        "rehearsal": {"signals": "A baseline_signals (ML 신호 전, B-06)", "all_prereg_seeds": seeds == list(rl.seeds)},
+        "task": "B-07" if ml else "B-06",
+        "signals": signal_record,
+        "label_end_dates": label_record,
         **result,
         "checkpoints": {
             "storage": f"best.zip은 git에 넣지 않고 팀 드라이브 {args.run_id}/ 폴더에 둔다 (PM 11/10). "
@@ -330,8 +443,8 @@ def main(argv: Sequence[str] | None = None) -> Path:
                              "같은 가중치인지는 이것으로 비교한다",
             "files": checkpoint_fingerprints(out),
         },
-        "fold": fold_summary(fold, dates, "명목 t+1+h 거래일 (C 실제 라벨 종료일 미반영)"),
-        "m9": "쿨다운·이벤트 청산 없음 (M9 백테스트 경보 전)",
+        "fold": fold_summary(fold, dates, purge_note, nominal),
+        "m9": m9.record,
         "ir_function": "src.backtest.metrics.validation_ir",
         "universe_size": {
             "mean": float(np.mean([len(s.tickers) for s in snaps])),
@@ -339,8 +452,6 @@ def main(argv: Sequence[str] | None = None) -> Path:
         },
         "inputs": input_fingerprints(tables, io.ROOT),
         "generated": {
-            "signals": {"source": "src.models.baseline.baseline_signals", "rows": len(signals),
-                        "sha256": content_sha256(signals)},
             "features": {"source": "src.features.price_features + B market_state_table (regime_mc)",
                          "rows": len(features), "sha256": content_sha256(features)},
         },
@@ -350,8 +461,9 @@ def main(argv: Sequence[str] | None = None) -> Path:
     (out / "metrics.json").write_text(json.dumps(metrics, ensure_ascii=False, indent=2, default=str) + "\n",
                                       encoding="utf-8")
     c = metrics["criteria"]
-    print(f"B-06 폴드 {args.fold}: λ = {result['lambda_search']['chosen_lambda']:g}, "
-          f"λ 선택 절차 끝까지: {c['lambda_selection_ran_to_the_end']} → {out}")
+    print(f"{metrics['task']} 폴드 {args.fold}: λ = {result['lambda_search']['chosen_lambda']:g}, "
+          f"λ 선택 절차 끝까지: {c['lambda_selection_ran_to_the_end']}, M9 {'있음' if m9.record['applied'] else '없음'}"
+          f" → {out}")
     return out
 
 

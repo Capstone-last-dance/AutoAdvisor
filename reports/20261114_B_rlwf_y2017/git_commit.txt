@@ -1,0 +1,14 @@
+099a511492d4eb9912f16d56dccecf8ae68402fa
+untracked: reports/20261114_B_rlwf_y2016/config.yaml
+untracked: reports/20261114_B_rlwf_y2016/git_commit.txt
+untracked: reports/20261114_B_rlwf_y2016/lambda_0.5/eval_log.csv
+untracked: reports/20261114_B_rlwf_y2016/lambda_0/eval_log.csv
+untracked: reports/20261114_B_rlwf_y2016/lambda_1/eval_log.csv
+untracked: reports/20261114_B_rlwf_y2016/lambda_2/eval_log.csv
+untracked: reports/20261114_B_rlwf_y2016/lambda_search.csv
+untracked: reports/20261114_B_rlwf_y2016/metrics.json
+untracked: reports/20261114_B_rlwf_y2016/seed_0/eval_log.csv
+untracked: reports/20261114_B_rlwf_y2016/seed_1/eval_log.csv
+untracked: reports/20261114_B_rlwf_y2016/seed_2/eval_log.csv
+untracked: reports/20261114_B_rlwf_y2016/seed_3/eval_log.csv
+untracked: reports/20261114_B_rlwf_y2016/seed_4/eval_log.csv

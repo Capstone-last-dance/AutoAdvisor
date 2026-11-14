@@ -1,0 +1,299 @@
+{
+  "run_id": "20261114_B_rlwf_y2016",
+  "task": "B-07",
+  "signals": {
+    "source": "A ML 신호 (A-06·A-07, DEC-08)",
+    "run_id": "20261113_A_rlsig_y2016",
+    "path": "signals/wf_20261113_A_rlsig_y2016.parquet",
+    "rows": 94084,
+    "sha256": "5016c91d96e6c57d8b0c3b020b8123a1322e289c935298f22503ff470d2c0b12",
+    "model_version": {
+      "train": {
+        "20261113_A_rlsig_cross": 53765
+      },
+      "val": {
+        "20261113_A_rlsig_fold": 40319
+      }
+    }
+  },
+  "label_end_dates": {
+    "path": "end_dates.parquet",
+    "sha256": "dc610a7905da2e03c9dd610cd74d54a3895636efbd2a5073c5b758266aa59b25",
+    "signal_days": 777
+  },
+  "criteria": {
+    "lambda_selection_ran_to_the_end": true,
+    "every_lambda_trained": true,
+    "eval_logs_and_checkpoints_complete": true,
+    "chosen_lambda_follows_dec21_f": true
+  },
+  "lambda_search": {
+    "grid": [
+      0.0,
+      0.5,
+      1.0,
+      2.0
+    ],
+    "seed": 0,
+    "total_timesteps": 100000,
+    "eval_every_steps": 10000,
+    "rule": "max_checkpoint_val_ir_then_smaller_lambda",
+    "chosen_lambda": 0.5,
+    "per_lambda": [
+      {
+        "lambda": 0.0,
+        "best_val_ir": 1.3904868956652146,
+        "best_timesteps": 10000,
+        "eval_steps_complete": true,
+        "n_evals": 10,
+        "finite_evals": 10,
+        "checkpoint": true
+      },
+      {
+        "lambda": 0.5,
+        "best_val_ir": 1.3959128613046898,
+        "best_timesteps": 100000,
+        "eval_steps_complete": true,
+        "n_evals": 10,
+        "finite_evals": 10,
+        "checkpoint": true
+      },
+      {
+        "lambda": 1.0,
+        "best_val_ir": 1.1097089001239888,
+        "best_timesteps": 50000,
+        "eval_steps_complete": true,
+        "n_evals": 10,
+        "finite_evals": 10,
+        "checkpoint": true
+      },
+      {
+        "lambda": 2.0,
+        "best_val_ir": 1.3762969874547546,
+        "best_timesteps": 10000,
+        "eval_steps_complete": true,
+        "n_evals": 10,
+        "finite_evals": 10,
+        "checkpoint": true
+      }
+    ]
+  },
+  "main_training": {
+    "lambda": 0.5,
+    "seeds": [
+      0,
+      1,
+      2,
+      3,
+      4
+    ],
+    "prereg_seeds": [
+      0,
+      1,
+      2,
+      3,
+      4
+    ],
+    "all_prereg_seeds": true,
+    "total_timesteps_per_seed": 300000,
+    "per_seed": [
+      {
+        "seed": 0,
+        "best_val_ir": 1.5275043808183855,
+        "best_timesteps": 160000,
+        "eval_steps_complete": true,
+        "n_evals": 30,
+        "finite_evals": 30,
+        "checkpoint": true
+      },
+      {
+        "seed": 1,
+        "best_val_ir": 1.6810690365786638,
+        "best_timesteps": 140000,
+        "eval_steps_complete": true,
+        "n_evals": 30,
+        "finite_evals": 30,
+        "checkpoint": true
+      },
+      {
+        "seed": 2,
+        "best_val_ir": 1.3123112319787038,
+        "best_timesteps": 160000,
+        "eval_steps_complete": true,
+        "n_evals": 30,
+        "finite_evals": 30,
+        "checkpoint": true
+      },
+      {
+        "seed": 3,
+        "best_val_ir": 1.3450784871474728,
+        "best_timesteps": 110000,
+        "eval_steps_complete": true,
+        "n_evals": 30,
+        "finite_evals": 30,
+        "checkpoint": true
+      },
+      {
+        "seed": 4,
+        "best_val_ir": 1.6603862607181665,
+        "best_timesteps": 100000,
+        "eval_steps_complete": true,
+        "n_evals": 30,
+        "finite_evals": 30,
+        "checkpoint": true
+      }
+    ]
+  },
+  "seconds": {
+    "lambda_search": 470.5889479999896,
+    "main_training": 1725.561847200006,
+    "prepare": 24.318569700000808
+  },
+  "checkpoints": {
+    "storage": "best.zip은 git에 넣지 않고 팀 드라이브 20261114_B_rlwf_y2016/ 폴더에 둔다 (PM 11/10). 드라이브 파일이 정본이고 sha256으로 대조한다",
+    "policy_sha256": "정책 파라미터 값만의 지문. 파일 sha256은 저장 시각이 들어가 다시 학습하면 달라지므로 같은 가중치인지는 이것으로 비교한다",
+    "files": {
+      "lambda_0.5/best.zip": {
+        "bytes": 761793,
+        "sha256": "5f20d9938f1e751d4b8518b655ed983f66471536b6800f5cd4b04581b84fe036",
+        "policy_sha256": "ecf5968058cee1a283da14cc112ca009a285340e90440d1f85385c17940af08c"
+      },
+      "lambda_0/best.zip": {
+        "bytes": 761778,
+        "sha256": "c49e9772305f8dc9670ef91c8f2a8628394d836d83a5359c5f5fd6ab6f028433",
+        "policy_sha256": "2af88fbbb98afe01a746128c79c25da297e21a674ec607982a5b251886a2d530"
+      },
+      "lambda_1/best.zip": {
+        "bytes": 761779,
+        "sha256": "6891e363313ad79b7c3bd0a84805df8fe5c779909622e908ed0c462a2c21ecd7",
+        "policy_sha256": "6af14d3e7eee9190e6881fccdf50c09e69ae168210306e4b47d0e9aefef56ace"
+      },
+      "lambda_2/best.zip": {
+        "bytes": 761778,
+        "sha256": "639360e1e803b0299bf07ecffd05cb298e35f890cde1a3759029657461099cdf",
+        "policy_sha256": "ed6f7f29b25460b430617efb3460e900eda3596bb0a68c6e28a08e4888014d65"
+      },
+      "seed_0/best.zip": {
+        "bytes": 761792,
+        "sha256": "60b6b72d1c9c65e4fca7fbb7a2890445dd08c501bf7864b329aadf35c9973bcd",
+        "policy_sha256": "c72042a5ecb47765b179014ba5c01e5e20c8eb8ce74b8fe1ac792e3f868e47fb"
+      },
+      "seed_1/best.zip": {
+        "bytes": 761795,
+        "sha256": "eaa24c0bbc5ec06647793ecdc6777b4aae79099344350329a522efcb8b969994",
+        "policy_sha256": "01d7a3af53fc9e73c353f6549d6abceaa2df3a346c80d8295e811825886e3def"
+      },
+      "seed_2/best.zip": {
+        "bytes": 761792,
+        "sha256": "bfebbbe48524d610a9f4272e71398791c9fc1f304df8c47f22a6e1e10591f2c4",
+        "policy_sha256": "2d422bcb382382243932bebe3255cc3e160af5e1bb705319962e977313a9028f"
+      },
+      "seed_3/best.zip": {
+        "bytes": 761795,
+        "sha256": "29b4e9669bfcec5e59464ac264e9e11dff609d2fc269312654962864457631aa",
+        "policy_sha256": "9fabe0cb31abf1c94c7edd4dfcda8eb66534dea8e6f0d86970fd448e6803b223"
+      },
+      "seed_4/best.zip": {
+        "bytes": 761784,
+        "sha256": "c623324e515419e0718603e7d02c89f4ae38a0b5359eaf533c21947aaebf4eee",
+        "policy_sha256": "9000614123caf5cd3731394fec0b217ef46de93a69bdae2ef69225fc20b22a2a"
+      }
+    }
+  },
+  "fold": {
+    "test_year": 2016,
+    "train": {
+      "n": 147,
+      "first": "2011-01-07",
+      "last": "2013-10-25",
+      "purged": 9
+    },
+    "val": {
+      "n": 101,
+      "first": "2014-01-03",
+      "last": "2015-12-04",
+      "purged": 4
+    },
+    "test": {
+      "n": 52,
+      "first": "2016-01-08",
+      "last": "2016-12-29"
+    },
+    "purge": {
+      "h": 20,
+      "end_dates": "C 실제 라벨 종료일 (DEC-09 (3) 변경, 신호일 단위)",
+      "delay_purged": {
+        "train": 5,
+        "val": 0
+      }
+    }
+  },
+  "m9": {
+    "applied": true,
+    "alerts_run_id": "20261112_PM_m9_b07_v1",
+    "path": "alerts/wf_20261112_PM_m9_b07_v1.parquet",
+    "sha256": "f537cc819973b84a84ca1ed545288795a35d225d731fdb472726cdd14166ddc9",
+    "alerts": 2599,
+    "cooldown_days": 3681,
+    "event_liquidations": 2333
+  },
+  "ir_function": "src.backtest.metrics.validation_ir",
+  "universe_size": {
+    "mean": 379.3709677419355,
+    "min": 321,
+    "max": 455
+  },
+  "inputs": {
+    "prices": {
+      "path": "data/processed/prices.parquet",
+      "rows": 9345272,
+      "sha256": "e735be46c5ca1685f922d0c8ee78f2129d8c8256bb6cfd9181723ccd0b01b5a5"
+    },
+    "status": {
+      "path": "data/processed/status.parquet",
+      "rows": 9345272,
+      "sha256": "40812ae37f997ef5dd0b42fc2f453a15839cd9d0f4967d1b9d37fdad7e7363b3"
+    },
+    "index": {
+      "path": "data/processed/index.parquet",
+      "rows": 4146,
+      "sha256": "ce9ffb646c4723fe067c76eaba90a526683444369ac7ab43e53684e662e9300e"
+    },
+    "delisted": {
+      "path": "data/processed/delisted.parquet",
+      "rows": 932,
+      "sha256": "fc14a9183780605617f72fa784f785b4ae0635fbbef46c0d7225cc539478a54c"
+    },
+    "delisted_reused": {
+      "path": "data/processed/delisted_reused.parquet",
+      "rows": 2,
+      "sha256": "a73192de4525b05e626bd24bff5dc30e205546d6ed963bbaf5f9c1ff7ce80a25"
+    },
+    "universe": {
+      "path": "data/processed/universe.parquet",
+      "rows": 413000,
+      "sha256": "b2b892af78a83bb773b804ba3cacf673efa4f5734a8d144b1384ffce36462758"
+    },
+    "sector": {
+      "path": "data/processed/sector.parquet",
+      "rows": 3701,
+      "sha256": "e2f5ab4f5dc20a65d33c7368720f995059b2d65076a2e327246b6bdbc12fdd99"
+    }
+  },
+  "generated": {
+    "features": {
+      "source": "src.features.price_features + B market_state_table (regime_mc)",
+      "rows": 94084,
+      "sha256": "f9f849b9791680df71d17a666863e3e0f2d8e8767dcd55e446da386f991aa69a"
+    }
+  },
+  "versions": {
+    "python": "3.12.10",
+    "stable_baselines3": "2.9.2",
+    "torch": "2.15.0+cpu",
+    "gymnasium": "1.4.0",
+    "numpy": "2.5.4",
+    "pandas": "3.1.0"
+  },
+  "device": "cpu"
+}
