@@ -15,7 +15,7 @@
 | PM-07 | PM 장지원 | 11/9 | 대기 | | |
 | PM-08 | PM 장지원 | 11/16 | 대기 | | |
 | PM-09 | PM 장지원 | 11/16 | 진행 중 | src/features/news_features.py; tests/features/test_news_features.py | `news_cnt_spike`·`news_sent_5` 구현과 누수 테스트. 11/12 실데이터(빅카인즈 2010-10-01~2026-10-31) 826개 신호일 348,678행: U_t 행 일치, 독립 재계산 3,000쌍 차이 0, 무작위 신호일 20개 누수 테스트 20/20. 11/13 이름 검토 157종목 보완 수집(빅카인즈 엑셀 343개, 형태소 분석·제목, 옛 상호 기간별, 나머지 종목은 U_t 기간만)과 증권사 출처 약칭 규칙(한화·SK·현대차 제목 끝 리포트 출처 제외)을 합쳐 다시 만들었다. 모든 종목에서 빅카인즈 통합 분류1이 스포츠인 기사(구단 기사, 기존 표 60,865·보완 24,015 연결)를 뺐다(`pm_features_20261113c`). 상호 변경 공시가 없던 의심 149종목 중 132종목의 변경일을 Codex가 사업보고서·공시로 확인했다. 그 전 구간은 옛 이름 시기의 거짓 0(두 창 모두 0건 95.7%)이라, 옛 이름 기사를 기간별로 받아(121종목, 엑셀 45개) 채웠다(`pm_features_20261113e`). 채운 28,643행 중 두 창 모두 0건은 0.8%다. 일반어와 겹치는 옛 이름(태평양·신우·삼호)은 받지 않고 그 기간을 결측으로 뒀다. 옛 이름이 '더 긴 이름'으로 등록되어 LG·CJ·효성·코오롱 등 9종목은 자회사 옛 이름 기사(예: LG상사)가 빠졌고, 두 표에 겹친 (기사, 종목) 505건은 한 번만 센다. 같은 점검 모두 통과. 결측률 2011~2025년 `news_cnt_spike` 7.6%·`news_sent_5` 33.3%(받지 않은 이름 검토 93종목 — 일반어·인명·지명과 겹치거나 U_t 행 30 미만, 잡음 키워드 5종목, 공시상 상호 변경 전 구간, 창 안 기사 없음). 보령(2022-03-25~)·하이트진로(~2011-08)는 결측. A 인계와 PR 리뷰 남음. 10/31 이후 기사는 아직 수집하지 않아 forward 신호일은 결측 |
-| PM-10 | PM 장지원 | 11/16 | 대기 | | |
+| PM-10 | PM 장지원 | 11/16 | 진행 중 | src/events/; [PR #34](https://github.com/Capstone-last-dance/AutoAdvisor/pull/34)·[PR #51](https://github.com/Capstone-last-dance/AutoAdvisor/pull/51) | 일간 경보 입력과 재생 규칙(DEC-32·33) 구현. #51에 신호일 생성 시각 제한(C 리뷰), `AlertsNotStarted` 경로 제거(D 리뷰), 늦은 경보의 생성 뒤 첫 체결일 청산(DEC-32 정정)을 반영했고 C 재검토가 필요하다. 유형별 10건 수작업 점검, 백테스트 청산 분포, T1·T3·T6 원문 판정은 남음 |
 | PM-11 | PM 장지원 | 12/4 | 대기 | | |
 | PM-12 | PM 장지원 | 12/7 | 대기 | | |
 | PM-13 | PM 장지원 | 12/11 | 대기 | | |
@@ -31,7 +31,7 @@
 | A-06 | A 김윤하 | 11/22 | 대기 | | |
 | A-07 | A 김윤하 | 11/22 | 대기 | | |
 | A-08 | A 김윤하 | 11/27 | 대기 | | |
-| A-09 | A 김윤하 | 11/30 | 대기 | | |
+| A-09 | A 김윤하 | 11/30 | 완료 | src/models/ranker.py(train_ranker); tests/models/test_ranker.py | `train_ranker(h, exclude_features)`는 h=1·5·20, exclude_features 옵션 모두 이미 공개돼 있었음. 실데이터(C 공식 라벨·실제 종료일 purge, 폴드 2016)로 셋 다 오류 없이 실행됨을 확인(검증 rank IC: h=1 0.0545 / h=5 0.0517 / h=20 0.0814; exclude_features로 mom_12_1 제외 시 0.0814→0.0768로 하락해 옵션이 실제 반영됨을 확인). 합성 데이터 기반 회귀 테스트 4개 추가(파라미터화 h=1·5·20 + exclude_features), `pytest tests` 744 passed |
 | A-10 | A 김윤하 | 12/7 | 대기 | | |
 | A-11 | A 김윤하 | 기한 없음 | 대기 | | |
 | B-01 | B 조윤상 | 11/1 | 완료 | docs/design_B.md; src/portfolio/; [PR #4](https://github.com/Capstone-last-dance/AutoAdvisor/pull/4) | M4·M8 설계와 PPO 골격. 합성 입력으로 학습 루프 테스트 통과, A 리뷰 후 병합 |
@@ -61,7 +61,7 @@
 | D-03 | D 임소현 | 11/6 | 완료 | src/pipeline/run_weekly.py; tests/pipeline/test_run_weekly.py; PR #7 | 주간 실행기, 미연결 단계는 _stub/ 처리. Q-17(자동 실행 방식) 결정 남음 |
 | D-04 | D 임소현 | 11/6 | 완료 | src/pipeline/forward_test.py; forward_log.csv; PR #19, #28; 태그 ft-20261106 | 11/6 신호를 11/8 22:27 KST에 기록(마감 11/9 09:00, DEC-04 변경). 11/13 기록 예정 |
 | D-05 | D 임소현 | 11/16 | 진행 중 | app/; src/pipeline/make_dashboard_sample.py; tests/app/test_dashboard.py | 샘플 데이터로 6.11절 완료 기준 (1)~(4) 확인. 진입 후보의 M9 쿨다운은 최근 20거래일 경보로 임시 처리. Q-16 결정: Streamlit Community Cloud, 팀원 이메일로 접속 제한. tickers 공개 범위 확인 전까지 종목코드만 표시 |
-| D-06 | D 임소현 | 11/20 | 대기 | | |
+| D-06 | D 임소현 | 11/20 | 진행 중 | src/pipeline/run_daily_alerts.py; src/common/io.py; [PR #50](https://github.com/Capstone-last-dance/AutoAdvisor/pull/50) | 일간 경보 실행기: 달력일 d로 M9 `daily_alerts(d)`를 불러 저장, 0건은 0행 파일, 미수집·실패는 파일을 쓰지 않음. alerts `generated_at` 열, 임시 파일 교체 저장. M9 PR #51 병합 뒤 실제 공시로 실행 확인 남음 |
 | D-07 | D 임소현 | 11/27 | 대기 | | |
 | D-08 | D 임소현 | 12/4 | 대기 | | |
 | D-09 | D 임소현 | 12/7 | 대기 | | |

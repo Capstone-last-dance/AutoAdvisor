@@ -233,6 +233,15 @@ class ExecutionEngine:
         first_i = signal_i + 1
         end_i = next_i if stop_at_signal_close else next_i + 1
         holdings, cash = dict(state.holdings), float(state.cash)
+        # 마지막 정리매매일이 신호일이면 첫 체결일에는 가격이 없다.
+        # 보유분은 마지막 가격일에 이미 청산됐어야 하므로, 미보유 목표만
+        # 가격 조회 전에 제외한다. 재상장 첫날부터는 새 회사 매수를 허용한다.
+        expired_targets = {
+            ticker: weight for ticker, weight in targets.items()
+            if ticker not in holdings and ticker in self.delistings
+            and self.day_index[self.delistings[ticker][0]] < first_i
+            < self.relisting_index.get(ticker, len(self.days))
+        }
         pending = set(state.pending_liquidations)
         pending_rebalance_sells: dict[str, float] = {}
         nav_start = portfolio_nav(holdings=holdings, closes=self._prices(first_i, holdings), cash=cash)
@@ -244,7 +253,7 @@ class ExecutionEngine:
         cash_obs = 1.0
         for i in range(first_i, end_i + 1):
             day = self.days[i]
-            active = set(holdings) | (set(targets) if i == first_i else set())
+            active = set(holdings) | (set(targets) - set(expired_targets) if i == first_i else set())
             px = self._prices(i, active)
             nav_before = portfolio_nav(holdings=holdings, closes=px, cash=cash)
             pending.update(self.events.get(day, frozenset()))
@@ -258,6 +267,9 @@ class ExecutionEngine:
                                         "fills": (), "rejected": {}, "scale": 1.0})
                 break
             day_targets = dict(targets) if i == first_i else {}
+            if i == first_i:
+                for ticker in expired_targets:
+                    day_targets.pop(ticker)
             if i != first_i:
                 day_targets = {ticker: qty * px[ticker] / nav_before for ticker, qty in holdings.items()}
                 for ticker, target_weight in pending_rebalance_sells.items():
@@ -297,7 +309,9 @@ class ExecutionEngine:
             if i == first_i:
                 self.rebalance_count += 1
                 self.scaled_rebalance_count += scale < 1.0 - 1e-12
-                turnover = 0.5 * sum(abs(diff) for diff in requested.values())
+                # 체결 거부된 폐지 종목도 원래 체결일 목표의 회전율에 포함한다.
+                turnover = 0.5 * (sum(abs(diff) for diff in requested.values())
+                                  + sum(expired_targets.values()))
             fill = execute_orders(
                 orders=orders, holdings=holdings, cash=cash,
                 execution_closes=px, previous_closes=previous,
@@ -340,6 +354,9 @@ class ExecutionEngine:
             if self.record_ledger:
                 skipped = {ticker: "cooldown_or_delisted" for ticker in set(day_targets) & forbidden
                            if requested.get(ticker, 0.0) > 0}
+                if i == first_i:
+                    skipped.update({ticker: "cooldown_or_delisted" for ticker, weight in expired_targets.items()
+                                    if weight > 0})
                 self.ledger.append({"date": day, "nav_before": nav_before, "nav_after": nav_after,
                                     "cash": cash, "holdings": dict(holdings), "cost": fill.total_cost + delist_cost,
                                     "fills": fill.fills + tuple(delist_fills), "rejected": {**fill.rejected, **skipped},

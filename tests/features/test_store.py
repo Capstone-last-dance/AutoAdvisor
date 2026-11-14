@@ -112,3 +112,49 @@ def test_missing_rate_table_counts_history_gaps():
     tab = missing_rate_table(f)
     assert tab.loc["mom_12_1", "missing_rate"] == 0.5                    # 100번째 날은 252일 이력이 없어 전부 결측
     assert tab.loc["vol_60", "missing_rate"] == 0.0
+
+
+# ---------------------------------------------------------------------------
+# run_weekly 2단계 (m2_step)
+# ---------------------------------------------------------------------------
+
+class _FakeCtx:
+    """D의 StepContext 중 2단계가 쓰는 부분만 흉내 낸다 (test_signals.py의 m3_step 테스트와 같은 요령)."""
+
+    def __init__(self, date, tables):
+        self.date = date
+        self._tables = tables
+        self.written = {}
+
+    def read_table(self, name, date=None):
+        return self._tables[name]
+
+    def write_table(self, name, df, date=None):
+        self.written[name] = (date, df)
+        return f"{name}/{date}.parquet"
+
+
+def test_m2_step_writes_only_this_dates_rows_with_pm_none(monkeypatch):
+    import src.features.store as store
+
+    dates = pd.to_datetime(["2026-11-06", "2026-11-13"])
+    all_features = pd.DataFrame({"date": [dates[0], dates[0], dates[1]], "ticker": ["000001", "000002", "000001"],
+                                 "mom_12_1": [0.1, 0.2, 0.3]})
+    monkeypatch.setattr("src.features.build_features.build", lambda prices, index, universe: (all_features, {}))
+    ctx = _FakeCtx("2026-11-13", {"prices": "p", "index": "i", "universe": "u"})
+
+    store.m2_step(ctx)
+
+    date, written = ctx.written["features"]
+    assert date == "2026-11-13"
+    assert len(written) == 1 and written["ticker"].iloc[0] == "000001" and written["mom_12_1"].iloc[0] == 0.3
+
+
+def test_m2_step_raises_if_date_has_no_feature_rows(monkeypatch):
+    import src.features.store as store
+
+    all_features = pd.DataFrame({"date": pd.to_datetime(["2026-11-06"]), "ticker": ["000001"], "mom_12_1": [0.1]})
+    monkeypatch.setattr("src.features.build_features.build", lambda prices, index, universe: (all_features, {}))
+    ctx = _FakeCtx("2026-11-13", {"prices": "p", "index": "i", "universe": "u"})
+    with pytest.raises(ValueError, match="피처 행이 없다"):
+        store.m2_step(ctx)
