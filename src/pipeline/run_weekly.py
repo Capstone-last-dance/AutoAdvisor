@@ -160,8 +160,8 @@ def _no_stub(ctx: StepContext) -> None:
 
 # 5.2절 1~7단계. entry가 None인 단계는 담당자와 함수 형태를 합의하기 전이다.
 STEPS: tuple[Step, ...] = (
-    Step(1, "M1", "데이터 갱신", None, _stub_tables(*PROCESSED_TABLES, dated=False)),
-    Step(2, "M2", "피처 계산", None, _stub_tables("features", dated=True)),
+    Step(1, "M1", "데이터 갱신", "src.data.build_openapi:m1_step", _stub_tables(*PROCESSED_TABLES, dated=False)),
+    Step(2, "M2", "피처 계산", "src.features.store:m2_step", _stub_tables("features", dated=True)),
     Step(3, "M3a·M3b", "급락 확률·순위 점수", "src.models.signals:m3_step", _stub_tables("signals", dated=True)),
     Step(4, "M4", "원시 목표 비중 w_raw", "src.portfolio.weekly:m4_step", _stub_w_raw),
     Step(5, "M8", "리스크 레이어", "src.portfolio.weekly:m8_step", _stub_tables("positions", dated=True)),
