@@ -88,12 +88,23 @@ def test_g7_uses_same_daily_interval_and_returns_undefined_when_no_baseline_draw
     days = pd.bdate_range("2023-01-02", periods=4)
     on = pd.Series([1.0, 1.1, 1.0, 1.12], index=days)
     off = pd.Series([1.0, 1.1, 0.8, 1.15], index=days)
-    result = evaluate_g7(on, off, load_prereg())
+    result = evaluate_g7(on, off, load_prereg(), initial_nav=1.0)
     assert result["daily_return_count"] == 3
     assert result["mdd_applied"] == pytest.approx(1 - 1.0 / 1.1)
     assert result["mdd_without_m8_m9"] == pytest.approx(1 - 0.8 / 1.1)
     assert result["mdd_reduction_relative"] == pytest.approx(2 / 3)
     with pytest.raises(ValueError, match="같은 일별 날짜"):
-        evaluate_g7(on, off.iloc[1:], load_prereg())
+        evaluate_g7(on, off.iloc[1:], load_prereg(), initial_nav=1.0)
     flat = pd.Series([1.0, 1.1, 1.2, 1.3], index=days)
-    assert evaluate_g7(flat, flat, load_prereg())["passed"] is None
+    assert evaluate_g7(flat, flat, load_prereg(), initial_nav=1.0)["passed"] is None
+
+
+def test_g7_includes_first_fill_cost_and_allows_different_first_day_nav():
+    days = pd.bdate_range("2023-01-02", periods=3)
+    on = pd.Series([0.99, 1.02, 0.90], index=days)
+    off = pd.Series([0.98, 1.01, 0.95], index=days)
+    result = evaluate_g7(on, off, load_prereg(), initial_nav=1.0)
+    assert result["cagr_applied"] == pytest.approx((0.90 / 1.0) ** 126 - 1)
+    assert result["mdd_applied"] == pytest.approx(1 - 0.90 / 1.02)
+    with pytest.raises(ValueError, match="체결 직전 시작 NAV"):
+        evaluate_g7(on, off, load_prereg(), initial_nav=0.0)

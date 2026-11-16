@@ -393,8 +393,9 @@ python -m src.backtest.kpi_report \
 
 `evaluate_g7`은 B가 제공할 버퍼 규칙의 M8·M9 적용/미적용 positions를
 같은 C 엔진·비용으로 운용해 얻은 **같은 날짜의 체결 후 일별 NAV**를
-비교한다. MDD 감소율과 CAGR 비열화를 사전등록 값으로 판정한다.
-비교 실행의 시작 NAV가 다르면 중단한다. B의 비교 positions 인계 전에는
+비교한다. 첫 체결일의 체결 직전 NAV는 두 실행에 공통인 `initial_nav`로
+전달한다. 첫날 체결 비용을 포함한 MDD 감소율과 CAGR 비열화를 사전등록
+값으로 판정한다. B의 비교 positions 인계 전에는
 실제 G7 값을 확정하지 않는다.
 
 ## 7. 연결 전 확인할 결정

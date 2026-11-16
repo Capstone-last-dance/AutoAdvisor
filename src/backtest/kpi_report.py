@@ -146,10 +146,11 @@ def evaluate_g1_g3(
 
 
 def evaluate_g7(applied_nav: pd.Series, without_m8_m9_nav: pd.Series,
-                prereg: Mapping[str, Any]) -> dict[str, Any]:
+                prereg: Mapping[str, Any], *, initial_nav: float) -> dict[str, Any]:
     """C-07: 같은 일별 날짜·시작 NAV의 G7 적용/미적용 경로를 비교한다.
 
-    NAV는 같은 C 엔진과 비용 규칙으로 만든 체결 후 일별 값이다. 이 함수는
+    NAV는 같은 C 엔진과 비용 규칙으로 만든 체결 후 일별 값이다. 첫 체결일의
+    체결 직전 NAV를 별도로 받아 첫날 비용을 MDD·CAGR에 반영한다. 이 함수는
     B의 비교용 positions를 생성하지 않으며, 판정 임계값을 재설정하지 않는다.
     """
     if (not isinstance(applied_nav, pd.Series) or not isinstance(without_m8_m9_nav, pd.Series)
@@ -163,11 +164,13 @@ def evaluate_g7(applied_nav: pd.Series, without_m8_m9_nav: pd.Series,
     off = pd.to_numeric(without_m8_m9_nav, errors="coerce").to_numpy(dtype=float)
     if not np.isfinite(on).all() or not np.isfinite(off).all() or (on <= 0).any() or (off <= 0).any():
         raise ValueError("G7 NAV는 유한한 양수여야 합니다")
-    if not np.isclose(on[0], off[0], rtol=0, atol=1e-12):
-        raise ValueError("G7 두 실행의 시작 NAV가 다릅니다")
+    if not np.isfinite(initial_nav) or initial_nav <= 0:
+        raise ValueError("G7 체결 직전 시작 NAV는 유한한 양수여야 합니다")
     count = len(days) - 1
-    mdd_on, mdd_off = m5.max_drawdown(on), m5.max_drawdown(off)
-    cagr_on, cagr_off = m5.cagr(on, trading_days=count), m5.cagr(off, trading_days=count)
+    mdd_on = m5.max_drawdown(np.r_[initial_nav, on])
+    mdd_off = m5.max_drawdown(np.r_[initial_nav, off])
+    cagr_on = m5.cagr(np.r_[initial_nav, on[1:]], trading_days=count)
+    cagr_off = m5.cagr(np.r_[initial_nav, off[1:]], trading_days=count)
     reduction = (mdd_off - mdd_on) / mdd_off if mdd_off > 0 else None
     threshold = prereg["kpi"]["G7"]
     return {
