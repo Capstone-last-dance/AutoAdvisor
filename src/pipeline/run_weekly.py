@@ -165,7 +165,7 @@ STEPS: tuple[Step, ...] = (
     Step(3, "M3a·M3b", "급락 확률·순위 점수", "src.models.signals:m3_step", _stub_tables("signals", dated=True)),
     Step(4, "M4", "원시 목표 비중 w_raw", "src.portfolio.weekly:m4_step", _stub_w_raw),
     Step(5, "M8", "리스크 레이어", "src.portfolio.weekly:m8_step", _stub_tables("positions", dated=True)),
-    Step(6, "M6", "근거 요약", None, _stub_evidence),
+    Step(6, "M6", "근거 요약", "src.rag.evidence:m6_step", _stub_evidence),
     Step(7, "M7", "forward test 커밋", forward_test_commit, _no_stub),
 )
 
