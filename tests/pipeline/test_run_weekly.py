@@ -149,6 +149,7 @@ class StepsTest(unittest.TestCase):
         self.assertEqual(entries[3], "src.models.signals:m3_step")
         self.assertEqual(entries[4], "src.portfolio.weekly:m4_step")
         self.assertEqual(entries[5], "src.portfolio.weekly:m8_step")
+        self.assertEqual(entries[6], "src.rag.evidence:m6_step")
 
 
 class StubPropagationTest(TempRootTest):
