@@ -372,6 +372,31 @@ M9 적용 실행은 PM의 `AlertBook.engine_alerts(첫 기록일, 종료일)`을
 B의 M8 적용 비중, PM의 경보 결과가 필요하다. M12의 SHAP·ANOVA는
 별도 C-06·C-09 작업이다.
 
+### C-05·C-07 판정 진입점
+
+`src.backtest.kpi_report.evaluate_g1_g3`는 A의 시험 연도별
+`signals/wf_{run_id}.parquet`와 같은 실행의
+`reports/{run_id}/wf_diagnostics.parquet`, C의 `labels.parquet`을 받는다.
+신호·진단의 `(date, ticker)` 집합과 폴드 연도를 대조하고 2026년 라벨을
+거부한다. G1·G3의 모델과 기준선은 같은 유효 행에서 M5 지표 함수로
+재계산하며, 연도별·전체 수치와 빠진 행 수를 반환한다. 파일이 인계되면
+다음 명령으로 `reports/{run_id}/`에 지표 JSON, 설정 사본, Git 해시,
+입력 파일 SHA-256을 남긴다. 기존 실행 디렉터리는 덮어쓰지 않는다.
+
+```bash
+python -m src.backtest.kpi_report \
+  --signals signals/wf_<A_run_id>.parquet \
+  --diagnostics reports/<A_run_id>/wf_diagnostics.parquet \
+  --labels <C_labels_path>/labels.parquet \
+  --out-dir reports/<C_run_id>
+```
+
+`evaluate_g7`은 B가 제공할 버퍼 규칙의 M8·M9 적용/미적용 positions를
+같은 C 엔진·비용으로 운용해 얻은 **같은 날짜의 체결 후 일별 NAV**를
+비교한다. MDD 감소율과 CAGR 비열화를 사전등록 값으로 판정한다.
+비교 실행의 시작 NAV가 다르면 중단한다. B의 비교 positions 인계 전에는
+실제 G7 값을 확정하지 않는다.
+
 ## 7. 연결 전 확인할 결정
 
 아래는 v0.3의 수치나 정책을 변경하자는 뜻이 아니다. 구현 시 서로 다른

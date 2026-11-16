@@ -48,11 +48,11 @@
 | C-02 | C 손석범 | 11/6 | 완료 | [병합 PR #8](https://github.com/Capstone-last-dance/AutoAdvisor/pull/8), [병합 PR #26](https://github.com/Capstone-last-dance/AutoAdvisor/pull/26) | A 11/8 데이터에서 라벨·종료일 각 978,983행을 생성해 스키마·키 대응·2025년 말 결과 컷오프를 검증함. C 공식 인계본을 받은 A가 자체 재현본과 전 행·전 열 값 일치를 확인함([이슈 #5](https://github.com/Capstone-last-dance/AutoAdvisor/issues/5)). 재사용 종목코드의 구회사 폐지 처리도 병합됨. |
 | C-03 | C 손석범 | 11/6 | 진행 중 | [병합 PR #8](https://github.com/Capstone-last-dance/AutoAdvisor/pull/8), [B-05 병합 PR #21](https://github.com/Capstone-last-dance/AutoAdvisor/pull/21) | 공통 체결·비용·NAV 엔진과 평가지표 구현 및 B 최종 리뷰 완료. B-05 연결 검증에서 같은 비중의 체결·비용·NAV 일치 확인. 실제 신호 기반 전체 평가가 남음 |
 | C-04 | C 손석범 | 11/16 | 진행 중 | [병합 PR #22](https://github.com/Capstone-last-dance/AutoAdvisor/pull/22), [병합 PR #23](https://github.com/Capstone-last-dance/AutoAdvisor/pull/23) | G0·G2 개인 행동 프록시, forward 실제 보유 재생·사후 성과 함수 구현·병합. 11/20 이후 실제 positions와 평가 검증이 남음 |
-| C-05 | C 손석범 | 11/23 | 진행 중 | [A 판정용 재실행](https://github.com/Capstone-last-dance/AutoAdvisor/issues/5), [A PR #44](https://github.com/Capstone-last-dance/AutoAdvisor/pull/44) | C 공식 라벨과 PM `ev_*` 피처를 반영한 A의 10폴드 재실행(2016~2025년, 520 신호일, 228,422행)을 대조함. G1 ROC-AUC 0.6916 대 베이스라인 0.6975로 차이 −0.0058(기준 ≥ 0.03), G3 rank IC 0.0645 대 최선 베이스라인 0.0734로 차이 −0.0089(기준 ≥ 0.01): 둘 다 상대성과 조건 미달. 뉴스 피처 반영 재실행과 C-05 나머지 평가가 남음. |
+| C-05 | C 손석범 | 11/23 | 진행 중 | [A 판정용 재실행](https://github.com/Capstone-last-dance/AutoAdvisor/issues/5), [A PR #44](https://github.com/Capstone-last-dance/AutoAdvisor/pull/44), `src/backtest/kpi_report.py` | C 공식 라벨과 PM `ev_*` 피처를 반영한 A의 10폴드 재실행(2016~2025년, 520 신호일, 228,422행)을 대조함. G1 ROC-AUC 0.6916 대 베이스라인 0.6975로 차이 −0.0058(기준 ≥ 0.03), G3 rank IC 0.0645 대 최선 베이스라인 0.0734로 차이 −0.0089(기준 ≥ 0.01): 둘 다 상대성과 조건 미달. G1·G3 동일 표본 독립 재계산과 R-10 실행 기록 코드를 추가. 뉴스 반영 신호·진단 파일이 로컬에 없어 최종 판정이 남음. |
 | C-06 | C 손석범 | 12/4 | 대기 | | |
-| C-07 | C 손석범 | 11/30 | 대기 | | |
+| C-07 | C 손석범 | 11/30 | 진행 중 | `src/backtest/kpi_report.py` (`evaluate_g7`); [병합 PR #58](https://github.com/Capstone-last-dance/AutoAdvisor/pull/58) | 같은 날짜·시작 NAV의 M8·M9 적용/미적용 G7 판정 함수를 구현. B 비교용 positions가 인계되면 같은 C 엔진으로 운용해 실제 값을 확정할 예정. PR #58의 RL positions 5시드 × 520신호일은 G0 전수 검사에서 위반 0건, `fold_seed_ir.csv`는 C ANOVA 2 함수 입력 검사를 통과함. PR #58은 11/16 병합됐으며 이 검사는 RL 산출물의 사전 검사다. B가 11/18 인계하기로 한 버퍼 기준선과 G7 미적용 positions는 아직 필요하다. |
 | C-08 | C 손석범 | 12/7 | 대기 | | |
-| C-09 | C 손석범 | 12/7 | 대기 | | |
+| C-09 | C 손석범 | 12/7 | 진행 중 | [병합 PR #25](https://github.com/Capstone-last-dance/AutoAdvisor/pull/25); `src/analysis/anova.py`; `reports/20261114_B_rl_wf/fold_seed_ir.csv` | ANOVA 1·2 함수 구현. 병합 PR #58의 실제 10폴드 × 5시드 IR 50행으로 ANOVA 2 실행: 폴드 F=102.99, p=5.74e-23, partial η²=0.963; 시드 F=0.217, p=0.927, partial η²=0.024. 자기상관·이분산 때문에 보조 분석으로 보고하며, ANOVA 1은 B의 M8 적용·미적용 주간 장부 인계 후 실행한다. |
 | C-10 | C 손석범 | 12/7 | 대기 | | |
 | C-11 | C 손석범 | 12/11 | 대기 | | |
 | C-12 | C 손석범 | 12/14 | 대기 | | |
