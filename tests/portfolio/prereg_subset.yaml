@@ -92,3 +92,8 @@ risk_layer:
     rebound_threshold: 0.10
     exposure_cap: 0.70
   invariant_tolerance: 1.0e-9
+
+# 7장 KPI 중 B 리포트가 읽는 것 (configs/prereg.yaml kpi와 같다)
+kpi:
+  G5: {min_ir_gain: 0.10, alternative: {cagr_not_lower: true, max_turnover_ratio: 0.7}, aggregate: "mean_over_seeds"}
+  G7: {min_mdd_reduction_rel: 0.25, max_cagr_giveup: 0.02}

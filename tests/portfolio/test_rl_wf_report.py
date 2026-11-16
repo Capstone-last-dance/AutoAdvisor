@@ -228,6 +228,16 @@ def test_other_config_or_test_signals_stop_the_run(setup, synthetic):
         wf.main([*args[:5], "20261110_A_short", *args[6:]])
 
 
+def test_test_signals_from_another_fold_model_stop_the_run(setup):
+    """시험 연도 2013의 행인데 model_version이 폴드 2012 모델이면 다른 폴드의 신호라 멈춘다 (A 제안, #58)."""
+    args, *_ = setup
+    sig = wf.io.read_table("signals", run_id="20261110_A_wfpm")
+    sig.loc[sig.index[-1], "model_version"] = "20261110_A_wfpm_y2012"
+    wf.io.write_table("signals", sig, run_id="20261110_A_wfmix")
+    with pytest.raises(ValueError, match=r"model_version.*\(2013, '20261110_A_wfpm_y2012'\)"):
+        wf.main([*args[:5], "20261110_A_wfmix", *args[6:]])
+
+
 def test_mixed_commits_are_recorded_not_hidden(setup):
     args, _, folders, root, _ = setup
     (folders[2013] / "git_commit.txt").write_text("def\n", encoding="utf-8")
