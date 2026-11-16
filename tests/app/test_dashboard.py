@@ -381,6 +381,13 @@ class EntryCandidatesTest(unittest.TestCase):
         self.assertEqual(list(ui.entry_candidates(self.frame(), set())["ticker"]), ["A00003", "A00001"])
         self.assertEqual(list(ui.entry_candidates(self.frame(), {"A00003"})["ticker"]), ["A00001"])
 
+    def test_tied_rank_sorted_by_ticker(self):
+        signals = pd.DataFrame({
+            "ticker": [f"A{i:05d}" for i in range(25, 0, -1)], "rank": [1] * 25, "crash_flag": [0] * 25,
+        })
+        expected = [f"A{i:05d}" for i in range(1, ui.CANDIDATE_COUNT + 1)]
+        self.assertEqual(list(ui.entry_candidates(signals, set())["ticker"]), expected)
+
 
 class StaticRulesTest(unittest.TestCase):
     """6.11절 금지 사항과 R-12."""

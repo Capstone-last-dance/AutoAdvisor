@@ -188,9 +188,12 @@ def m9_cooldown(signal_date: str) -> set[str] | None:
 
 
 def entry_candidates(signals: pd.DataFrame, cooldown: set[str]) -> pd.DataFrame:
-    """crash_flag = 0이고 M9 쿨다운이 아닌 종목을 rank 오름차순으로 20개 (2.2절)."""
+    """crash_flag = 0이고 M9 쿨다운이 아닌 종목을 rank 오름차순으로 20개 (2.2절).
+
+    rank가 같으면 종목코드 오름차순이다 (M6 m6_step과 같은 기준).
+    """
     keep = (signals["crash_flag"] == 0) & ~signals["ticker"].isin(cooldown)
-    return signals[keep].sort_values("rank").head(CANDIDATE_COUNT)
+    return signals[keep].sort_values(["rank", "ticker"]).head(CANDIDATE_COUNT)
 
 
 def _kst(timestamp: float) -> str:
