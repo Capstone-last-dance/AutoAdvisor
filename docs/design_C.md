@@ -395,8 +395,24 @@ python -m src.backtest.kpi_report \
 같은 C 엔진·비용으로 운용해 얻은 **같은 날짜의 체결 후 일별 NAV**를
 비교한다. 첫 체결일의 체결 직전 NAV는 두 실행에 공통인 `initial_nav`로
 전달한다. 첫날 체결 비용을 포함한 MDD 감소율과 CAGR 비열화를 사전등록
-값으로 판정한다. B의 비교 positions 인계 전에는
-실제 G7 값을 확정하지 않는다.
+값으로 판정한다. PR #63의 v6 비교 결과는 재현 대조에 쓰고,
+DEC-35에 따른 v7 재실행 뒤 실제 G7 값을 확정한다.
+
+### D-09 성과 페이지 출력 계약
+
+`reports/final/metrics.json`은 C가 확정한 KPI와 실행 근거의 원본으로 둔다.
+D-09 성과 페이지에는 이 결과에서 만든 CSV 세 개를 같은 폴더에 제공한다.
+실험 중인 실행 폴더의 결과를 `final/`에 복사하지 않는다.
+
+| 파일 | 필수 열 | C가 기록할 내용 |
+|---|---|---|
+| `kpi.csv` | `gate,kpi,value,threshold,verdict` | G0~G7 판정 근거를 지표당 한 행으로 기록. 필요하면 `note`에 판정 불가·보조 분석 이유를 적는다. |
+| `nav.csv` | `date,series,nav` | 확정 실행과 벤치마크의 같은 거래일 일별 NAV를 긴 형식으로 기록한다. |
+| `periods.csv` | `period,start,end` | P1~P7 분석 구간의 시작·종료일을 기록하고 설명은 선택 열 `description`에 둔다. |
+
+CSV는 화면 표시용이며, 값과 판정은 `metrics.json` 및 해당 실행의
+`config.yaml`·`git_commit.txt`와 대조 가능해야 한다. 실제 출력 생성은
+C-10~C-12의 최종 결과 취합 단계에서 수행한다.
 
 ## 7. 연결 전 확인할 결정
 
