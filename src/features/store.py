@@ -81,3 +81,23 @@ def missing_by_year(features: pd.DataFrame) -> pd.DataFrame:
     y = pd.to_datetime(features["date"]).dt.year
     cols = [f"{f}_na" for f in RANK_FEATURES if f"{f}_na" in features]
     return features[cols].groupby(y).mean().rename(columns=lambda c: c[:-3])
+
+
+def m2_step(ctx) -> None:
+    """run_weekly 2단계: 신호일 t의 피처 행렬 (6.2절, A-05).
+
+    A의 `build_features.build`는 1단계가 쓴 `prices`·`index`·`universe`(t까지만 있다, R-03)에서
+    전체 신호일 피처를 만든다 — 신호일마다 다시 부르지 않고 t 행만 추려 쓴다.
+
+    PM 피처는 `merge_features(a, pm)`로 합칠 자리가 이미 있지만, PM이 이 단계에 넘길 표(공시·뉴스
+    피처)를 아직 정하지 않았다(issue #5, 1단계와 같은 질문). 그래서 지금은 `pm=None`으로 A 피처만
+    쓴다 — 지금 forward test 신호도 PM 피처 없이 돌고 있어 결과가 달라지지 않는다(R-08). PM이
+    표 이름·시점을 정하면 여기서 `ctx.read_table`로 읽어 넘기기만 하면 된다."""
+    from src.features.build_features import build as build_feature_matrix
+
+    prices, index, universe = ctx.read_table("prices"), ctx.read_table("index"), ctx.read_table("universe")
+    features, _ = build_feature_matrix(prices, index, universe)
+    t = features[features["date"] == pd.Timestamp(ctx.date)].reset_index(drop=True)
+    if t.empty:
+        raise ValueError(f"신호일 {ctx.date}의 피처 행이 없다 (universe에 그 신호일이 있는지 확인)")
+    ctx.write_table("features", merge_features(t, pm=None), date=ctx.date)

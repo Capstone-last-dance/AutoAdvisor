@@ -204,6 +204,48 @@ def build_all(raw: Path, start: date, end: date, first_signal_year: int = 2011) 
             "_events": adjust_events(p), "_days": days}
 
 
+# ---------------------------------------------------------------------------
+# run_weekly 1단계 (A 담당, issue #5 1·2단계 질문의 임시 처리)
+# ---------------------------------------------------------------------------
+
+# scripts/signal_day.sh와 같은 값이어야 한다(이어받기 수집 폴더). 둘 중 하나를 바꾸면 같이 바꾼다.
+COLLECT_SNAPSHOT = "2026-11-02"
+COLLECT_START = "2010-01-04"
+
+# M1의 PM 몫(공시·뉴스). sector와 같은 방식으로 기존 표를 그대로 옮긴다(2026-11-13 PM 결정).
+_PM_TABLES = ("disclosures", "news_daily", "news")
+
+
+def m1_step(ctx) -> None:
+    """run_weekly 1단계: `data/processed/`를 신호일 t까지 갱신한다 (6.1절, A-02).
+
+    **A 담당 8표**(prices·index·tickers·status·universe·delisted·delisted_reused·sector)는
+    `build_all`로 실제로 다시 만든다. 수집(`collect_openapi`)은 여기서 돌리지 않는다 — 신호일
+    자료가 이미 열려 있다고 보고(DEC-04, 운영은 `scripts/signal_day.sh`가 먼저 돌아간 뒤에 이 단계를
+    부른다), 자료가 비어 있으면 `build_all`의 `require_complete_files`가 그대로 예외를 낸다.
+    `sector`는 DEC-23대로 정적 분류라 다시 받지 않고 기존 표를 그대로 옮긴다.
+
+    **PM 담당 3표**(disclosures·news_daily·news)도 `sector`와 같은 방식으로 기존 표를 그대로
+    옮긴다 — 0행으로 비우지 않는다. issue #5에 1단계를 1a(A)/1b(PM)로 쪼갤지 올렸으나, PM이
+    2026-11-13에 "번호는 쪼개지 않고, 기존 공시·뉴스 표는 보존"으로 정리했다. 결측 보완이 끝난
+    공시·뉴스 피처 파일이 오면 PM 쪽 수집 경로가 그 표를 직접 갱신하고, 이 단계는 그걸 그대로
+    읽어서 옮기기만 한다. **PM 표가 아직 한 번도 안 만들어졌으면(파일 없음) 건너뛰고 경고만
+    남긴다**(PM 리뷰 2026-11-13) — 이 단계 뒤에 그 표를 읽는 단계가 아직 없어서, 여기서 멈추면
+    11/20 forward test 기록까지 못 간다. `sector`는 A 자신의 정적 표라 없으면 그대로 예외를 낸다."""
+    raw = ROOT / "data" / "raw" / COLLECT_SNAPSHOT
+    out = build_all(raw, date.fromisoformat(COLLECT_START), date.fromisoformat(ctx.date))
+    for name in ("prices", "index", "tickers", "status", "universe", "delisted", "delisted_reused"):
+        ctx.write_table(name, out[name])
+    ctx.write_table("sector", ctx.read_table("sector"))
+    for name in _PM_TABLES:
+        try:
+            table = ctx.read_table(name)
+        except FileNotFoundError:
+            ctx.log.warning("1단계: PM 표 %s가 아직 없어 건너뛴다 (issue #5)", name)
+            continue
+        ctx.write_table(name, table)
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser()
     ap.add_argument("--snapshot", required=True)

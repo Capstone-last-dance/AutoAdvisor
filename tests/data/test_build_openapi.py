@@ -1,4 +1,5 @@
 import json
+import logging
 from datetime import date
 
 import pandas as pd
@@ -180,3 +181,74 @@ def test_delisted_reused_skips_ticker_outside_build_range():
     days = [pd.Timestamp(d) for d in pd.bdate_range("2020-01-01", "2020-01-10")]
     out = build_delisted_reused(pd.DataFrame(columns=["ticker", "date", "close_raw"]), days)
     assert out.empty
+
+
+# ---------------------------------------------------------------------------
+# run_weekly 1단계 (m1_step)
+# ---------------------------------------------------------------------------
+
+class _FakeCtx:
+    """D의 StepContext 중 1단계가 쓰는 부분만 흉내 낸다 (test_signals.py의 m3_step 테스트와 같은 요령)."""
+
+    def __init__(self, date, tables=()):
+        self.date = date
+        self._tables = dict(tables)
+        self.written = {}
+        self.log = logging.getLogger("test_m1_step")
+
+    def read_table(self, name, date=None):
+        # 실제 io.read_table과 같이, 없는 표는 FileNotFoundError를 낸다 (m1_step의 PM 표 건너뛰기 분기용)
+        if name not in self._tables:
+            raise FileNotFoundError(f"파일이 없다: {name}")
+        return self._tables[name]
+
+    def write_table(self, name, df, date=None):
+        self.written[name] = df
+        return f"{name}.parquet"
+
+
+def _canned_out():
+    a_tables = ("prices", "index", "tickers", "status", "universe", "delisted", "delisted_reused")
+    return {name: pd.DataFrame({"name": [name]}) for name in a_tables}
+
+
+def test_m1_step_writes_a_tables_and_passes_sector_and_pm_tables_through(monkeypatch):
+    from src.data import build_openapi
+
+    out = _canned_out()
+    monkeypatch.setattr(build_openapi, "build_all", lambda raw, start, end: out)
+    sector = pd.DataFrame({"name": ["sector"]})
+    pm_tables = {name: pd.DataFrame({"name": [name]}) for name in build_openapi._PM_TABLES}
+    ctx = _FakeCtx("2026-11-13", {"sector": sector, **pm_tables})
+
+    build_openapi.m1_step(ctx)
+
+    for name, df in out.items():
+        pd.testing.assert_frame_equal(ctx.written[name], df)
+    pd.testing.assert_frame_equal(ctx.written["sector"], sector)   # 다시 받지 않고 그대로 옮김 (DEC-23)
+    for name, df in pm_tables.items():
+        # sector와 같은 방식으로 기존 표를 그대로 옮긴다 — 0행으로 비우지 않는다 (2026-11-13 PM 결정)
+        pd.testing.assert_frame_equal(ctx.written[name], df)
+
+
+def test_m1_step_skips_missing_pm_tables_with_a_warning_instead_of_stopping(monkeypatch, caplog):
+    """PM 표 파일이 아직 없으면 (PM이 아직 표 대신 별도 파일로만 넘겨 온 상태) 1단계가 멈추지
+    않고 건너뛰어야 한다 — 멈추면 11/20 forward test 기록까지 못 간다 (PM 리뷰 2026-11-13)."""
+    from src.data import build_openapi
+
+    out = _canned_out()
+    monkeypatch.setattr(build_openapi, "build_all", lambda raw, start, end: out)
+    sector = pd.DataFrame({"name": ["sector"]})
+    ctx = _FakeCtx("2026-11-13", {"sector": sector})   # PM 표 3개 전부 없음
+
+    with caplog.at_level(logging.WARNING, logger="test_m1_step"):
+        build_openapi.m1_step(ctx)   # 예외 없이 끝나야 한다
+
+    for name, df in out.items():
+        pd.testing.assert_frame_equal(ctx.written[name], df)
+    pd.testing.assert_frame_equal(ctx.written["sector"], sector)
+    for name in build_openapi._PM_TABLES:
+        assert name not in ctx.written
+    messages = [r.getMessage() for r in caplog.records]
+    for name in build_openapi._PM_TABLES:
+        assert any(name in m for m in messages)
