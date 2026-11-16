@@ -455,6 +455,12 @@ python -m src.pipeline.run_weekly --date YYYY-MM-DD
 
 - 모듈과 연결되지 않은 단계는 9.3절 스키마의 빈 스텁을 `_stub/` 아래에 쓴다. 앞 단계가 스텁이면 뒤 단계의 출력도 `_stub/`에 쓴다.
 - 스텁이 하나라도 쓰인 실행은 forward test 커밋을 하지 않는다.
+- 리허설: `--rehearsal`을 붙이면 1~6단계만 실제로 돌리고 7단계 forward test 기록(`forward_log.csv`, 커밋, 태그, push)을 건너뛴다. 지난 신호일 자료로 리허설하거나 진단용 신호를 만들 때 쓴다. 로그는 `logs/{date}_rehearsal.log`에 따로 남는다. `--source-commit`과 함께 쓸 수 없다. 출력 파일(signals, positions, evidence 등)은 실제 폴더에 쓰이니 Git에 커밋하지 않는다.
+
+  ```bash
+  python -m src.pipeline.run_weekly --date YYYY-MM-DD --rehearsal
+  ```
+
 - 모듈 연결: `src/pipeline/run_weekly.py`의 `STEPS`에서 해당 단계의 `entry`에 `"모듈경로:함수이름"`을 적는다. 함수는 `fn(ctx)` 형태로, 입력은 `ctx.read_table`, 출력은 `ctx.write_table`로 다룬다. 연결할 함수가 준비되면 D에게 알려 준다.
 
 #### forward test 기록
