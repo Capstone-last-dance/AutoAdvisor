@@ -48,12 +48,13 @@ IRFunction = Callable[[np.ndarray], float]
 
 # M9 쿨다운 (PM): 신호일 t → 체결일 t+1에 신규 진입이 금지된 종목코드.
 # available_at < cutoff_at(t)인 경보만 쓴다 (6.10절, R-03). 컷오프 뒤 경보는 엔진의 체결일 cooldowns가 막는다.
-# 구현은 PM의 src.events.alerts:cooldown_at (PR #34). 경보 파일이 없으면 FileNotFoundError
+# 구현은 PM의 src.events.alerts:cooldown_at (PR #34). 날짜별 경보 파일이 하나도 없으면 AlertsNotStarted,
+# 필요한 날짜(t 포함)의 파일이 없으면 AlertsNotCollected (PR #51, 둘 다 FileNotFoundError 하위)
 CooldownFunction = Callable[[str], Iterable[str]]
 
 # M9 체결 지도 (PM): (첫 신호일, 마지막 날) → (cooldowns, event_liquidations). 둘 다 체결일(YYYY-MM-DD) → 종목코드
 # 집합이고, 첫 신호일의 다음 거래일부터 마지막 날까지 그날 걸린 모든 경보를 담는다 (design_B.md 5.2절 '체결' 행).
-# forward의 지난 보유 재생에서 C 엔진에 넘긴다. 구현은 PM의 src.events.alerts:engine_alerts (PR #34)
+# forward의 지난 보유 재생에서 C 엔진에 넘긴다. 구현은 PM의 src.events.alerts:engine_alerts (PR #34). 예외는 위와 같다
 EngineAlertsFunction = Callable[[str, str], tuple[Mapping[str, frozenset[str]], Mapping[str, frozenset[str]]]]
 
 # 지난 forward 기록 (D, M7): 신호일 t → t보다 앞선 forward 기록의 positions (신호일 YYYY-MM-DD → 9.3절 positions 행).

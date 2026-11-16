@@ -13,11 +13,12 @@ import pandas as pd
 import pytest
 
 from src.common import io
+from src.events.alerts import AlertsNotCollected, AlertsNotStarted
 from src.pipeline.run_weekly import StepContext
 from src.portfolio import weekly
 from src.portfolio.buffer_rule import run_buffer_rule
 from src.portfolio.engine_adapter import build_engine, engine_inputs
-from src.portfolio.params import BufferRuleParams
+from src.portfolio.params import BufferRuleParams, load_prereg
 from src.portfolio.rl_data import build_snapshots
 from tests.portfolio.fakes import market_tables
 
@@ -150,7 +151,7 @@ def test_first_record_needs_no_past_records_but_the_next_one_does(wired, monkeyp
 
 
 def _no_alert_files(*args):
-    raise FileNotFoundError("alerts/에 날짜별 경보 파일이 없다")  # PR #34 read_alerts와 같은 경우
+    raise AlertsNotStarted("alerts/에 날짜별 경보 파일이 없다")  # PR #51 _require_started와 같은 경우
 
 
 @pytest.fixture
@@ -160,7 +161,7 @@ def alerts_root(tmp_path, monkeypatch):
 
     def add(day):
         (tmp_path / "alerts").mkdir(exist_ok=True)
-        (tmp_path / "alerts" / f"{day}.parquet").write_bytes(b"")  # 날짜 목록만 세므로 내용은 읽지 않는다
+        (tmp_path / "alerts" / f"{day}.parquet").write_bytes(b"")  # 날짜 목록만 세는 경우만 쓴다 (내용은 읽지 않는다)
 
     return add
 
@@ -172,8 +173,10 @@ def alerts_root(tmp_path, monkeypatch):
         ("src.events.no_such_module:cooldown_at", "src.events.no_such_module:engine_alerts", "찾지 못했다"),  # PR 미병합
         ("src.events.alerts:no_such_function", "src.events.alerts:no_such_function", "찾지 못했다"),
         (_no_alert_files, _no_alert_files, "날짜별 경보 파일이 하나도 없다"),
+        # 실제 PM 함수 (PR #51): 빈 alerts/에서 AlertsNotStarted를 낸다
+        ("src.events.alerts:cooldown_at", "src.events.alerts:engine_alerts", "날짜별 경보 파일이 하나도 없다"),
     ],
-    ids=["not-wired", "not-merged", "no-function", "no-alert-files"],
+    ids=["not-wired", "not-merged", "no-function", "no-alert-files", "pm-m9-not-started"],
 )
 def test_missing_m9_records_without_cooldown_as_a_deviation(wired, monkeypatch, alerts_root, cooldown, engine, reason):
     """PM 11/9 결정: M9가 없어도 기록을 미루지 않는다. 결과는 M9가 아무 경보도 주지 않을 때와 같고, 스텁이 아니다."""
@@ -203,18 +206,69 @@ def test_other_m9_errors_stop_the_run(wired, monkeypatch):
 
 
 @pytest.mark.parametrize("which", ["M9_COOLDOWN_ENTRY", "M9_ENGINE_ENTRY"])
-def test_file_errors_stop_the_run_once_alert_files_exist(wired, monkeypatch, alerts_root, which):
-    """PM #36 리뷰: 경보 파일이 있는데 M9가 FileNotFoundError를 내면(목록의 파일을 못 엶, index 없음 등)
-    'M9 없음'이 아니다. 쿨다운 없이 기록하지 않고 멈춘다."""
-    alerts_root("2026-11-19")
+@pytest.mark.parametrize(
+    ("error", "files"),
+    [
+        (AlertsNotCollected, ["2026-11-18"]),  # 일간 경보를 빠뜨렸다 (PM #51)
+        (FileNotFoundError, ["2026-11-18"]),  # M9가 읽는 index가 없음 등 (PM #36 리뷰)
+        (FileNotFoundError, []),  # 경보 파일이 없어도 AlertsNotStarted가 아니면 'M9 없음'이 아니다
+    ],
+    ids=["not-collected", "other-file", "other-file-no-alerts"],
+)
+def test_file_errors_other_than_not_started_stop_the_run(wired, monkeypatch, alerts_root, which, error, files):
+    """M9 없이 기록하는 것은 AlertsNotStarted뿐이다 (PM #51). 다른 FileNotFoundError는 쿨다운 없이 기록하지 않고 멈춘다."""
+    for day in files:
+        alerts_root(day)
 
     def unreadable(*args):
-        raise FileNotFoundError("alerts/2026-11-19.parquet")
+        raise error("alerts/2026-11-19.parquet")
 
     monkeypatch.setattr(weekly, which, unreadable)
     t, recorded = wired.dates[2], {d: wired.backtest[d] for d in wired.dates[:2]}
-    with pytest.raises(FileNotFoundError, match="2026-11-19"):
+    with pytest.raises(error, match="2026-11-19"):
         _run(wired, t, recorded, monkeypatch)
+
+
+def test_pm_m9_stops_when_a_needed_alert_file_is_missing(wired, monkeypatch, alerts_root):
+    """실제 PM 함수 (PR #51): 경보 파일은 있는데 t까지 필요한 날짜 파일이 빠졌으면 AlertsNotCollected로 멈춘다."""
+    days = pd.DatetimeIndex(pd.to_datetime(wired.tables["index"]["date"]))
+    monkeypatch.setattr("src.events.alerts.load_trading_days", lambda: days)
+    t = wired.dates[2]
+    alerts_root(wired.dates[0])  # t 파일은 없다
+    monkeypatch.setattr(weekly, "M9_COOLDOWN_ENTRY", "src.events.alerts:cooldown_at")
+    with pytest.raises(AlertsNotCollected, match="경보 파일이 없는 날짜") as e:
+        _run(wired, t, {d: wired.backtest[d] for d in wired.dates[:2]}, monkeypatch)
+    assert not isinstance(e.value, AlertsNotStarted)
+
+
+def _zero_alerts():
+    """9.3절 alerts 형식의 0행 표 (경보 0건으로 확정된 날의 파일, DEC-33)."""
+    at = pd.Series(pd.DatetimeIndex([pd.Timestamp("2026-01-05 10:00")]).tz_localize("Asia/Seoul"))
+    at = at.astype(pd.DatetimeTZDtype("ns", "Asia/Seoul"))
+    return pd.DataFrame({"date": [pd.Timestamp("2026-01-05")], "ticker": ["000001"], "trigger_type": ["T1"],
+                         "rcept_no": ["20260105000001"], "report_nm": ["테스트 공시"], "rcept_dt": at,
+                         "available_at": at, "generated_at": at}).iloc[0:0]
+
+
+def test_pm_m9_reads_alert_files_only_through_t(wired, monkeypatch, alerts_root):
+    """실제 PM 함수 (PR #51): 첫 체결일의 쿨다운 근거일부터 t까지 0행 파일만 있으면 M9를 적용해 기록한다.
+    일간 경보는 t 다음 날 08:00에 t일 파일까지 만들고 주간이 그 뒤에 돈다 (D-06). M9가 t 다음 날 이후 파일을
+    찾았다면 AlertsNotCollected로 멈췄을 것이다."""
+    days = pd.DatetimeIndex(pd.to_datetime(wired.tables["index"]["date"]))
+    monkeypatch.setattr("src.events.alerts.load_trading_days", lambda: days)
+    t, recorded = wired.dates[2], {d: wired.backtest[d] for d in wired.dates[:2]}
+    monkeypatch.setattr(weekly, "M9_COOLDOWN_ENTRY", lambda d: ())
+    quiet_m9 = _run(wired, t, recorded, monkeypatch).written[("positions", t)][0]
+    cooldown = int(load_prereg()["events"]["cooldown_trading_days"])  # PM 함수가 읽는 값
+    first_execution = int(days.searchsorted(pd.Timestamp(wired.dates[0]), side="right"))
+    for day in pd.date_range(days[first_execution - cooldown], t, freq="D"):
+        io.write_table("alerts", _zero_alerts(), date=day.strftime("%Y-%m-%d"))
+    monkeypatch.setattr(weekly, "M9_COOLDOWN_ENTRY", "src.events.alerts:cooldown_at")
+    monkeypatch.setattr(weekly, "M9_ENGINE_ENTRY", "src.events.alerts:engine_alerts")
+    ctx = _run(wired, t, recorded, monkeypatch)
+    pd.testing.assert_frame_equal(ctx.written[("positions", t)][0], quiet_m9)
+    assert weekly.DEVIATIONS_KEY not in ctx.memory and ctx.stubbed == []
+    assert max(io.list_dates("alerts")) == t
 
 
 @pytest.fixture

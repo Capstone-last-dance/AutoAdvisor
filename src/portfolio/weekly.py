@@ -12,11 +12,12 @@
 - 기록이 없는 주(스텁 등으로 커밋되지 않은 주)는 리밸런싱 없이 직전 보유를 유지한 것으로 재생하고 경고한다.
   C의 사후 성과(evaluate_forward_record, PR #22)도 기록된 주만 이어 재생한다.
 - 다른 역할의 함수는 아래 *_ENTRY에 "모듈:함수"로 연결한다 (R-17). 형태는 interfaces.py에 있다.
-  - M9(PM, PR #34)가 없으면 쿨다운·M9 청산 없이 계산하고 기록한다. '없음'은 두 경우뿐이다 (PM #36 리뷰):
-    연결 전이거나 연결한 모듈·함수 자체가 없다(PR 미병합), alerts/에 날짜별 경보 파일이 하나도 없다(M9를 아직
-    돌리지 않았다). 경고와 ctx.memory["deviations"]에 남기고 PM이 deviation log에 적는다 (PM 11/9 결정).
-    RECORD_WITHOUT_M9 = False면 스텁 실행으로 표시해 커밋을 막는다. M9 모듈 안의 다른 import 실패, 경보 파일이
-    있는데 난 FileNotFoundError, 그 밖의 M9 오류는 그대로 멈춘다.
+  - M9(PM, PR #34)가 없으면 쿨다운·M9 청산 없이 계산하고 기록한다. '없음'은 두 경우뿐이다 (PM #36 리뷰, #51):
+    연결 전이거나 연결한 모듈·함수 자체가 없다(PR 미병합), M9가 AlertsNotStarted를 낸다(alerts/에 날짜별 경보
+    파일이 처음부터 하나도 없다). 경고와 ctx.memory["deviations"]에 남기고 PM이 deviation log에 적는다 (PM 11/9 결정).
+    RECORD_WITHOUT_M9 = False면 스텁 실행으로 표시해 커밋을 막는다. 필요한 날짜의 경보 파일이 없을 때 나는
+    AlertsNotCollected(일간 경보를 빠뜨림), 그 밖의 FileNotFoundError, M9 모듈 안의 다른 import 실패와 오류는
+    그대로 멈춘다.
   - 지난 기록이 필요한데(positions_from 다음 신호일부터) 읽는 함수(D)를 찾지 못하면 실패한다.
 - 앞 단계가 B 입력 표(신호 입력, 재생할 때는 엔진 입력까지)를 스텁으로 썼으면 B 출력도 스텁이다 (빈 w_raw, 0행 positions).
 """
@@ -29,7 +30,7 @@ from typing import Any
 
 import pandas as pd
 
-from src.common import io
+from src.events.alerts import AlertsNotStarted
 from src.portfolio.buffer_rule import buffer_rule_weights
 from src.portfolio.engine_adapter import build_engine, engine_inputs
 from src.portfolio.interfaces import ForwardEngine
@@ -259,11 +260,12 @@ def _mark_stub(ctx, label: str) -> None:
 
 
 def _call_m9(ctx, entry: Any, what: str, *args: str) -> Any:
-    """M9 함수를 부른다. M9가 아직 없는 두 경우만 M9 없이 계산하고(_without_m9) None을 돌려준다 (PM #36 리뷰).
+    """M9 함수를 부른다. M9가 아직 없는 두 경우만 M9 없이 계산하고(_without_m9) None을 돌려준다 (PM #36 리뷰, #51).
     - 연결 전이거나, 연결한 모듈·함수 자체가 없다 (PR #34 미병합. _resolve가 EntryNotFound)
-    - FileNotFoundError가 났고 alerts/에 날짜별 경보 파일이 하나도 없다 (M9를 아직 돌리지 않았다)
-    경보 파일이 있는데 난 FileNotFoundError(목록의 파일을 못 엶, M9가 읽는 index가 없음 등), M9 모듈 안의
-    import 실패, 그 밖의 오류는 M9가 틀린 값을 냈을 수 있어 그대로 낸다."""
+    - M9가 AlertsNotStarted를 냈다 (alerts/에 날짜별 경보 파일이 처음부터 하나도 없다. M9를 아직 돌리지 않았다)
+    AlertsNotCollected(필요한 날짜의 파일이 없다)를 잡으면 일간 경보를 빠뜨린 주간 실행이 M9 없이 기록되므로 잡지 않는다.
+    그 밖의 FileNotFoundError(M9가 읽는 index가 없음 등), M9 모듈 안의 import 실패, 다른 오류도 M9가 틀린 값을 냈을 수
+    있어 그대로 낸다."""
     try:
         fn = _resolve(entry, f"PM M9 {what}")
         if fn is not None:
@@ -271,17 +273,10 @@ def _call_m9(ctx, entry: Any, what: str, *args: str) -> Any:
         reason = "함수가 연결되지 않았다"
     except EntryNotFound as e:
         reason = str(e)
-    except FileNotFoundError as e:
-        if _alert_file_dates():
-            raise
+    except AlertsNotStarted as e:
         reason = f"날짜별 경보 파일이 하나도 없다: {e}"
     _without_m9(ctx, what, reason)
     return None
-
-
-def _alert_file_dates() -> list[str]:
-    """alerts/{d}.parquet(9.3절, PM M9 출력)이 있는 날짜. D io.list_dates로 센다."""
-    return io.list_dates("alerts")
 
 
 def _without_m9(ctx, what: str, reason: str) -> None:

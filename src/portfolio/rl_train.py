@@ -28,6 +28,7 @@ EnvFactory = Callable[[float], PortfolioEnv]  # λ → 학습 환경 (episode="r
 class Rollout:
     positions: pd.DataFrame  # 신호일별 positions 행 (9.3절)
     excess_returns: np.ndarray  # 체결된 스텝의 주간 초과수익 a_k = R_net − R_BM
+    executed_dates: tuple[str, ...] = ()  # excess_returns 각 값의 신호일 (그 신호일 다음 거래일에 체결)
 
 
 def rollout(env: PortfolioEnv, policy_for: Callable[[str], PPO]) -> Rollout:
@@ -39,7 +40,7 @@ def rollout(env: PortfolioEnv, policy_for: Callable[[str], PPO]) -> Rollout:
     if env.episode != "full":
         raise ValueError("rollout은 episode='full' 환경에서만 쓴다")
     obs, _ = env.reset()
-    frames, excess = [], []
+    frames, excess, executed = [], [], []
     while True:
         action, _ = policy_for(env.current_date).predict(obs, deterministic=True)
         obs, _, terminated, truncated, info = env.step(action)
@@ -48,9 +49,10 @@ def rollout(env: PortfolioEnv, policy_for: Callable[[str], PPO]) -> Rollout:
         )
         if info["executed"]:
             excess.append(info["excess_return"])
+            executed.append(info["date"])
         if terminated or truncated:
             break
-    return Rollout(pd.concat(frames, ignore_index=True), np.asarray(excess, dtype=np.float64))
+    return Rollout(pd.concat(frames, ignore_index=True), np.asarray(excess, dtype=np.float64), tuple(executed))
 
 
 class ValidationIRCallback(BaseCallback):
