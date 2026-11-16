@@ -1,27 +1,27 @@
 # 작업 진행 현황
 
-마지막 갱신: 2026-11-03
+마지막 갱신: 2026-11-16
 
 아래 표는 전체 명세의 작업 ID 단위 상태이며 세부 단계 완료와 구분한다. 개인 작업 기록·실행 로그·수집 원본은 Git에서 제외하고, 이 문서에는 팀 진행 현황과 남은 과제를 기록한다.
 
 | 작업 ID | 담당 | 기한 | 상태 | 근거 | 메모 |
 |---|---|---|---|---|---|
-| PM-01 | PM 장지원 | 10/28 | 진행 중 | docs/status.md; docs/decisions.md; docs/deviation_log.md; docs/preregistration.md | 명세에서 요구하는 공용 기록 4개 작성. 주간 회의 공지는 미완료 |
-| PM-02 | PM 장지원 | 10/30 | 진행 중 | README.md; .env.example; requirements-lock.txt; [PR #2](https://github.com/Capstone-last-dance/AutoAdvisor/pull/2); docs/decisions.md | D-01 설치 재현·README 기존 .env 보호 검증 및 PR 공유 완료. 변수명 OPENDART_API_KEY·NAVER_CLIENT_ID·NAVER_CLIENT_SECRET 유지. 키 공유/교체·팀원별 재현·네이버 인증 확인은 남음 |
+| PM-01 | PM 장지원 | 10/28 | 완료 | docs/status.md; docs/decisions.md; docs/deviation_log.md; docs/preregistration.md; [PR #9](https://github.com/Capstone-last-dance/AutoAdvisor/pull/9)·[#10](https://github.com/Capstone-last-dance/AutoAdvisor/pull/10)·[#15](https://github.com/Capstone-last-dance/AutoAdvisor/pull/15) | 공용 기록 4개 작성, status.md에 부록 2의 모든 작업 ID가 들어 있다(완료 기준). 결정·변경 기록 갱신은 PM-16에서 이어간다 |
+| PM-02 | PM 장지원 | 10/30 | 완료 | README.md; .env.example; requirements-lock.txt; [PR #2](https://github.com/Capstone-last-dance/AutoAdvisor/pull/2) | 저장소에 키 값이 없고 `.env.example` 변수명을 확정했다. D-01에서 README대로 설치·재현을 확인했다(완료 기준). 뉴스 원천이 빅카인즈로 바뀌어(DEC-06) 네이버 인증은 필수가 아니다. 키 교체는 R-16 절차를 따른다 |
 | PM-03 | PM 장지원 | 10/30 | 진행 중 | docs/프로젝트_구조_및_역할분담_v0.3.md 부록 3 Q-06·Q-08 | Q-08 문헌·DART 누락 반례·KRX 공식 CSV 2개·KIND 과거/상폐 표시 회사/해제 원문 3개 검증. 표본·실행 기록은 별도 보관. A 공동 확인·전체 기간 상태 데이터 검증 남음 |
-| PM-04 | PM 장지원 | 11/2 | 진행 중 | src/data/disclosures.py; [공시 계약](disclosures_contract.md); [PR #2](https://github.com/Capstone-last-dance/AutoAdvisor/pull/2) | 원본 수집·legacy 859,133건 대조 완료. DEC-09 시각 분리·15:30 경계·공용 I/O는 C 재검토에서 확인. 로컬에서 접수일 회사↔종목 연결 근거 없는 ticker를 결측으로 유지하고 공개를 차단했다. 실제 매핑 원천·D 스키마 연동·purge 합의·C 재리뷰 남음 |
-| PM-05 | PM 장지원 | 11/6 | 진행 중 | src/data/naver_client.py; src/data/news.py; src/data/collect_news.py; tests/unit/test_news.py | 1회 원본 수집 CLI·키 비노출/무재시도·필수 관측 시각/종목 매핑 정규화 구현. 전체 회귀 167개 테스트 통과. 실제 네이버 인증과 빅카인즈 계정 준비 후 기사 표본 확보 필요. news.parquet·BigKinds 가져오기·최종 뉴스 수집 미완료 |
-| PM-06 | PM 장지원 | 11/8 | 대기 | | |
-| PM-07 | PM 장지원 | 11/9 | 대기 | | |
-| PM-08 | PM 장지원 | 11/16 | 대기 | | |
-| PM-09 | PM 장지원 | 11/16 | 진행 중 | src/features/news_features.py; tests/features/test_news_features.py | `news_cnt_spike`·`news_sent_5` 구현과 누수 테스트. 11/12 실데이터(빅카인즈 2010-10-01~2026-10-31) 826개 신호일 348,678행: U_t 행 일치, 독립 재계산 3,000쌍 차이 0, 무작위 신호일 20개 누수 테스트 20/20. 11/13 이름 검토 157종목 보완 수집(빅카인즈 엑셀 343개, 형태소 분석·제목, 옛 상호 기간별, 나머지 종목은 U_t 기간만)과 증권사 출처 약칭 규칙(한화·SK·현대차 제목 끝 리포트 출처 제외)을 합쳐 다시 만들었다. 모든 종목에서 빅카인즈 통합 분류1이 스포츠인 기사(구단 기사, 기존 표 60,865·보완 24,015 연결)를 뺐다(`pm_features_20261113c`). 상호 변경 공시가 없던 의심 149종목 중 132종목의 변경일을 Codex가 사업보고서·공시로 확인했다. 그 전 구간은 옛 이름 시기의 거짓 0(두 창 모두 0건 95.7%)이라, 옛 이름 기사를 기간별로 받아(121종목, 엑셀 45개) 채웠다(`pm_features_20261113e`). 채운 28,643행 중 두 창 모두 0건은 0.8%다. 일반어와 겹치는 옛 이름(태평양·신우·삼호)은 받지 않고 그 기간을 결측으로 뒀다. 옛 이름이 '더 긴 이름'으로 등록되어 LG·CJ·효성·코오롱 등 9종목은 자회사 옛 이름 기사(예: LG상사)가 빠졌고, 두 표에 겹친 (기사, 종목) 505건은 한 번만 센다. 같은 점검 모두 통과. 결측률 2011~2025년 `news_cnt_spike` 7.6%·`news_sent_5` 33.3%(받지 않은 이름 검토 93종목 — 일반어·인명·지명과 겹치거나 U_t 행 30 미만, 잡음 키워드 5종목, 공시상 상호 변경 전 구간, 창 안 기사 없음). 보령(2022-03-25~)·하이트진로(~2011-08)는 결측. A 인계와 PR 리뷰 남음. 10/31 이후 기사는 아직 수집하지 않아 forward 신호일은 결측 |
-| PM-10 | PM 장지원 | 11/16 | 진행 중 | src/events/; [PR #34](https://github.com/Capstone-last-dance/AutoAdvisor/pull/34)·[PR #51](https://github.com/Capstone-last-dance/AutoAdvisor/pull/51) | 일간 경보 입력과 재생 규칙(DEC-32·33) 구현. #51에 신호일 생성 시각 제한(C 리뷰), `AlertsNotStarted` 경로 제거(D 리뷰), 늦은 경보의 생성 뒤 첫 체결일 청산(DEC-32 정정)을 반영했고 C 재검토가 필요하다. 유형별 10건 수작업 점검, 백테스트 청산 분포, T1·T3·T6 원문 판정은 남음 |
-| PM-11 | PM 장지원 | 12/4 | 진행 중 | `src/rag/evidence.py`; `tests/rag/` | 11/20 forward용 공시 템플릿 구현. 6단계 연결·리허설 및 뉴스·LLM 본안(12/4) 남음 |
+| PM-04 | PM 장지원 | 11/2 | 완료 | src/data/disclosures.py; [공시 계약](disclosures_contract.md); [PR #2](https://github.com/Capstone-last-dance/AutoAdvisor/pull/2) (11/4 병합 `2bdc09e`) | OpenDART 목록 2010-01-01~2026-11-08 860,976건 보관, `report_nm_norm` 정규화(6.10절). 원천에 접수 시각이 없어 `rcept_dt`는 결측이고 `available_at` 규약(DEC-09)으로 대신한다. C 승인 후 병합. 회사↔종목 연결 근거(DEC-09 (2) 재검토)는 결정 대기로 남긴다 |
+| PM-05 | PM 장지원 | 11/6 | 진행 중 | src/data/news.py; src/data/collect_news.py; tests/unit/test_news.py; `data/interim/news_bigkinds_excel/`(로컬, 이용 조건상 비공개) | 빅카인즈 일별 트렌드 1,262개 키워드(11/5), 기사 엑셀 3,329,059행 수집·대조(11/7), (기사, 종목) 표 3,331,437행(트렌드 대조 99.89%, 11/8), 제목 감성 점수(11/9). 이름 검토 250종목 보완 수집(11/13). 11/16 #56 리뷰로 상호 변경 처리의 누수를 확인해 옛 이름 보완 수집(159종목)을 진행한다. 10/31 이후 기사는 아직 수집하지 않아 forward 신호일은 결측 |
+| PM-06 | PM 장지원 | 11/8 | 완료 | [PR #16](https://github.com/Capstone-last-dance/AutoAdvisor/pull/16) (11/5 C 승인 후 병합 `bd46cff`) | 2015~2025년 공시 제목 588,868건 표본으로 T1~T6·`ev_*` 키워드 확정안과 키워드별 매칭·오매칭 예시를 작성했다(완료 기준). 회사 답변 원문·거래일 검증은 PM-10 유형별 점검에서 이어간다 |
+| PM-07 | PM 장지원 | 11/9 | 완료 | configs/prereg.yaml; docs/preregistration.md; [PR #29](https://github.com/Capstone-last-dance/AutoAdvisor/pull/29) (11/9 18:02 병합 `89074af`); [PR #39](https://github.com/Capstone-last-dance/AutoAdvisor/pull/39) | `FILL_` 0개, 커밋 해시와 시각을 preregistration.md에 기록했다(완료 기준). 이후 변경은 deviation_log.md에 적는다 |
+| PM-08 | PM 장지원 | 11/16 | 완료 | src/features/event_features.py; tests/features/test_event_features.py; reports/20261109_PM08_ev/; [PR #37](https://github.com/Capstone-last-dance/AutoAdvisor/pull/37) (11/9 병합 `9a416f9`) | `ev_*` 6개. 결측률 0, 실데이터 무작위 신호일 20개 누수 테스트 20/20, 826개 신호일 348,678행이 U_t와 일치(6.2절 완료 기준 (1)~(3)). C 승인. 11/10 A에 인계 |
+| PM-09 | PM 장지원 | 11/16 | 진행 중 | src/features/news_features.py; tests/features/test_news_features.py; [PR #56](https://github.com/Capstone-last-dance/AutoAdvisor/pull/56) (11/16 병합 `79ff49f`); reports/20261116_PM09_rename_pit/ | 코드는 C 승인 후 병합(테스트 24개). 실데이터 v6(`pm_features_20261113e`, 11/13 A 인계)는 C 확인 요청으로 신호일 뒤 상호 변경이 과거 결측 표시를 정하는 누수를 확인했다(16,044행, 4.6%, 174종목, [#56 답글](https://github.com/Capstone-last-dance/AutoAdvisor/pull/56#issuecomment-6907615460)). 옛 이름 기사 보완 수집(159종목, 엑셀 17행) → v7 생성, 신호일별 `covered_from` 재구성 누수 테스트, A 재인계와 deviation log 기록이 남았다 |
+| PM-10 | PM 장지원 | 11/16 | 진행 중 | src/events/; reports/20261109_PM_m9_v1/; [PR #34](https://github.com/Capstone-last-dance/AutoAdvisor/pull/34) (11/9)·[PR #51](https://github.com/Capstone-last-dance/AutoAdvisor/pull/51) (11/12) | T2~T5 제목 판정·종목 연결·쿨다운·청산 일정과 일간 경보 `daily_alerts`·`generated_at` 재생 규칙(DEC-32·33) 병합. 2015~2025 경보 2,047건(11/9 v1, 완료 기준 (1)). 백테스트 경보 `20261112_PM_m9_b07_v1`을 B-07에 전달. 유형별 무작위 10건 수작업 점검(완료 기준 (2)), T1·T3·T6 원문 판정이 남았다 |
+| PM-11 | PM 장지원 | 12/4 | 진행 중 | src/rag/; tests/rag/test_evidence.py; [PR #54](https://github.com/Capstone-last-dance/AutoAdvisor/pull/54) (11/16 병합 `a1f85fd`) | 11/20 forward용 공시 템플릿 근거 요약(시각 컷오프, 경보는 `generated_at` < 기록 마감, 고지 문구) C 승인 후 병합. LLM 요약(Qwen3-1.7B 시험)은 12/4까지 |
 | PM-12 | PM 장지원 | 12/7 | 대기 | | |
 | PM-13 | PM 장지원 | 12/11 | 대기 | | |
 | PM-14 | PM 장지원 | 12/11 | 대기 | | |
 | PM-15 | PM 장지원 | 12/14 | 대기 | | |
-| PM-16 | PM 장지원 | 매주 | 대기 | | |
+| PM-16 | PM 장지원 | 매주 | 진행 중 | docs/decisions.md; docs/deviation_log.md | 주간 회의 진행, decisions·deviation 기록 갱신 중 (DEC-34까지) |
 | PM-17 | PM 장지원 | 11/8 | 진행 중 | docs/프로젝트_구조_및_역할분담_v0.3.md 부록 3 Q-07·Q-09·Q-10·Q-11, 4.9절; docs/decisions.md DEC-10 | 원문 4건·상세 API 2회에서 후속 정정값 소급 위험 확인, 최초 ZIP 2건 확보/수치 대조, 원저자 코드와 가중치 이용 조건 구분, MIT 기반 후보 검토. Q-10 검증 모델/환경 실측·Q-11 날짜표 보완 유지. T6 금액 계약·감성 모델 이용 조건/학습 시점·실제 추론과 D/A/C 접점은 미완료. FILL_ 유지 |
 | A-01 | A 김윤하 | 10/30 | 대기 | | |
 | A-02 | A 김윤하 | 11/2 | 진행 중 | 11/3 A·C 인계 (`processed_20261103.zip`) | A 보고: 2010-01-04~2026-10-30 핵심 4표 공유. C 실측 보고: 주간 `status`의 관리종목·지수 편입 3열 전부 결측으로 공용 I/O 검증 실패. 일별 `is_halted`와 평가 가격 공백 규칙 확인 필요. `universe` 스텁, `sector`·`investor_flows` 미포함. 11/3 PM 결정: `investor_flows`는 만들지 않음(DEC-22), `sector` v1은 KIND 현재 분류와 상폐 '미분류'(DEC-23), `status`는 일별로 하고 지수 편입 2열 삭제, `is_admin`은 v2까지 결측 허용, `universe` v1은 관리종목 단계 미적용(DEC-24). 정지일 평가 가격은 DEC-25 대기 |
