@@ -10,7 +10,8 @@
 - 체크포인트: 폴드 폴더의 seed_{s}/best.zip (팀 드라이브에서 받은 파일). 폴드 metrics.json의 `policy_sha256`과
   다르면 다른 가중치이므로 멈춘다. 파일 `sha256`만 다르면(다시 저장한 파일) 기록만 한다.
 - 시험 신호: A의 walk-forward 신호 `signals/wf_{--test-signals-run-id}.parquet`. 시험 연도 Y의 행은 폴드 Y 모델의
-  예측이다. 신호일이 시험 연도(splits.walk_forward_test_years)의 신호일과 같아야 한다.
+  예측이다. 신호일이 시험 연도(splits.walk_forward_test_years)의 신호일과 같아야 하고, 행마다 model_version이
+  그 해의 `_y{Y}`로 끝나야 한다.
 - M9: 폴드 학습과 같은 백테스트 경보(폴드 metrics.json의 m9)를 쓴다. 폴드가 M9 없이 학습됐으면 시험도 M9 없이
   운용하고 '설계 그대로' 기준을 통과하지 않은 것으로 적는다.
 - 운용: 시드마다 첫 시험 신호일에 현금 100%로 시작해 결정적 행동으로 운용한다. 신호일 t의 정책은 t가 속한 해의
@@ -19,7 +20,7 @@
 - 출력: positions/wf_{run_id}_s{seed}.parquet (9.3절, constructor = rl). reports/{run_id}/에 config.yaml,
   git_commit.txt, metrics.json, fold_seed_ir.csv (ANOVA 2 입력: fold, seed, ir), weekly_excess.csv
   (seed, fold, signal_date, week = 체결 시작일, a_k). IR은 C의 validation_ir를 시험 주간 초과수익에 쓴 B의 확인값이다.
-  G5 판정 지표는 C-07이 positions로 계산한다.
+  G5 비교 표와 판정은 buffer_wf_report가 이 positions와 버퍼 규칙 기준선으로 만든다 (C 동의, #58).
 - 같은 run_id의 결과 폴더나 positions 파일이 하나라도 있으면 덮어쓰지 않고 멈춘다 (R-11).
 """
 from __future__ import annotations
@@ -185,6 +186,10 @@ def test_signal_table(run_id: str, test_dates: Sequence[str]) -> tuple[pd.DataFr
                          f"남는 신호일 {len(extra)}개 {extra[:3]})")
     year = pd.to_datetime(signals["date"]).dt.year
     versions = signals.groupby([year, signals["model_version"].astype(str)]).size()
+    # 시험 연도 Y의 행은 폴드 Y 모델의 예측이다. model_version 접미사가 그 해(_y{Y})가 아니면 다른 폴드의 신호다 (A 제안, #58)
+    wrong = [(int(y), v) for y, v in versions.index if not v.endswith(f"_y{int(y)}")]
+    if wrong:
+        raise ValueError(f"signals/wf_{run_id}: model_version이 그 해 폴드(_y{{Y}})가 아닌 행이 있다: {wrong[:3]}")
     path = io.ROOT / "signals" / f"wf_{run_id}.parquet"
     return signals, {
         "run_id": run_id, "path": path.relative_to(io.ROOT).as_posix(), "rows": len(signals),
