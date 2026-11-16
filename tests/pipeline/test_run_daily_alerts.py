@@ -153,6 +153,30 @@ class BackfillTest(TempRootTest):
         self.assertIn("3/4일 저장", printed)
         self.assertIn("2026-10-31", printed)
         self.assertEqual(io.list_dates("alerts"), [d for d in self.DAYS if d != "2026-10-31"])
+        self.assertNotIn("backfill_alert_files", printed)   # 첫날은 저장됐으니 PM 백필 안내는 없다
+
+    def stderr_of(self, fn):
+        with mock.patch("sys.stderr") as err:
+            code = rda.backfill(self.DAYS[0], self.DAYS[-1], fn)
+        return code, "".join(str(c.args[0]) for c in err.write.call_args_list)
+
+    def test_first_day_not_collected_points_to_pm_backfill(self):
+        # 앞 기간 파일이 없으면 daily_alerts가 첫날부터 미수집이다 (DEC-33)
+        def fn(d):
+            raise AlertsNotCollected("앞 기간 파일 없음")
+
+        code, printed = self.stderr_of(fn)
+        self.assertEqual(code, 1)
+        self.assertIn("0/4일 저장", printed)
+        self.assertIn("backfill_alert_files", printed)
+
+    def test_first_day_other_failure_has_no_pm_hint(self):
+        def fn(d):
+            raise RuntimeError("x")
+
+        code, printed = self.stderr_of(fn)
+        self.assertEqual(code, 1)
+        self.assertNotIn("backfill_alert_files", printed)
 
     def test_single_day_range(self):
         self.assertEqual(rda.backfill(SAT, SAT, lambda d: alerts_frame(d, 0)), 0)

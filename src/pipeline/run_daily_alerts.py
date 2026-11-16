@@ -1,7 +1,7 @@
 """일간 경보 실행기 (M11, 작업 D-06, 명세서 6.10절). D 소유.
 
     python -m src.pipeline.run_daily_alerts [--date YYYY-MM-DD]
-    python -m src.pipeline.run_daily_alerts --from YYYY-MM-DD --to YYYY-MM-DD   # 기간 백필
+    python -m src.pipeline.run_daily_alerts --from YYYY-MM-DD --to YYYY-MM-DD   # 빠진 날 다시 채우기
 
 달력일 d 하루의 M9 경보를 만들어 alerts/{d}.parquet에 저장한다 (PM 11/10 합의).
 - d는 거래일이 아니라 달력일이다. 토요일 공시는 토요일 파일에만 들어간다.
@@ -13,8 +13,11 @@
   그래서 "파일 없음 = 미수집"이다.
 - 같은 날짜를 다시 돌리면 성공한 결과로만 교체한다. 저장 중 실패하면 기존 파일은 그대로다 (io.write_table).
 - 주간 실행(run_weekly)은 신호일 t의 경보 파일까지 읽는다. "일간 경보(t일까지) → 주간" 순서로 돌린다.
-- --from/--to는 그 기간의 달력일을 하루씩 차례로 돌린다(백필). 하루가 미수집·실패여도 다음 날은 계속 돌리고,
-  끝에 파일을 쓰지 못한 날짜를 알려 준다. 하루라도 실패하면 종료 코드 1이다. 날짜별 로그는 하루 실행과 같다.
+- --from/--to는 그 기간의 달력일을 하루씩 차례로 돌린다. 앞 기간 경보 파일이 이어져 있을 때 빠진 날을 채우는
+  용도다. daily_alerts(d)는 같은 사건 판정에 d 앞 쿨다운 기간의 파일을 먼저 읽으므로(DEC-33), 앞 기간 파일이
+  없으면 첫날부터 모두 미수집이 된다. 처음 시작할 때는 PM이 M9 backfill_alert_files로 채운다.
+  하루가 미수집·실패여도 다음 날은 계속 돌리고, 끝에 파일을 쓰지 못한 날짜를 알려 준다. 하루라도 실패하면
+  종료 코드 1이다. 날짜별 로그는 하루 실행과 같다.
 """
 
 from __future__ import annotations
@@ -42,8 +45,15 @@ def default_date(now: dt.datetime | None = None) -> str:
     return (now.astimezone(KST).date() - dt.timedelta(days=1)).isoformat()
 
 
+SAVED, NOT_COLLECTED, FAILED = "saved", "not_collected", "failed"
+
+
 def run(date: str, daily_alerts: Callable[[str], pd.DataFrame] | None = None) -> int:
     """d 하루의 경보를 저장한다. 성공하면 0, 미수집·실패면 1 (파일을 쓰지 않는다)."""
+    return 0 if _run(date, daily_alerts) == SAVED else 1
+
+
+def _run(date: str, daily_alerts: Callable[[str], pd.DataFrame] | None) -> str:
     io._check_date_arg(date)
     log = _setup_logger(date)
     try:
@@ -51,28 +61,36 @@ def run(date: str, daily_alerts: Callable[[str], pd.DataFrame] | None = None) ->
         alerts = (daily_alerts or m9.daily_alerts)(date)
         path = io.write_table("alerts", alerts, date=date)
         log.info("확정 경보 %d건을 %s에 저장했다", len(alerts), path.relative_to(io.ROOT).as_posix())
-        return 0
+        return SAVED
     except Exception as exc:
         if isinstance(exc, m9.AlertsNotCollected):   # AlertsNotStarted 포함
             log.error("미수집: %s 경보를 만들지 못했다 (%s). 파일을 쓰지 않았다", date, exc)
-        else:
-            log.error("실패 (%s: %s). 파일을 쓰지 않았다\n%s", type(exc).__name__, exc, traceback.format_exc())
-        return 1
+            return NOT_COLLECTED
+        log.error("실패 (%s: %s). 파일을 쓰지 않았다\n%s", type(exc).__name__, exc, traceback.format_exc())
+        return FAILED
     finally:
         runlog.close_log(log)
 
 
 def backfill(start: str, end: str, daily_alerts: Callable[[str], pd.DataFrame] | None = None) -> int:
-    """start~end(양끝 포함) 달력일을 차례로 run한다. 모두 성공하면 0, 하루라도 미수집·실패면 1."""
+    """start~end(양끝 포함) 달력일을 차례로 돌린다. 모두 성공하면 0, 하루라도 미수집·실패면 1.
+
+    앞 기간 경보 파일이 이어져 있을 때 빠진 날을 채우는 용도다. 처음 시작할 때는 PM이 M9
+    backfill_alert_files로 채운다 (daily_alerts는 앞 기간 파일이 없으면 미수집이다).
+    """
     io._check_date_arg(start)
     io._check_date_arg(end)
     if start > end:
         raise ValueError(f"--from({start})이 --to({end})보다 늦다")
-    days = pd.date_range(start, end, freq="D").strftime("%Y-%m-%d")
-    failed = [day for day in days if run(day, daily_alerts) != 0]
-    print(f"백필 {start} ~ {end}: {len(days) - len(failed)}/{len(days)}일 저장", file=sys.stderr)
+    days = list(pd.date_range(start, end, freq="D").strftime("%Y-%m-%d"))
+    status = {day: _run(day, daily_alerts) for day in days}
+    failed = [day for day, result in status.items() if result != SAVED]
+    print(f"{start} ~ {end}: {len(days) - len(failed)}/{len(days)}일 저장", file=sys.stderr)
     if failed:
         print(f"파일을 쓰지 못한 날 {len(failed)}일 (logs/alerts_{{날짜}}.log 확인): {', '.join(failed)}", file=sys.stderr)
+        if status[days[0]] == NOT_COLLECTED:
+            print(f"첫날({start})부터 미수집이다. {start} 앞 기간 경보 파일이 없을 수 있다. "
+                  "처음 시작이면 PM이 M9 backfill_alert_files로 먼저 채워야 한다", file=sys.stderr)
         return 1
     return 0
 
@@ -84,8 +102,8 @@ def _setup_logger(date: str) -> logging.Logger:
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="일간 경보 실행기 (명세서 6.10절, 작업 D-06)")
     parser.add_argument("--date", help="경보를 만들 달력일 YYYY-MM-DD. 빼면 어제(KST)")
-    parser.add_argument("--from", dest="start", help="백필 시작 달력일 YYYY-MM-DD (--to와 함께)")
-    parser.add_argument("--to", dest="end", help="백필 끝 달력일 YYYY-MM-DD, 포함 (--from과 함께)")
+    parser.add_argument("--from", dest="start", help="다시 채울 첫 달력일 YYYY-MM-DD (--to와 함께)")
+    parser.add_argument("--to", dest="end", help="다시 채울 끝 달력일 YYYY-MM-DD, 포함 (--from과 함께)")
     args = parser.parse_args(argv)
     if args.start or args.end:
         if args.date or not (args.start and args.end):
