@@ -119,6 +119,42 @@ class EmptyPagesTest(RootTest):
         self.assertEqual(at.info[0].value, "확정된 결과 없음")
 
 
+class PerformancePageTest(RootTest):
+    """D-09: reports/final/이 있을 때와 일부만 있을 때, 형식이 틀렸을 때."""
+
+    PAGE = APP / "pages" / "4_performance.py"
+
+    def test_sample_reports_show_tables_and_chart(self):
+        write_sample(self.tmp)
+        at = self.open(self.PAGE)
+        self.assertEqual(len(at.info), 0)
+        kpi, periods = at.dataframe[0].value, at.dataframe[1].value
+        self.assertEqual(list(kpi["게이트"]), [f"G{i}" for i in range(8)])
+        self.assertEqual(list(periods["구간"]), ["P1", "P2"])
+        text = self.captions(at)
+        self.assertIn("기간: 2026-08-03 ~ 2026-11-13", text)   # NAV 그림 아래 캡션
+        self.assertIn(io.DISCLAIMER, text)
+
+    def test_partial_reports(self):
+        final = self.tmp / "reports" / "final"
+        final.mkdir(parents=True)
+        (final / "summary.pdf").write_bytes(b"x")
+        at = self.open(self.PAGE)
+        texts = " ".join(m.value for m in at.markdown)
+        self.assertIn("KPI 판정 표가 아직 없습니다.", texts)
+        self.assertIn("NAV 자료가 아직 없습니다.", texts)
+        self.assertIn("summary.pdf", texts)
+
+    def test_bad_format_shows_error_without_path(self):
+        final = self.tmp / "reports" / "final"
+        final.mkdir(parents=True)
+        (final / "kpi.csv").write_text("gate,value\nG0,1\n", encoding="utf-8")
+        at = self.open(self.PAGE)
+        self.assertEqual(len(at.error), 1)
+        self.assertIn("kpi.csv를 읽지 못해", at.error[0].value)
+        self.assertNotIn(str(self.tmp), at.error[0].value)
+
+
 class AlertTimingTest(RootTest):
     SIGNAL = SIGNAL_DATES[-1]
 

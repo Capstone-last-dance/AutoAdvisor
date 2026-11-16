@@ -363,6 +363,33 @@ def list_final_reports() -> list[str]:
                   if p.is_file() and p.name != ".gitkeep")
 
 
+# 성과 페이지가 읽는 reports/final/ 표 (D-09 제안 형식, C 확정 전). {이름: 필수 열}
+FINAL_TABLES: dict[str, tuple[str, ...]] = {
+    "kpi": ("gate", "kpi", "value", "threshold", "verdict"),   # KPI 판정 표 G0~G7
+    "nav": ("date", "series", "nav"),                          # 일간 NAV (긴 형식, series별 한 줄)
+    "periods": ("period", "start", "end"),                     # 분석 구간 P1~P7
+}
+
+
+def final_mtime(name: str) -> float | None:
+    """reports/final/{name}.csv의 수정 시각. 없으면 None."""
+    path = ROOT / "reports" / "final" / f"{name}.csv"
+    return path.stat().st_mtime if path.is_file() else None
+
+
+def read_final(name: str) -> pd.DataFrame:
+    """reports/final/{name}.csv를 읽는다. 필수 열이 없으면 ValueError. date·start·end 열은 날짜로 바꾼다."""
+    required = FINAL_TABLES[name]
+    df = pd.read_csv(ROOT / "reports" / "final" / f"{name}.csv", dtype={"gate": str, "period": str})
+    missing = [c for c in required if c not in df.columns]
+    if missing:
+        raise ValueError(f"reports/final/{name}.csv: 필수 열 없음 {missing}")
+    for col in ("date", "start", "end"):
+        if col in df.columns:
+            df[col] = pd.to_datetime(df[col])
+    return df
+
+
 # ---------------------------------------------------------------------------
 # 경로
 # ---------------------------------------------------------------------------
