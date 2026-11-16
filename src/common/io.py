@@ -363,7 +363,7 @@ def list_final_reports() -> list[str]:
                   if p.is_file() and p.name != ".gitkeep")
 
 
-# 성과 페이지가 읽는 reports/final/ 표 (D-09 제안 형식, C 확정 전). {이름: 필수 열}
+# 성과 페이지가 읽는 reports/final/ 표 (D-09 제안, C 손석범 11/16 확인). {이름: 필수 열}
 FINAL_TABLES: dict[str, tuple[str, ...]] = {
     "kpi": ("gate", "kpi", "value", "threshold", "verdict"),   # KPI 판정 표 G0~G7
     "nav": ("date", "series", "nav"),                          # 일간 NAV (긴 형식, series별 한 줄)
