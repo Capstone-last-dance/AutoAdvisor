@@ -83,6 +83,24 @@ def _recent_alert_tickers(previous: pd.Timestamp, day: pd.Timestamp, cutoff: pd.
     return set(alerts.loc[in_window & before_deadline, "ticker"])
 
 
+def signal_day_disclosures(date: str, tickers: pd.DataFrame) -> pd.DataFrame:
+    """신호일 t의 공시: t−19~t 거래일 접수분 중 t 15:30 KST 전에 이용 가능한 것 (종목 연결 포함).
+
+    M6와 같은 규칙으로 B·I 수집 완료 여부와 공시 버전을 다음 거래일 09:00 KST 기록 마감 전 원본으로 고정한다.
+    수집이 끝나지 않았으면 `AlertsNotCollected`를 낸다. PM `ev_*`의 forward 계산(DEC-36)이 쓴다.
+    """
+    day = pd.Timestamp(date)
+    trading_days = m9.load_trading_days()
+    position = trading_days.get_indexer([day])[0]
+    if position < 0:
+        raise ValueError(f"{date}: 거래일 달력에 신호일이 없다")
+    cutoff = day.tz_localize(m9.KST) + _CLOSE
+    next_day = trading_days[m9._next_day_index(trading_days, day)]
+    record_deadline = next_day.tz_localize(m9.KST) + m9.RECORD_DEADLINE
+    receipt_days = trading_days[max(0, position - 19):position + 1]
+    return _disclosures(day, receipt_days, cutoff, record_deadline, tickers)
+
+
 def _disclosures(day: pd.Timestamp, receipt_days: pd.DatetimeIndex, cutoff: pd.Timestamp,
                  record_deadline: pd.Timestamp, tickers: pd.DataFrame) -> pd.DataFrame:
     raw = io.ROOT / "data" / "raw"
