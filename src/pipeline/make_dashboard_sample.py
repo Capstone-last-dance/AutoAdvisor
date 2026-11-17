@@ -119,6 +119,33 @@ def _write_all() -> None:
         "bm_return": [np.nan],
     }))
 
+    _write_final(days)
+
+
+def _write_final(days: pd.DatetimeIndex) -> None:
+    """reports/final/ 샘플 (io.FINAL_TABLES 형식). 판정과 수치는 모두 가짜다."""
+    final = io.ROOT / "reports" / "final"
+    final.mkdir(parents=True, exist_ok=True)
+    pd.DataFrame({
+        "gate": [f"G{i}" for i in range(8)],
+        "kpi": ["샘플 지표"] * 8,
+        "value": np.linspace(0.1, 0.8, 8).round(2),
+        "threshold": ["샘플 기준"] * 8,
+        "verdict": ["샘플"] * 8,
+        "note": ["가짜 값"] * 8,
+    }).to_csv(final / "kpi.csv", index=False)
+    steps = np.arange(len(days))
+    pd.concat([
+        pd.DataFrame({"date": days, "series": series, "nav": 1 + rate * steps})
+        for series, rate in (("포트폴리오", 0.001), ("BM", 0.0005))
+    ]).to_csv(final / "nav.csv", index=False)
+    pd.DataFrame({
+        "period": ["P1", "P2"],
+        "start": [days[0], days[len(days) // 2]],
+        "end": [days[len(days) // 2 - 1], days[-1]],
+        "description": ["샘플 구간 A", "샘플 구간 B"],
+    }).to_csv(final / "periods.csv", index=False)
+
 
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="대시보드 샘플 데이터 생성")
