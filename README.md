@@ -533,6 +533,21 @@ DASHBOARD_DATA_ROOT=_sample streamlit run app/Home.py
 
 PowerShell에서는 `$env:DASHBOARD_DATA_ROOT="_sample"`을 먼저 실행한다. `DASHBOARD_DATA_ROOT`가 `_stub/`이나 그 하위 폴더면 스텁 데이터를 표시하지 않고 거부한다.
 
+#### 대시보드 배포
+
+일간·주간 실행은 담당자가 수동으로 하고, 공식 주간 기록(forward test)이 성공한 뒤 배포 스크립트를 돌린다 (Q-17, D-08). 실행에 쓴 앱 코드와 검증된 신호·비중·경보·공시 근거를 비공개 배포 저장소에 한 커밋으로 올리고, Streamlit Community Cloud가 그 저장소의 `app/Home.py`를 띄운다.
+
+```bash
+python -m src.pipeline.publish_dashboard --date YYYY-MM-DD --target ../배포저장소
+```
+
+- `--target`은 비공개 배포 저장소를 clone한 폴더다. origin이 이 공개 저장소와 같으면 거부한다.
+- 신호일이 `forward_log.csv`에 있고 태그 `ft-YYYYMMDD`가 origin에 게시돼 있어야 한다. 신호·비중은 게시된 태그에서 읽으므로 진단용·리허설 신호는 올라가지 않는다.
+- 올리는 파일은 고정돼 있다: 대시보드가 쓰는 코드(`app/`, `src/`의 일부, `configs/prereg.yaml`), 공식 기록 신호일의 signals·positions·evidence, 신호일까지의 alerts, `forward_log.csv`, `data/processed/index.parquet`, `reports/final/`. 뉴스 원문, `data/raw/`, `.env`는 올리지 않는다.
+- 앱 코드에 커밋하지 않은 변경이 있으면 거부한다. 배포 커밋 메시지에 코드 커밋 해시가 남는다.
+- 배포 저장소의 `requirements.txt`는 대시보드에 필요한 패키지(numpy, pandas, pyarrow, streamlit, PyYAML)만 이 저장소와 같은 버전으로 적는다.
+- `--no-push`를 붙이면 배포 저장소에 커밋까지만 한다.
+
 (명세서 6.11절, 6.12절)
 
 ---
