@@ -58,13 +58,13 @@
 | C-12 | C 손석범 | 12/14 | 대기 | | |
 | D-01 | D 임소현 | 10/30 | 완료 | README.md; requirements.txt; requirements-lock.txt | 설치 절차·버전 고정, PM 재현 확인 |
 | D-02 | D 임소현 | 11/2 | 완료 | src/common/io.py; tests/common/test_io.py; PR #6 | io.py·스키마 검증, PM 리뷰 승인 후 병합 |
-| D-03 | D 임소현 | 11/6 | 완료 | src/pipeline/run_weekly.py; tests/pipeline/test_run_weekly.py; PR #7; [PR #38](https://github.com/Capstone-last-dance/AutoAdvisor/pull/38) | 주간 실행기, 미연결 단계는 _stub/ 처리. #38로 3~5단계(M3a·M3b·M4·M8), A PR #55로 1·2단계(M1·M2) 연결. 6단계(M6 `m6_step`)는 PR #54 리뷰 뒤 연결. Q-17(자동 실행 방식) 결정 남음 |
-| D-04 | D 임소현 | 11/6 | 완료 | src/pipeline/forward_test.py; forward_log.csv; PR #19, #28; 태그 ft-20261106 | 11/6 신호를 11/8 22:27 KST에 기록(마감 11/9 09:00, DEC-04 변경). 11/13 기록 예정 |
-| D-05 | D 임소현 | 11/16 | 진행 중 | app/; src/pipeline/make_dashboard_sample.py; tests/app/test_dashboard.py | 샘플 데이터로 6.11절 완료 기준 (1)~(4) 확인. 진입 후보는 M9 `cooldown_at`으로 쿨다운 종목을 뺀다 (경보 미시작·미수집이면 계산 보류). Q-16 결정: Streamlit Community Cloud, 팀원 이메일로 접속 제한. tickers 공개 범위 확인 전까지 종목코드만 표시 |
-| D-06 | D 임소현 | 11/20 | 진행 중 | src/pipeline/run_daily_alerts.py; src/common/io.py; [PR #50](https://github.com/Capstone-last-dance/AutoAdvisor/pull/50) | 일간 경보 실행기: 달력일 d로 M9 `daily_alerts(d)`를 불러 저장, 0건은 0행 파일, 미수집·실패는 파일을 쓰지 않음. alerts `generated_at` 열, 임시 파일 교체 저장. M9 PR #51과 함께 #50 병합(11/16). 실제 공시로 첫 실행 확인 남음 |
+| D-03 | D 임소현 | 11/6 | 완료 | src/pipeline/run_weekly.py; tests/pipeline/test_run_weekly.py; PR #7; [PR #38](https://github.com/Capstone-last-dance/AutoAdvisor/pull/38) | 주간 실행기, 미연결 단계는 _stub/ 처리. #38로 3~5단계(M3a·M3b·M4·M8), A PR #55로 1·2단계(M1·M2) 연결. [PR #61](https://github.com/Capstone-last-dance/AutoAdvisor/pull/61)로 6단계(M6 `m6_step`) 연결, [PR #64](https://github.com/Capstone-last-dance/AutoAdvisor/pull/64)로 `--rehearsal`(7단계 기록 생략) 추가. Q-17 결정(11/16): 실행은 담당자가 수동, 공식 기록 뒤 배포(D-08) |
+| D-04 | D 임소현 | 11/6 | 완료 | src/pipeline/forward_test.py; forward_log.csv; PR #19, #28; 태그 ft-20261106 | 11/6 신호를 11/8 22:27 KST에 기록(마감 11/9 09:00, DEC-04 변경). 11/13분은 마감(11/16 09:00) 미기록, deviation log에 기록하고 공식 로그·태그에 넣지 않음(PM 결정, #61). 다음 기록 11/20 |
+| D-05 | D 임소현 | 11/16 | 완료 | app/; src/pipeline/make_dashboard_sample.py; tests/app/test_dashboard.py; [PR #41](https://github.com/Capstone-last-dance/AutoAdvisor/pull/41) | 샘플 데이터로 6.11절 완료 기준 (1)~(4) 확인. 진입 후보는 M9 `cooldown_at`으로 쿨다운 종목을 뺀다 (경보 미시작·미수집이면 계산 보류). Q-16 결정: Streamlit Community Cloud, 팀원 이메일로 접속 제한. tickers 공개 범위 확인 전까지 종목코드만 표시 |
+| D-06 | D 임소현 | 11/20 | 진행 중 | src/pipeline/run_daily_alerts.py; src/common/io.py; [PR #50](https://github.com/Capstone-last-dance/AutoAdvisor/pull/50) | 일간 경보 실행기: 달력일 d로 M9 `daily_alerts(d)`를 불러 저장, 0건은 0행 파일, 미수집·실패는 파일을 쓰지 않음. alerts `generated_at` 열, 임시 파일 교체 저장. M9 PR #51과 함께 #50 병합(11/16). [PR #65](https://github.com/Capstone-last-dance/AutoAdvisor/pull/65) `--from/--to`로 빠진 날 다시 채우기(리뷰 중). 처음 시작분(10/26~11/19)은 PM이 M9 `backfill_alert_files`로 채움. 실제 공시로 첫 실행 확인 남음 |
 | D-07 | D 임소현 | 11/27 | 대기 | | |
-| D-08 | D 임소현 | 12/4 | 대기 | | |
-| D-09 | D 임소현 | 12/7 | 대기 | | |
+| D-08 | D 임소현 | 12/4 | 진행 중 | src/pipeline/publish_dashboard.py; [PR #66](https://github.com/Capstone-last-dance/AutoAdvisor/pull/66) | Q-17대로 공식 기록 뒤 앱 코드와 검증된 신호·비중·경보·공시 근거를 비공개 배포 저장소 (AutoAdvisor-dashboard, 11/16 생성)에 한 커밋으로 올림. 뉴스 원문 제외. Streamlit Cloud 연결은 조직 OAuth 승인과 11/20 기록 뒤 첫 배포 후 |
+| D-09 | D 임소현 | 12/7 | 진행 중 | app/pages/4_performance.py; [PR #62](https://github.com/Capstone-last-dance/AutoAdvisor/pull/62) | 성과 페이지: reports/final의 kpi.csv·nav.csv·periods.csv (형식 C 확인 11/16). forward test 페이지는 표 완성 |
 | D-10 | D 임소현 | 12/11 | 대기 | | |
 | D-11 | D 임소현 | 12/11 | 대기 | | |
 | D-12 | D 임소현 | 12/14~18 | 대기 | | |
