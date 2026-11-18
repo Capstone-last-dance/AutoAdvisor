@@ -91,7 +91,8 @@ def m2_step(ctx) -> None:
 
     PM 피처(DEC-36): ML 신호 구간(`splits.forward_test.ml_signals_from` 이후)에서는 최종 모델 입력인
     `ev_*`를 PM의 `signal_day_event_features`로 그 자리에서 계산해 합친다. 공시는 M6와 같은 원본
-    (`data/raw/*_PM_disclosures_*`)을 기록 마감 전 버전으로 읽고, 수집이 끝나지 않았으면 단계가 멈춘다.
+    (`data/raw/*_PM_disclosures_*`)을 신호일 t 15:30 KST 전에 받은 버전으로 읽고, 그 전에 수집이 끝나지 않았으면
+    단계가 멈춘다.
     그 전 신호일(베이스라인)은 PM 피처 없이 A 피처만 쓴다. 최종 모델에는 뉴스 피처가 없다(A-08, 11/10 학습)."""
     from src.features.build_features import build as build_feature_matrix
 

@@ -8,7 +8,8 @@
 공시 보관 구간 밖의 신호일은 0으로 채우지 않고 오류를 낸다. 0은 '공시가 없었다'는 뜻이기 때문이다.
 
 forward 신호일은 `signal_day_event_features`로 하루치를 만든다 (DEC-36). 주간 실행 2단계가 ML 신호 구간
-(`ml_signals_from` 이후)에서 부르고, 공시 원본과 버전은 M6와 같이 기록 마감 전 원본으로 고정한다.
+(`ml_signals_from` 이후)에서 부르고, 공시는 M6와 같은 원본을 쓰되 수집 완료와 버전은 t 15:30 신호 컷오프
+전에 받은 관측으로만 정한다.
 """
 
 from __future__ import annotations
@@ -88,8 +89,9 @@ def signal_day_event_features(date, universe: pd.DataFrame, tickers: pd.DataFram
                               cfg: Mapping[str, Any]) -> pd.DataFrame:
     """forward 신호일 t 하루치 `date, ticker, ev_*` (U_t 전 종목, DEC-36).
 
-    공시는 `src.rag.evidence.signal_day_disclosures`(M6와 같은 원본·버전·수집 완료 규칙)로 읽는다. 창 t−19~t 거래일의
-    B·I 수집이 기록 마감 전에 끝나지 않았으면 `AlertsNotCollected`를 내고 0으로 채우지 않는다.
+    공시는 `src.rag.evidence.signal_day_disclosures`(M6와 같은 원본, 신호 컷오프 기준 버전)로 읽는다. 제목과 종목코드는
+    t 15:30 KST 전에 받은 관측의 버전을 쓴다. 창 t−19~t 거래일의 B·I 수집이 그 전에 끝나지 않았으면
+    `AlertsNotCollected`를 내고 0으로 채우지 않는다.
     """
     from src.data.disclosures import normalize_report_nm
     from src.events.alerts import load_trading_days
