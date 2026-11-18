@@ -1,0 +1,65 @@
+{
+  "run_id": "20261118_C_g2_reproduction",
+  "classification": "exploratory reproduction; not preregistered G2 adjudication",
+  "package_sha256": "afaf58c02d9468a23665ff8cec084e32c61ce220b23de7228cf4313c4beb72d5",
+  "package_inputs_sha256": {
+    "replay_g2.py": "9a91f34714bf3c69f2f5d7ee72bf24dbd0c47473723acf4bb90de3dd73c8c945",
+    "cohort_signals.parquet": "df91d00f71ca8fbc0761458fa605910e557ccf23ca8594d28a3dfb5779862122",
+    "cohort_labels_h20.parquet": "98a5d277290e0adec27f87e1e18e36ebaaef8023e69260e2d7da0eb9e3d894dd",
+    "expected_summary.csv": "1eae30b62b0fc6d8f46d944c584c9235a03adc9e44f8d580a242b57220fefc5d",
+    "expected_daily_nav.csv": "2f68391107f5ca49255d1ba4db83be0087d42920895ed973c2e6b9631e4f4b3c"
+  },
+  "market_inputs_sha256": {
+    "prices.parquet": "e735be46c5ca1685f922d0c8ee78f2129d8c8256bb6cfd9181723ccd0b01b5a5",
+    "status.parquet": "40812ae37f997ef5dd0b42fc2f453a15839cd9d0f4967d1b9d37fdad7e7363b3",
+    "index.parquet": "ce9ffb646c4723fe067c76eaba90a526683444369ac7ab43e53684e662e9300e",
+    "delisted.parquet": "fc14a9183780605617f72fa784f785b4ae0635fbbef46c0d7225cc539478a54c",
+    "delisted_reused.parquet": "a73192de4525b05e626bd24bff5dc30e205546d6ed963bbaf5f9c1ff7ce80a25"
+  },
+  "code_base_for_replay": "bd686ca",
+  "c_repo_commit": "50f6b56ef154c26874c4dde12532d5e02703d125",
+  "replay_method": "ZIP replay_g2.py dynamically adapts C retail_proxy in memory; not independent reimplementation",
+  "days": 2447,
+  "cohort_pairs": 15600,
+  "blocked_flags": 3092,
+  "max_abs_summary_difference": 6.661338147750939e-15,
+  "max_abs_daily_nav_difference": 0.0,
+  "variants": [
+    {
+      "variant": "none",
+      "mdd": 0.6854058719987346,
+      "cagr": -0.07743899341997995,
+      "mean_cash_share": 0.10405348492945136,
+      "hac_t": null
+    },
+    {
+      "variant": "cash_only",
+      "mdd": 0.625094664762391,
+      "cagr": -0.06634022924673155,
+      "mean_cash_share": 0.1971324899666348,
+      "hac_t": null
+    },
+    {
+      "variant": "add_relative_downside_reserve_cash",
+      "mdd": 0.5050096651155555,
+      "cagr": -0.01774654494071748,
+      "mean_cash_share": 0.19593819071571864,
+      "hac_t": -3.8713301429231377
+    }
+  ],
+  "g2_threshold_check_against_original": {
+    "mdd_reduction_relative": 0.2631961794507535,
+    "cagr_not_lower": true,
+    "hac_t": -3.8713301429231377,
+    "meets_three_numeric_thresholds": true
+  },
+  "cash_matched_diagnostic": {
+    "mdd_reduction_relative": 0.19210690222813187,
+    "meets_20pct_mdd_threshold": false
+  },
+  "limits": [
+    "cohort_signals.parquet contains frozen crash_flag but not the 60-day volatility/relative-downside construction procedure; flag generation not independently reproduced",
+    "combination was selected after 2016-2025 exploration, so these same-period results are not a preregistered unbiased G2 success claim",
+    "G1 cannot be assessed from this package"
+  ]
+}
