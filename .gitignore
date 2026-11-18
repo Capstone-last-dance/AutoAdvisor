@@ -62,8 +62,9 @@ _stub/*
 /reports/*_PM_git_*/
 
 # Model weights go to the team drive run_id folder; metrics.json keeps their SHA-256 (PM, 11/10).
+# Exception: B RL checkpoints (reports/*/best.zip, ~0.76 MB each) are committed so the B runs can be
+# replayed from git (B, 11/18). Their SHA-256 in metrics.json still identifies them.
 # Do not ignore *.txt: reports/*/git_commit.txt is the R-10 record.
-# best.zip
 *.joblib
 gate_*.txt
 ranker_*.txt
