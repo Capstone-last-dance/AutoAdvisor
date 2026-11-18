@@ -505,6 +505,13 @@ R_net을 체결 직전 NAV로 재면, 행동 a_t가 일으킨 t+1일 체결 비�
 1. 폴드 학습·검증 구간의 진단 열: v7 rlsig 10개(`wf_20261117_A_rlsig_y{Y}`)와 같은 행에 `raw_prob`, `base_prob`, `base_flag`, `b1_score`, `b2_score`, `b3_score`. 시험 구간은 `wf_diagnostics.parquet`에 이미 있다. 학습 구간 값은 rlsig와 같은 교차 적합(DEC-08)이어야 한다. 쓰는 곳: R-vol60, S-rank의 RL 학습.
 2. v7 피처 행렬: 2011~2025 신호일 × U_t, 순위·급락 모델 입력 열 전부(뉴스 피처 포함). v7 신호를 만든 것과 같은 판이고 SHA-256을 붙인다. 쓰는 곳: 위험 태그(M-tag), 포트폴리오 변동성(M-pv), rank 평활(S-rank), RL 관측 확장.
 3. 확인: `base_flag` 동점 처리 규칙, 폴드별 B3 릿지 alpha.
+- A 답 (11/18):
+  - `base_flag` 동점: `flag_top(out, "base_prob")`라 보조 기준 없이 종목코드 오름차순이다. `crash_flag`는 `flag_top(out, "crash_prob", "raw_prob")`로 raw_prob을 보조 기준으로 쓴다.
+  - B3 릿지 alpha (v7, metrics.json에 있음): 2016 10, 2017 100, 2018 100, 2019 10, 2020~2025 100.
+  - 1번: 교차 적합 학습 연도는 `gate.fit_fold`·`ranker.fit_fold`가 이미 계산한 열을 저장만 하면 되고, 검증 연도는 `walk_forward.fold_signals()`와 같은 방식으로 더한다. 다시 돌린 뒤 이미 준 v7 rlsig 10개와 전 행이 같은지 확인하고 보낸다. 11/21까지.
+  - 2번: 11/17 v7 walk-forward에 쓴 병합 피처 행렬(A 피처 + PM ev_* + 뉴스 v7)을 11/8판 정제 표 스냅샷으로 다시 만들어 저장한다. 11/24까지.
+  - 순서: 11/20 신호일 데이터 준비(KRX 갱신, sector.parquet)를 먼저 한다.
+- 받으면 B가 확인할 것: rlsig와 행(date, ticker)이 같은지, 9.3절 열이 기존 v7 rlsig와 같은지, 신호일마다 `base_flag` 수가 ceil(0.10 × N_t)인지, 시험 연도 값이 `wf_diagnostics.parquet`와 같은지, 피처 행렬의 vol_20이 B `feature_table`과 같은지.
 
 #### 비교와 보고
 - 사전등록 기준선과 같은 표, 같은 C M5 함수, 같은 판정 기간(3.6절 '평가 기간 끝 처리')으로 잰다. G5·G7 기준은 '참고 판정'으로만 적는다.
