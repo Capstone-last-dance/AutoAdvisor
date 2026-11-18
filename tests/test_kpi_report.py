@@ -99,12 +99,15 @@ def test_g7_uses_same_daily_interval_and_returns_undefined_when_no_baseline_draw
     assert evaluate_g7(flat, flat, load_prereg(), initial_nav=1.0)["passed"] is None
 
 
-def test_g7_includes_first_fill_cost_and_allows_different_first_day_nav():
+def test_g7_uses_post_fill_nav_for_mdd_and_pre_fill_nav_for_cagr():
     days = pd.bdate_range("2023-01-02", periods=3)
     on = pd.Series([0.99, 1.02, 0.90], index=days)
     off = pd.Series([0.98, 1.01, 0.95], index=days)
     result = evaluate_g7(on, off, load_prereg(), initial_nav=1.0)
     assert result["cagr_applied"] == pytest.approx((0.90 / 1.0) ** 126 - 1)
     assert result["mdd_applied"] == pytest.approx(1 - 0.90 / 1.02)
+    rising_after_fill = pd.Series([0.98, 0.99, 1.01], index=days)
+    assert evaluate_g7(rising_after_fill, rising_after_fill, load_prereg(), initial_nav=1.0)[
+        "mdd_applied"] == pytest.approx(0.0)
     with pytest.raises(ValueError, match="체결 직전 시작 NAV"):
         evaluate_g7(on, off, load_prereg(), initial_nav=0.0)

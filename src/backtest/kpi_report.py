@@ -150,7 +150,8 @@ def evaluate_g7(applied_nav: pd.Series, without_m8_m9_nav: pd.Series,
     """C-07: 같은 일별 날짜·시작 NAV의 G7 적용/미적용 경로를 비교한다.
 
     NAV는 같은 C 엔진과 비용 규칙으로 만든 체결 후 일별 값이다. 첫 체결일의
-    체결 직전 NAV를 별도로 받아 첫날 비용을 MDD·CAGR에 반영한다. 이 함수는
+    체결 직전 NAV를 별도로 받아 CAGR의 시작점으로 쓴다. MDD는 체결 후
+    일간 NAV에서만 계산한다. 이 함수는
     B의 비교용 positions를 생성하지 않으며, 판정 임계값을 재설정하지 않는다.
     """
     if (not isinstance(applied_nav, pd.Series) or not isinstance(without_m8_m9_nav, pd.Series)
@@ -167,8 +168,8 @@ def evaluate_g7(applied_nav: pd.Series, without_m8_m9_nav: pd.Series,
     if not np.isfinite(initial_nav) or initial_nav <= 0:
         raise ValueError("G7 체결 직전 시작 NAV는 유한한 양수여야 합니다")
     count = len(days) - 1
-    mdd_on = m5.max_drawdown(np.r_[initial_nav, on])
-    mdd_off = m5.max_drawdown(np.r_[initial_nav, off])
+    mdd_on = m5.max_drawdown(on)
+    mdd_off = m5.max_drawdown(off)
     cagr_on = m5.cagr(np.r_[initial_nav, on[1:]], trading_days=count)
     cagr_off = m5.cagr(np.r_[initial_nav, off[1:]], trading_days=count)
     reduction = (mdd_off - mdd_on) / mdd_off if mdd_off > 0 else None

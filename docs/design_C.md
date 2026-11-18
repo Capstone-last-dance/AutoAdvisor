@@ -394,9 +394,25 @@ python -m src.backtest.kpi_report \
 `evaluate_g7`은 B가 제공할 버퍼 규칙의 M8·M9 적용/미적용 positions를
 같은 C 엔진·비용으로 운용해 얻은 **같은 날짜의 체결 후 일별 NAV**를
 비교한다. 첫 체결일의 체결 직전 NAV는 두 실행에 공통인 `initial_nav`로
-전달한다. 첫날 체결 비용을 포함한 MDD 감소율과 CAGR 비열화를 사전등록
+전달한다. 체결 후 일간 NAV의 MDD 감소율과 체결 직전 NAV를 시작점으로 한 CAGR 비열화를 사전등록
 값으로 판정한다. PR #63의 v6 비교 결과는 재현 대조에 쓰고,
 DEC-35에 따른 v7 재실행 뒤 실제 G7 값을 확정한다.
+
+### C-06 SHAP 실행 준비
+
+`src.analysis.shap_report`는 A의 M3a·M3b 시험 연도별 LightGBM 텍스트 모델을
+`reports/<A run_id>/models/fold_<연도>/{gate,ranker}/`에서 읽는다. 같은 실행의
+결합 피처 파일을 받아 2016~2025년 시험 연도마다 `(date, ticker)` 정렬 후
+시드 42로 최대 5,000행을 비복원 추출한다. 2026 홀드아웃은 거부한다.
+`shap.TreeExplainer`의 게이트 양성 출력과 순위 모델 회귀 출력을 사용한다.
+
+실행 명령은 `python -m src.analysis.shap_report --features <A features.parquet>
+--models reports/<A run_id>/models --output reports/<C run_id>`이다. 결과는
+`top10_by_year.csv`, `feature_importance_all.csv`, `rank_stability.csv`,
+두 모델 각각의 전체 상위 3개 피처 의존성 그림, 입력·모델 SHA-256 및 설정
+사본이다. A의 v7 폴드 모델과 대응 피처가 전달되기 전에는 표·그림의 실제
+수치를 확정하지 않는다. 실행 환경에는 사전등록 패키지 `shap`와 그림용
+`matplotlib`이 필요하다.
 
 ### D-09 성과 페이지 출력 계약
 
