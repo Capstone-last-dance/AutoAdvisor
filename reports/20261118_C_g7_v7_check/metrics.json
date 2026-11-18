@@ -1,0 +1,99 @@
+{
+  "run_id": "20261118_C_g7_v7_check",
+  "source_pr": 73,
+  "source_head": "53d842cf72814ec18185d24ead42d4089f195bee",
+  "source_buffer_run_id": "20261118_B_buffer_wf",
+  "source_metrics_sha256": "c06292cf299f25051543a7d84c98a04fdb7a9d6bcee2ac160caff82c36b633da",
+  "daily_nav_sha256": "4e6f811c38531cd7bc437108052e99a10405327f93a829ebc51730435ef40738",
+  "weekly_excess_sha256": "1489822aa41f604ff693eea6bbc44dffad1ec12547352ede1ae7726d884c754f",
+  "positions": {
+    "buffer_full": {
+      "sha256": "ae882a1681dfc39e81894bb0d05d1d173a82aef4d5d6a29db927942d35a2123f",
+      "rows": 10889,
+      "signal_dates": 520,
+      "m8_mode": "full",
+      "m9_alerts_run_id": "20261112_PM_m9_b07_v1"
+    },
+    "buffer_off": {
+      "sha256": "c965e27c1a91332b7abdc75c4d32fc287c5acd897088f6d24f92b04c2ba2545b",
+      "rows": 10895,
+      "signal_dates": 520,
+      "m8_mode": "off",
+      "m9_alerts_run_id": null
+    },
+    "buffer_no_exposure": {
+      "sha256": "001fb33032967df8e147be4e4ee204baba44f4a442f37f2990dc8ad41c8c55d4",
+      "rows": 10889,
+      "signal_dates": 520,
+      "m8_mode": "no_exposure",
+      "m9_alerts_run_id": "20261112_PM_m9_b07_v1"
+    },
+    "rl_s0": {
+      "sha256": "63f993e81601d780a0dffe851c15bcbb208e6c80f938a50bdc61e6c070e26e63",
+      "rows": 10920,
+      "signal_dates": 520,
+      "m8_mode": "full",
+      "m9_alerts_run_id": "20261112_PM_m9_b07_v1"
+    },
+    "rl_s1": {
+      "sha256": "e99ff7a4876a1618f12e13f1b4649874e991d002a8bbb625beefbb31f1e1eba3",
+      "rows": 10920,
+      "signal_dates": 520,
+      "m8_mode": "full",
+      "m9_alerts_run_id": "20261112_PM_m9_b07_v1"
+    },
+    "rl_s2": {
+      "sha256": "8d664e1992beea71f5fe0bd0e299700a03ff95abba0c3cfc8c23b62360cf777e",
+      "rows": 10920,
+      "signal_dates": 520,
+      "m8_mode": "full",
+      "m9_alerts_run_id": "20261112_PM_m9_b07_v1"
+    },
+    "rl_s3": {
+      "sha256": "435f8e5f3ea2524cbb951d890d8dc7689b1032365f9c7af4528b7e72a5a0225e",
+      "rows": 10920,
+      "signal_dates": 520,
+      "m8_mode": "full",
+      "m9_alerts_run_id": "20261112_PM_m9_b07_v1"
+    },
+    "rl_s4": {
+      "sha256": "15eda96e50897b4f450dad058fe3e5893b47d445a1a1e3eea48ee8cafef6b339",
+      "rows": 10920,
+      "signal_dates": 520,
+      "m8_mode": "full",
+      "m9_alerts_run_id": "20261112_PM_m9_b07_v1"
+    }
+  },
+  "nav_rows": 2447,
+  "first_fill": "2016-01-11",
+  "last_day": "2025-12-30",
+  "g7": {
+    "daily_return_count": 2446,
+    "mdd_applied": 0.6871119983696123,
+    "mdd_without_m8_m9": 0.6345323002766347,
+    "mdd_reduction_relative": -0.08286370618178888,
+    "cagr_applied": -0.07704543691763588,
+    "cagr_without_m8_m9": -0.0441366362847645,
+    "passed": false
+  },
+  "g5_check": {
+    "rl_mean": {
+      "ir": -1.116189150019136,
+      "cagr": -0.046024432014274044,
+      "annual_turnover": 16.5704870880761
+    },
+    "buffer": {
+      "ir": -1.081460623361016,
+      "cagr": -0.07704543691763588,
+      "annual_turnover": 21.183418900792507
+    },
+    "ir_gain": -0.034728526658120096,
+    "turnover_ratio": 0.7822385595866288,
+    "passed": false
+  },
+  "limits": [
+    "A 원천 v7 신호 생성은 이 C 재계산 범위 밖",
+    "PR #73 병합 전 blob을 입력으로 사용"
+  ],
+  "c_git_commit": "131415bb4eeae7be25e86aa94d747c2fbb806ed5"
+}
