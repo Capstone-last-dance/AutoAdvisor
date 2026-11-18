@@ -63,7 +63,7 @@ _stub/*
 
 # Model weights go to the team drive run_id folder; metrics.json keeps their SHA-256 (PM, 11/10).
 # Do not ignore *.txt: reports/*/git_commit.txt is the R-10 record.
-best.zip
+# best.zip
 *.joblib
 gate_*.txt
 ranker_*.txt
