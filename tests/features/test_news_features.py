@@ -6,7 +6,8 @@ import pytest
 
 from src.common import io
 from src.features.news_features import (NEWS_FEATURES, OUTPUT_COLUMNS, analysis_articles, build_news_features,
-                                        compute_news_features, current_name_since, rank_news_features)
+                                        compute_news_features, current_name_since, name_change_dates,
+                                        rank_news_features)
 
 HOLIDAY = pd.Timestamp("2026-03-02")                                   # 월요일 휴장
 DAYS = pd.bdate_range("2025-10-01", "2026-04-30").drop(HOLIDAY)
@@ -139,6 +140,27 @@ class TestMissing:
         out = raw([(day(-1), "000001", 0.5)], covered_from={"000001": day(-70)})
         assert value(out, "news_cnt_spike") == pytest.approx(2.0)
 
+    def test_rename_after_signal_day_does_not_hide_past_window(self):
+        # DEC-35 회귀: 변경일 목록이면 t 뒤 변경은 t의 창을 결측으로 만들지 않는다 (v6는 날짜 하나라 결측이 됐다)
+        rows = [(day(-1), "000001", 0.5), (day(9), "000001", 0.3)]
+        later = day(10)
+        out = raw(rows, covered_from={"000001": [day(3)]}, dates=(T, later))
+        assert value(out, "news_cnt_spike") == pytest.approx(2.0)
+        assert value(out, "news_sent_5") == pytest.approx(0.5)
+        assert np.isnan(value(out, "news_cnt_spike", t=later))           # 기준 창에 변경일이 든다
+        assert value(out, "news_sent_5", t=later) == pytest.approx(0.3)  # 최근 창은 변경 뒤다
+        fixed = raw(rows, covered_from={"000001": day(3)}, dates=(T, later))
+        assert np.isnan(value(fixed, "news_cnt_spike"))                  # 날짜 하나는 모든 신호일에 적용된다
+
+    def test_rename_list_uses_last_change_up_to_signal_day(self):
+        out = raw([(day(-1), "000001", 0.5)], covered_from={"000001": [day(3), day(-20)]})
+        assert np.isnan(value(out, "news_cnt_spike"))
+        assert value(out, "news_sent_5") == pytest.approx(0.5)
+        on_signal_day = raw([(day(-1), "000001", 0.5)], covered_from={"000001": [T]})
+        assert np.isnan(value(on_signal_day, "news_sent_5"))            # t 당일 변경은 t까지 일어난 변경이다
+        empty = raw([(day(-1), "000001", 0.5)], covered_from={"000001": []})
+        assert value(empty, "news_cnt_spike") == pytest.approx(2.0)
+
 
 class TestRowsAndRanks:
     def test_rows_are_exactly_universe(self):
@@ -187,6 +209,25 @@ def test_future_articles_do_not_change_past_features():
         pd.testing.assert_frame_equal(part.reset_index(drop=True), full[full["date"] == t].reset_index(drop=True))
 
 
+def test_future_renames_do_not_change_past_features():
+    # DEC-35 (4)의 축소판: 신호일마다 t까지 알 수 있던 변경일만 넣어 다시 계산해도 t의 피처가 같다
+    rng = np.random.default_rng(35)
+    pool = pd.date_range("2025-10-01", "2026-04-30", freq="D")
+    rows = [(pool[i], f"00000{k}", float(rng.uniform(-1, 1))) for i, k in
+            zip(rng.integers(0, len(pool), 3000), rng.integers(1, 4, 3000))]
+    tickers = ("000001", "000002", "000003")
+    renames = {"000001": [pd.Timestamp("2026-02-10"), pd.Timestamp("2026-04-01")],
+               "000002": [pd.Timestamp("2026-03-20")], "000003": [pd.Timestamp("2025-11-03")]}
+    dates = tuple(DAYS[(DAYS >= "2026-01-15") & (DAYS <= "2026-04-20")][::4])
+    full = build_news_features(articles(rows), universe(tickers, dates), DAYS, CFG, tickers, COVERAGE, renames)
+    for t in dates:
+        known = {k: [d for d in v if d <= t] for k, v in renames.items()}
+        part = build_news_features(articles(rows), universe(tickers, (t,)), DAYS, CFG, tickers, COVERAGE, known)
+        pd.testing.assert_frame_equal(part.reset_index(drop=True), full[full["date"] == t].reset_index(drop=True))
+    first = full[full["date"] == dates[0]].set_index("ticker")
+    assert first.loc["000002", "news_cnt_spike_na"] == 0                 # 3/20 변경은 1/15 신호일에 영향이 없다
+
+
 def test_rank_news_features_empty():
     assert list(rank_news_features(pd.DataFrame(columns=["date", "ticker", *NEWS_FEATURES])).columns) == OUTPUT_COLUMNS
 
@@ -204,3 +245,10 @@ def test_current_name_since_takes_latest_change():
     renames = pd.DataFrame({"ticker": ["000001", "000001", "000002"],
                             "change_date": ["2015-03-01", "2019-07-01", "2012-01-02"]})
     assert current_name_since(renames) == {"000001": pd.Timestamp("2019-07-01"), "000002": pd.Timestamp("2012-01-02")}
+
+
+def test_name_change_dates_keeps_every_change_in_order():
+    renames = pd.DataFrame({"ticker": ["000001", "000001", "000002", "000001", "000003"],
+                            "change_date": ["2019-07-01", "2015-03-01", "2012-01-02", "2015-03-01", None]})
+    assert name_change_dates(renames) == {"000001": [pd.Timestamp("2015-03-01"), pd.Timestamp("2019-07-01")],
+                                          "000002": [pd.Timestamp("2012-01-02")]}
