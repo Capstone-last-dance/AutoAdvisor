@@ -72,3 +72,5 @@ final_gate.txt
 final_ranker.txt
 test.ipynb
 .ipynb_checkpoints/
+# B-09 탐색 폴더는 브랜치 b09-explore에서만 추적한다 (main에는 넣지 않는다. runs/의 체크포인트 155 MB 포함)
+/explore/
