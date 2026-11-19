@@ -1,7 +1,7 @@
 """forward 신호일 하루치 `ev_*` (DEC-36). M6 테스트의 합성 공시 원본을 그대로 쓴다.
 
 합성 달력의 신호일 T(2026-02-20, 금)의 컷오프는 T 15:30 KST, 기록 마감은 2/23(월) 09:00 KST다.
-`ev_*`는 컷오프 전에 받은 관측만 쓰고(C #70 리뷰), M6 근거는 기록 마감 전 최신 관측을 쓴다.
+`ev_*`는 컷오프 전에 받은 관측만 쓰고(C #70 리뷰), M6 근거도 같은 규칙이라(C #71 리뷰) 둘은 같은 버전을 쓴다.
 """
 from pathlib import Path
 
@@ -28,7 +28,6 @@ LOOKBACK = (DAY - TOO_OLD).days
 BEFORE_CUTOFF = "2026-02-20T08:00:00+09:00"   # 신호일 아침: t−1까지 창이 끝났다
 AFTER_CUTOFF = "2026-02-21T08:00:00+09:00"    # 컷오프 뒤, 기록 마감 전
 CUTOFF = pd.Timestamp(f"{T} 15:30", tz=m9.KST)
-RECORD_DEADLINE = pd.Timestamp("2026-02-23 09:00", tz=m9.KST)
 
 
 def filing(n, day, code, title):
@@ -49,8 +48,8 @@ def events(out, ticker):
 
 
 def m6_versions():
-    """M6 규칙(기록 마감 전 최신 관측)으로 고른 접수번호별 (종목, 제목)."""
-    frame = evidence._disclosures(DAY, DAYS[POSITION - 19:POSITION + 1], CUTOFF, RECORD_DEADLINE, TICKERS)
+    """M6 근거가 고르는 접수번호별 (종목, 제목). `ev_*`와 같은 컷오프 전 관측 규칙이다."""
+    frame = evidence._disclosures(DAY, DAYS[POSITION - 19:POSITION + 1], CUTOFF, TICKERS)
     return dict(zip(frame["rcept_no"], zip(frame["ticker"], frame["report_nm"])))
 
 
@@ -100,9 +99,9 @@ def test_title_revised_after_cutoff_does_not_reach_ev(inputs, client_factory):  
     archive(client_factory, [filing(1, received, "000001", "주식소각결정")],
             day=DAY + pd.Timedelta(days=1), observed_at=AFTER_CUTOFF)
 
-    # 두 제목은 서로 다른 ev_*를 만들고, 수정 제목은 기록 마감 전에 보인다(M6 근거에는 이쪽이 실린다).
+    # 두 제목은 서로 다른 ev_*를 만든다. 수정 제목은 기록 마감 전에 보이지만 M6 근거도 원래 제목을 쓴다.
     (rcept_no, (code, title)), = m6_versions().items()
-    assert (code, title) == ("000001", "주식소각결정")
+    assert (code, title) == ("000001", "자기주식취득결정")
 
     out = run()
     assert events(out, "000001") == ["ev_buyback"] and events(out, "000002") == []
@@ -114,7 +113,7 @@ def test_stock_code_relinked_after_cutoff_keeps_signal_time_ticker(inputs, clien
     archive(client_factory, [filing(1, received, "000002", "자기주식취득결정")],
             day=DAY + pd.Timedelta(days=1), observed_at=AFTER_CUTOFF)
 
-    assert [code for code, _ in m6_versions().values()] == ["000002"]
+    assert [code for code, _ in m6_versions().values()] == ["000001"]
     out = run()
     assert events(out, "000001") == ["ev_buyback"] and events(out, "000002") == []
 

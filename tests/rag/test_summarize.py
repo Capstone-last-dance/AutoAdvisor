@@ -1,10 +1,15 @@
 """M6 LLM 요약의 검사·대체 규칙 (6.7절, PM-11). 모델 없이 가짜 생성기로 검증한다."""
 import json
 
+import pandas as pd
 import pytest
 
 from src.common import io
+from src.pipeline.run_weekly import StepContext
+from src.rag import evidence
 from src.rag import summarize as s
+from tests.conftest import item
+from tests.rag.test_evidence import AFTER_CUTOFF, DAY, T, archive_filings, inputs, ticker  # noqa: F401  (inputs는 fixture)
 
 
 def record(*titles, date="2026-11-27", ticker="000001"):
@@ -87,6 +92,35 @@ def test_summarize_records_pass_retry_fallback_and_no_sources():
     assert all(tuple(r) == io.EVIDENCE_KEYS for r in out) and out[0]["sources"] == good["sources"]
     assert len(calls) == 5 and "다음 규칙 위반을 고쳐" in calls[2][-1] and "처분" in calls[2][-1]
     assert report[2]["attempts"][-1]["problems"]
+
+
+def test_m6_to_summary_input_uses_title_seen_before_cutoff(inputs, client_factory):  # noqa: F811
+    """C #71 리뷰: 같은 공시의 제목이 컷오프 전·후에 다르면, M6 근거와 요약기 입력에는 컷오프 전 제목만 들어간다.
+
+    컷오프 뒤·기록 마감 전에 받은 수정 제목('주식소각결정')은 출처에 없으므로, 그 말을 쓴 요약은 검사에서 막혀
+    템플릿으로 돌아간다.
+    """
+    received = "20260216"                                  # t−19~t 창 안의 거래일
+    archive_filings(client_factory, [item(day=received, stock_code=ticker(1), report_nm="자기주식취득결정")])
+    archive_filings(client_factory, [item(day=received, stock_code=ticker(1), report_nm="주식소각결정")],
+                    day=DAY + pd.Timedelta(days=1), observed_at=AFTER_CUTOFF)
+
+    evidence.m6_step(StepContext(T))
+
+    rec, = s.read_records(io.ROOT / io.EVIDENCE_FOLDER / f"{T}.jsonl")
+    assert [source["title"] for source in rec["sources"]] == ["자기주식취득결정"]
+    prompt = s.user_prompt(rec)
+    assert "자기주식취득결정" in prompt and "소각" not in prompt
+
+    generate, calls = fake("주식 소각 결정을 공시했다 [1].", "주식 소각 결정을 공시했다 [1].")
+    out, report = s.summarize_records([rec], generate)
+    assert report[0]["method"] == "template_fallback" and len(calls) == 2
+    assert any("제목에 없는 말 ['소각']" in p for p in report[0]["attempts"][0]["problems"])
+    assert out[0] == rec                                   # 템플릿 근거 그대로
+
+    generate, _ = fake("자기주식 취득 결정을 공시했다 [1].")
+    out, report = s.summarize_records([rec], generate)
+    assert report[0]["method"] == "llm" and out[0]["summary"] == "자기주식 취득 결정을 공시했다 [1]."
 
 
 def test_main_writes_separate_llm_file_and_report(tmp_path, monkeypatch):
