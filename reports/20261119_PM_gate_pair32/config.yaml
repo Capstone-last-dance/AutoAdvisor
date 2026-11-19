@@ -1,0 +1,28 @@
+run_id: 20261119_PM_gate_pair32
+evaluation: exploratory
+training_seed: 20261119
+max_negatives_per_positive: 32
+calibration_validation_years: 1
+pressure_probability_weight: 0.1
+weekly_flag_fraction: 0.1
+max_iter: 1000
+feature_columns:
+  - vol_60
+  - relative_downside
+  - log_vol_level
+  - turnover_rank_centered_by_cohort
+  - log_market_cap
+  - past_relative_crash_frequency
+  - past_relative_worst_loss
+  - log_cross_section_return_iqr_20
+  - market_beta_120
+  - earnings_provisional
+  - earnings_structure_change
+  - ev_cbbw
+  - ev_dividend
+  - ev_earnings_freshness_20
+  - earnings_five_sessions_with_prior_vol
+  - scaled_sessions_two_to_five_up
+  - scaled_sessions_two_to_five_down
+  - earnings_follow_volume_observed
+  - earnings_days_two_to_five_traded_value_ratio_log
