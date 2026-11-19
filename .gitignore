@@ -72,3 +72,6 @@ final_gate.txt
 final_ranker.txt
 test.ipynb
 .ipynb_checkpoints/
+# B-09 탐색 (브랜치 b09-explore): 선별 체크포인트·positions·로그는 넣지 않는다. 코드·원장·결과 표만 넣는다
+/explore/b09/runs/
+/explore/b09/*.out.txt
