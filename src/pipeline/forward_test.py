@@ -11,6 +11,8 @@ run_weekly 7단계도 같은 record()를 부른다.
 - forward/{YYYYMMDD} 브랜치에서만 기록한다. main에 직접 커밋하지 않는다 (DEC-04).
 - 마감은 신호일 다음 거래일 09:00 KST다 (DEC-04). 지나면 기록하지 않고, 커밋·로그 기록·push 직전마다 다시 확인한다.
 - 날짜별 입력을 커밋 전에 검사한다 (6.8절): 11/20 전 baseline만, 11/20~26 baseline+positions, 11/27부터 ML+positions.
+- 11/27부터 B 병행 모델 비중 positions/wf_{YYYYMMDD}_B_t7c53.parquet이 있으면 같은 신호 커밋·태그에 함께 넣는다
+  (PM 11/20). 없거나 쓸 수 없으면 경고만 남기고 공식 기록은 그대로 한다.
 - 이미 기록한 신호일은 다시 기록하지 않는다 (커밋한 신호는 고치지 않는다).
 - 스텁(_stub/)은 읽지 않는다. 실제 폴더의 파일만 커밋한다.
 - 신호를 만든 코드의 커밋 해시를 두 커밋 메시지에 적는다 (DEC-04).
@@ -42,6 +44,15 @@ POSITIONS_FROM = pd.Timestamp("2026-11-20")
 ML_FROM = pd.Timestamp("2026-11-27")
 
 PUBLISHED_TAGS = "refs/forward-published"  # origin의 ft-* 태그를 받아 두는 곳
+
+# B 병행 모델 비중 (PM 11/20 결정): 11/27부터 공식 기록과 같은 커밋·태그에 함께 남긴다.
+# 경로 positions/wf_{YYYYMMDD}_B_{name}.parquet (io의 run_id 경로). 없으면 공식 기록만 한다.
+PARALLEL_FROM = pd.Timestamp("2026-11-27")
+PARALLEL_NAME = "t7c53"
+
+
+def parallel_run_id(date: str, name: str = PARALLEL_NAME) -> str:
+    return f"{date.replace('-', '')}_B_{name}"
 
 log = logging.getLogger("forward_test")
 
@@ -85,12 +96,13 @@ def _trading_days_after(date: str | pd.Timestamp) -> pd.DatetimeIndex:
 
 
 def record(date: str, source_commit: str, push: bool = True, memo: str | None = None,
-           now: Callable[[], pd.Timestamp] | None = None) -> str:
+           now: Callable[[], pd.Timestamp] | None = None, include_parallel: bool = True) -> str:
     """신호일 date의 신호를 커밋하고 해시를 forward_log.csv에 적는다. 신호 커밋 해시를 돌려준다.
 
     source_commit: 신호를 만든 코드의 커밋 (DEC-04).
     push: False면 커밋과 태그까지만 하고 push하지 않는다 (리허설용).
     memo: 두 커밋 메시지에 덧붙일 설명. 예: universe v1의 관리종목 단계 미적용 (DEC-24).
+    include_parallel: False면 B 병행 모델 비중 파일을 커밋하지 않는다 (그 주 병행 단계가 실패한 경우).
     """
     io._check_date_arg(date)
     now = now or (lambda: pd.Timestamp.now(tz=KST))
@@ -133,16 +145,21 @@ def record(date: str, source_commit: str, push: bool = True, memo: str | None = 
     source = _signal_source(signals)
 
     paths = [f"signals/{date}.parquet"]
+    has_positions = False
     try:
         io.read_table("positions", date=date)
         paths.append(f"positions/{date}.parquet")
+        has_positions = True
     except FileNotFoundError:
         pass
     want_source, want_positions = expected_input(day)
     if source != want_source:
         raise ForwardTestError(f"{date}은 {want_source} 신호를 기록하는 날인데 {source} 신호다 (6.8절)")
-    if (len(paths) > 1) != want_positions:
+    if has_positions != want_positions:
         raise ForwardTestError(f"{date}은 positions {'포함' if want_positions else '없이'} 기록하는 날이다 (6.8절)")
+    parallel = _parallel_path(date, day) if include_parallel else None
+    if parallel:
+        paths.append(parallel)
 
     note = f"\n\n신호를 만든 코드 커밋: {code_commit}" + (f"\n{memo}" if memo else "")
     check_deadline()
@@ -153,7 +170,7 @@ def record(date: str, source_commit: str, push: bool = True, memo: str | None = 
         "signal_date": [day],
         "commit_hash": [commit_hash],
         "signal_source": [source],
-        "has_positions": pd.array([int(len(paths) > 1)], dtype="int8"),
+        "has_positions": pd.array([int(has_positions)], dtype="int8"),
         "label_ready_date": [label_ready_date(date)],
         # 사후 열은 확정 전까지 비워 둔다 (9.3절)
         "mean_er_top20": [float("nan")],
@@ -190,6 +207,27 @@ def record(date: str, source_commit: str, push: bool = True, memo: str | None = 
     return commit_hash
 
 
+def _parallel_path(date: str, day: pd.Timestamp) -> str | None:
+    """함께 커밋할 B 병행 모델 비중 파일 경로. 없거나 쓸 수 없으면 None (공식 기록은 그대로 한다, PM 11/20)."""
+    run_id = parallel_run_id(date)
+    rel = f"positions/wf_{run_id}.parquet"
+    if not (io.ROOT / rel).is_file():
+        if day >= PARALLEL_FROM:
+            log.warning("병행 모델 비중 %s가 없어 공식 기록만 한다", rel)
+        return None
+    if day < PARALLEL_FROM:
+        log.warning("병행 모델 기록은 %s부터라 %s는 커밋하지 않는다", f"{PARALLEL_FROM:%Y-%m-%d}", rel)
+        return None
+    try:
+        df = io.read_table("positions", run_id=run_id)
+        if df.empty or not (df["date"] == day).all():
+            raise ValueError("행이 없거나 다른 날짜의 행이 있다")
+    except Exception as exc:  # 병행 기록 문제로 공식 기록을 막지 않는다
+        log.warning("병행 모델 비중 %s를 쓸 수 없어 공식 기록만 한다 (%s: %s)", rel, type(exc).__name__, exc)
+        return None
+    return rel
+
+
 def past_positions(t: str) -> dict[str, pd.DataFrame]:
     """t보다 앞선 기록의 positions를 태그 ft-*에서 읽어 {신호일 "YYYY-MM-DD": 표}로 날짜순으로 돌려준다.
 
@@ -197,24 +235,40 @@ def past_positions(t: str) -> dict[str, pd.DataFrame]:
     origin에 게시된 태그만 전용 ref로 받아 읽는다. push에 실패해 로컬에만 남은 태그는 기록이 아니다.
     태그의 파일이 스키마를 어기면 예외를 낸다.
     """
+    return past_tables(t, "positions")
+
+
+def past_parallel_positions(t: str, name: str = PARALLEL_NAME) -> dict[str, pd.DataFrame]:
+    """t보다 앞선 기록의 B 병행 모델 비중(positions/wf_{YYYYMMDD}_B_{name}.parquet). 없는 기록은 뺀다."""
+    return past_tables(t, "positions", lambda date: f"positions/wf_{parallel_run_id(date, name)}.parquet")
+
+
+def past_tables(t: str, table: str, path: Callable[[str], str] | None = None) -> dict[str, pd.DataFrame]:
+    """t보다 앞선 기록의 파일을 게시된 태그 ft-*에서 읽어 {신호일: 표}로 날짜순으로 돌려준다.
+
+    table: 스키마 검사에 쓸 9.3절 테이블 이름 (signals 또는 positions).
+    path: 신호일 "YYYY-MM-DD"를 저장소 경로로 바꾸는 함수. 빼면 "{table}/{신호일}.parquet".
+    그 파일이 없는 기록은 뺀다. 파일이 스키마를 어기거나 다른 날짜의 행이 있으면 예외를 낸다.
+    """
     io._check_date_arg(t)
+    path = path or (lambda date: f"{table}/{date}.parquet")
     _git("fetch", "-q", "--prune", "--no-tags", "origin", f"+refs/tags/ft-*:{PUBLISHED_TAGS}/ft-*")
     dates = sorted(f"{m[1]}-{m[2]}-{m[3]}"
                    for tag in _git("for-each-ref", "--format=%(refname:strip=2)", PUBLISHED_TAGS).splitlines()
                    if (m := re.fullmatch(r"ft-(\d{4})(\d{2})(\d{2})", tag)))
     out: dict[str, pd.DataFrame] = {}
     for date in dates:
-        path = f"positions/{date}.parquet"
+        rel = path(date)
         tag = f"{PUBLISHED_TAGS}/ft-{date.replace('-', '')}"
-        if date >= t or not _git("ls-tree", "--name-only", tag, "--", path):
+        if date >= t or not _git("ls-tree", "--name-only", tag, "--", rel):
             continue
-        result = subprocess.run(["git", "-C", str(io.ROOT), "cat-file", "blob", f"{tag}:{path}"], capture_output=True)
+        result = subprocess.run(["git", "-C", str(io.ROOT), "cat-file", "blob", f"{tag}:{rel}"], capture_output=True)
         if result.returncode != 0:
-            raise ForwardTestError(f"{tag}의 {path}를 읽지 못했다")
-        df = io._normalize_dates("positions", pd.read_parquet(BytesIO(result.stdout)))
-        io.validate("positions", df)
+            raise ForwardTestError(f"{tag}의 {rel}를 읽지 못했다")
+        df = io._normalize_dates(table, pd.read_parquet(BytesIO(result.stdout)))
+        io.validate(table, df)
         if not (df["date"] == pd.Timestamp(date)).all():
-            raise ForwardTestError(f"{tag}의 {path}에 다른 날짜의 행이 있다")
+            raise ForwardTestError(f"{tag}의 {rel}에 다른 날짜의 행이 있다")
         out[date] = df
     return out
 
