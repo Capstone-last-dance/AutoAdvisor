@@ -455,6 +455,7 @@ python -m src.pipeline.run_weekly --date YYYY-MM-DD
 
 - 모듈과 연결되지 않은 단계는 9.3절 스키마의 빈 스텁을 `_stub/` 아래에 쓴다. 앞 단계가 스텁이면 뒤 단계의 출력도 `_stub/`에 쓴다.
 - 스텁이 하나라도 쓰인 실행은 forward test 커밋을 하지 않는다.
+- 5b단계(B 병행 모델, `src.portfolio.t7c53:step`)는 선택 단계다. 실패해도 멈추지 않고, 공식 기록은 병행 파일 없이 하며 커밋 메모에 고정 문구만 남긴다. 함수가 아직 없으면 스텁 없이 건너뛴다.
 - 리허설: `--rehearsal`을 붙이면 1~6단계만 실제로 돌리고 7단계 forward test 기록(`forward_log.csv`, 커밋, 태그, push)을 건너뛴다. 지난 신호일 자료로 리허설하거나 진단용 신호를 만들 때 쓴다. 로그는 `logs/{date}_rehearsal.log`에 따로 남는다. `--source-commit`과 함께 쓸 수 없다. 출력 파일(signals, positions, evidence 등)은 실제 폴더에 쓰이니 Git에 커밋하지 않는다.
 
   ```bash
@@ -475,6 +476,7 @@ python -m src.pipeline.forward_test --date YYYY-MM-DD --source-commit <신호를
 
 - `forward/YYYYMMDD` 브랜치에서만 기록한다. main에는 PR을 merge commit으로만 병합한다 (squash·rebase 금지, 해시 보존).
 - 날짜별 입력을 커밋 전에 검사한다: 11/20 전은 baseline만, 11/20~26은 baseline과 positions, 11/27부터는 ML과 positions.
+- 11/27부터 B 병행 모델(T7-80-C53) 비중 `positions/wf_{YYYYMMDD}_B_t7c53.parquet`이 있으면 같은 신호 커밋·태그에 함께 넣는다 (PM 11/20). 없거나 쓸 수 없으면 경고만 남기고 공식 기록은 그대로 한다. 지난 기록은 `past_tables(t, 표, 경로)`·`past_parallel_positions(t)`로 게시된 태그에서 읽는다.
 - 마감은 신호일 다음 거래일 09:00 KST다 (DEC-04). 지나면 기록하지 않는다. 커밋·로그 기록·push 직전마다 다시 확인하고, 도중에 멈추면 끝난 단계와 남은 일을 알려 준다. 이미 기록한 신호일도 다시 기록하지 않는다.
 - `_stub/`의 파일은 읽지 않는다. 신호 파일 외의 변경은 커밋에 넣지 않는다.
 - `--source-commit`의 커밋은 로컬에 있어야 한다 (없으면 `git fetch`). 두 커밋 메시지에 적힌다.

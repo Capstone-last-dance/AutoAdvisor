@@ -193,6 +193,52 @@ class StepsTest(unittest.TestCase):
         self.assertEqual(entries[4], "src.portfolio.weekly:m4_step")
         self.assertEqual(entries[5], "src.portfolio.weekly:m8_step")
         self.assertEqual(entries[6], "src.rag.evidence:m6_step")
+        self.assertEqual(entries["5b"], "src.portfolio.t7c53:step")
+
+    def test_parallel_step_is_optional_and_after_m8(self):
+        order = [s.no for s in rw.STEPS]
+        self.assertEqual(order.index("5b"), order.index(5) + 1)
+        self.assertTrue(next(s for s in rw.STEPS if s.no == "5b").optional)
+        self.assertFalse(any(s.optional for s in rw.STEPS if s.no != "5b"))
+
+
+class OptionalStepTest(TempRootTest):
+    """5b단계(B 병행)는 실패해도 멈추지 않고, 공식 기록은 병행 파일 없이 한다 (PM 11/20)."""
+
+    def run_with(self, parallel):
+        noop = lambda ctx: None
+        steps = with_entries(s1=noop, s2=noop, s3=noop, s4=noop, s5=noop, s6=noop, s5b=parallel)
+        with mock.patch.object(rw.forward_test, "record", return_value="h") as record:
+            code = rw.run(DAY, steps, source_commit="abc")
+        return code, record
+
+    def test_failure_keeps_official_record(self):
+        def boom(ctx):
+            raise RuntimeError("C:\\Users\\some one\\secret.parquet")
+
+        code, record = self.run_with(boom)
+        self.assertEqual(code, 0)
+        record.assert_called_once()
+        self.assertFalse(record.call_args.kwargs["include_parallel"])
+        memo = record.call_args.kwargs["memo"]
+        self.assertIn("B 병행 모델 기록 실패", memo)
+        self.assertNotIn("some one", memo)                       # 공개 커밋에는 고정 문구만
+        log = self.log_text()
+        self.assertIn("실패, 공식 기록은 계속한다", log)
+        self.assertNotIn("스텁으로 대신한다", log)
+
+    def test_success_includes_parallel(self):
+        calls = []
+        code, record = self.run_with(lambda ctx: calls.append(ctx.date))
+        self.assertEqual((code, calls), (0, [DAY]))
+        self.assertTrue(record.call_args.kwargs["include_parallel"])
+        self.assertIsNone(record.call_args.kwargs["memo"])
+
+    def test_unconnected_parallel_is_skipped_without_stub(self):
+        code, record = self.run_with(None)
+        self.assertEqual(code, 0)
+        record.assert_called_once()                                # 스텁 취급이면 기록하지 않았을 것이다
+        self.assertIn("연결된 함수가 없어 건너뛴다 (선택 단계)", self.log_text())
 
 
 class StubPropagationTest(TempRootTest):

@@ -340,6 +340,65 @@ class PastPositionsTest(RepoTest):
         with self.assertRaises(ValueError):
             ft.past_positions("2026-13-01")
 
+    def test_past_tables_reads_signals(self):
+        got = ft.past_tables("2026-12-04", "signals")
+        self.assertEqual(list(got), ["2026-11-06", "2026-11-20", "2026-11-27"])
+        self.assertEqual(set(got["2026-11-27"]["model_version"]), {"lgbm_v1"})
+
+
+def parallel_frame(date):
+    pos = sample("positions"); pos["date"] = pd.Timestamp(date)
+    return pos
+
+
+class ParallelRecordTest(RepoTest):
+    """B 병행 모델 비중 (PM 11/20): 11/27부터 같은 신호 커밋·태그에 넣고, 문제가 있으면 공식 기록만 한다."""
+
+    ML_DAY = "2026-11-27"
+    REL = "positions/wf_20261127_B_t7c53.parquet"
+
+    def at(self, date):
+        return lambda: pd.Timestamp(f"{date} 20:00", tz=ft.KST)
+
+    def test_parallel_file_goes_into_signal_commit_and_tag(self):
+        self.prepare(self.ML_DAY, "lgbm_v1", positions=True)
+        io.write_table("positions", parallel_frame(self.ML_DAY), run_id=ft.parallel_run_id(self.ML_DAY))
+        commit_hash = self.record(self.ML_DAY, now=self.at(self.ML_DAY))
+        self.assertEqual(self.files_in(commit_hash), {f"signals/{self.ML_DAY}.parquet",
+                                                      f"positions/{self.ML_DAY}.parquet", self.REL})
+        self.assertEqual(io.read_table("forward_log").iloc[-1]["has_positions"], 1)
+        self.assertEqual(list(ft.past_parallel_positions("2026-12-04")), [self.ML_DAY])
+        self.assertEqual(ft.past_parallel_positions(self.ML_DAY), {})
+        self.assertEqual(list(ft.past_positions("2026-12-04")), [self.ML_DAY])   # 공식 비중은 따로 읽힌다
+
+    def test_missing_parallel_file_records_official_only(self):
+        self.prepare(self.ML_DAY, "lgbm_v1", positions=True)
+        with self.assertLogs("forward_test", "WARNING") as logs:
+            commit_hash = self.record(self.ML_DAY, now=self.at(self.ML_DAY))
+        self.assertNotIn(self.REL, self.files_in(commit_hash))
+        self.assertIn("공식 기록만", "\n".join(logs.output))
+
+    def test_bad_parallel_file_records_official_only(self):
+        self.prepare(self.ML_DAY, "lgbm_v1", positions=True)
+        wrong = parallel_frame("2026-11-20")                               # 다른 날짜의 행
+        io.write_table("positions", wrong, run_id=ft.parallel_run_id(self.ML_DAY))
+        commit_hash = self.record(self.ML_DAY, now=self.at(self.ML_DAY))
+        self.assertNotIn(self.REL, self.files_in(commit_hash))
+        self.assertIn(f"positions/{self.ML_DAY}.parquet", self.files_in(commit_hash))
+
+    def test_include_parallel_false_skips_file(self):
+        self.prepare(self.ML_DAY, "lgbm_v1", positions=True)
+        io.write_table("positions", parallel_frame(self.ML_DAY), run_id=ft.parallel_run_id(self.ML_DAY))
+        commit_hash = self.record(self.ML_DAY, now=self.at(self.ML_DAY), include_parallel=False)
+        self.assertNotIn(self.REL, self.files_in(commit_hash))
+
+    def test_before_parallel_start_is_not_committed(self):
+        date = "2026-11-20"
+        self.prepare(date, "baseline", positions=True)
+        io.write_table("positions", parallel_frame(date), run_id=ft.parallel_run_id(date))
+        commit_hash = self.record(date, now=self.at(date))
+        self.assertEqual(self.files_in(commit_hash), {f"signals/{date}.parquet", f"positions/{date}.parquet"})
+
 
 class LabelReadyDateTest(unittest.TestCase):
     def test_dates(self):
