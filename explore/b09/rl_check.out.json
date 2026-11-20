@@ -1,0 +1,75 @@
+{
+ "buffer_full": {
+  "ir": -1.1957543186473343,
+  "cagr": -0.07294401336240497,
+  "annual_excess": -0.19292757171086905,
+  "mdd": 0.5359488417269566,
+  "annual_turnover": 20.661028075559322,
+  "mean_cash": 0.07379257940648888
+ },
+ "official_s0": {
+  "positions_same": true,
+  "max_diff": 0.0,
+  "ir": -1.1455545920412393,
+  "cagr": -0.03041050296633352,
+  "annual_excess": -0.1503940613147976,
+  "mdd": 0.3349881662814035,
+  "annual_turnover": 15.823665016781797,
+  "mean_cash": 0.5489587168065877,
+  "ir_gain": 0.05019972660609495,
+  "turnover_ratio": 0.7658701667174144,
+  "cagr_not_lower": true
+ },
+ "official_s1": {
+  "positions_same": true,
+  "max_diff": 0.0,
+  "ir": -1.258268750553262,
+  "cagr": -0.0417193658979943,
+  "annual_excess": -0.16170292424645838,
+  "mdd": 0.3412507014757301,
+  "annual_turnover": 18.238316284922618,
+  "mean_cash": 0.4873427928806537,
+  "ir_gain": -0.06251443190592765,
+  "turnover_ratio": 0.8827400174968729,
+  "cagr_not_lower": true
+ },
+ "official_s2": {
+  "positions_same": true,
+  "max_diff": 0.0,
+  "ir": -1.4684997149418075,
+  "cagr": -0.07335715118796471,
+  "annual_excess": -0.1933407095364288,
+  "mdd": 0.43320106952938553,
+  "annual_turnover": 20.38276056982087,
+  "mean_cash": 0.4500121667807469,
+  "ir_gain": -0.27274539629447325,
+  "turnover_ratio": 0.9865317686651022,
+  "cagr_not_lower": false
+ },
+ "official_s3": {
+  "positions_same": true,
+  "max_diff": 0.0,
+  "ir": -1.194897550552483,
+  "cagr": -0.04195894578551107,
+  "annual_excess": -0.16194250413397515,
+  "mdd": 0.34766011860866786,
+  "annual_turnover": 17.163466717301283,
+  "mean_cash": 0.5083095408536201,
+  "ir_gain": 0.0008567680948512457,
+  "turnover_ratio": 0.8307169737407486,
+  "cagr_not_lower": true
+ },
+ "official_s4": {
+  "positions_same": true,
+  "max_diff": 0.0,
+  "ir": -1.6125618946372609,
+  "cagr": -0.10242680769702694,
+  "annual_excess": -0.22241036604549103,
+  "mdd": 0.5176726323572518,
+  "annual_turnover": 18.92216215945928,
+  "mean_cash": 0.478615242930009,
+  "ir_gain": -0.41680757598992657,
+  "turnover_ratio": 0.915838364395961,
+  "cagr_not_lower": false
+ }
+}

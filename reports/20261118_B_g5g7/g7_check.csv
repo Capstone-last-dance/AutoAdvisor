@@ -1,0 +1,4 @@
+criterion,applied,unapplied,value,threshold,pass
+(MDD_미적용 − MDD_적용) ÷ MDD_미적용 ≥ min_mdd_reduction_rel,0.6871119983696123,0.6345323002766347,-0.08286370618178888,0.25,False
+CAGR_적용 ≥ CAGR_미적용 − max_cagr_giveup,-0.07704543691763588,-0.0441366362847645,-0.03290880063287138,-0.02,False
+"G7 (B 확인값, 판정은 C-07)",,,,,False
