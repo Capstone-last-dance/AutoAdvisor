@@ -10,6 +10,9 @@
 - news_sent_5 = 최근 창 기사 감성 점수의 평균. 기사가 없으면 결측이다.
 - 건수를 구하지 못한 종목·구간은 0이 아니라 결측이다 (DEC-06 (4)). 수집하지 않은 종목, 수집 구간 밖, 현재 상호를 쓰기
   전 구간(옛 상호 기사는 세지 못한다)이 여기에 든다. 창의 달력일이 하나라도 이 범위 밖이면 그 피처는 결측이다.
+- 상호 변경일은 신호일 t까지 일어난 것만 쓴다 (DEC-35). `covered_from`에 변경일 목록을 주면 t마다 t 이하의 마지막
+  변경일을 적용한다. 날짜 하나를 주면 모든 신호일에 같은 날을 적용하므로, t 뒤의 변경일을 넣으면 과거 창이 결측이 되는
+  누수가 생긴다(v6 `pm_features_20261113e`).
 - 순위 변환과 결측 처리는 A와 같은 규칙(`price_features.rank_and_fill`)으로 신호일별 U_t 안에서 한다.
 """
 
@@ -38,7 +41,9 @@ def compute_news_features(articles: pd.DataFrame, universe: pd.DataFrame, tradin
     articles: date(기사 달력일), ticker, sentiment. 분석 대상 기사만 넣는다. 감성 점수가 없는 기사는 건수에만 든다.
     collected: 건수를 수집한 종목. 여기 없는 U_t 종목은 두 피처 모두 결측이다.
     coverage: 빠짐없이 수집한 달력일 구간 (시작, 끝).
-    covered_from: {종목: 현재 상호를 쓰기 시작한 날}. 그 전 달력일이 창에 들면 결측이다.
+    covered_from: {종목: 건수를 믿을 수 있는 첫날}. 그 전 달력일이 창에 들면 결측이다. 값이 날짜 하나면 모든 신호일에
+        같은 날을 쓰고, 날짜 목록(상호 변경일들, `name_change_dates`)이면 신호일 t마다 t 이하의 마지막 날을 쓴다.
+        t 뒤의 변경은 t의 피처에 영향을 주지 않는다 (DEC-35).
     covered_until: {종목: 건수를 믿을 수 있는 마지막 날}. 그 뒤 달력일이 창에 들면 결측이다(예: 새 상호가 일반어·지명과 겹침).
     """
     days = pd.DatetimeIndex(sorted(pd.to_datetime(list(trading_days)))).normalize().unique()
@@ -78,25 +83,37 @@ def compute_news_features(articles: pd.DataFrame, universe: pd.DataFrame, tradin
 
     # 종목별로 건수를 믿을 수 있는 달력일 [lo, hi]
     start, end = pd.Timestamp(coverage[0]).normalize(), pd.Timestamp(coverage[1]).normalize()
-    since = {str(k): pd.Timestamp(v).normalize() for k, v in (covered_from or {}).items() if pd.notna(v)}
+    since, steps = {}, {}                              # 고정 날짜 / 신호일 시점 변경일 목록
+    for k, v in (covered_from or {}).items():
+        if isinstance(v, (list, tuple, set, np.ndarray, pd.Series, pd.Index)):
+            dates = sorted(pd.Timestamp(x).normalize() for x in v if pd.notna(x))
+            if dates:
+                steps[str(k)] = np.array(dates, dtype="datetime64[ns]")
+        elif pd.notna(v):
+            since[str(k)] = pd.Timestamp(v).normalize()
     known = set(map(str, collected))
     until = {str(k): pd.Timestamp(v).normalize() for k, v in (covered_until or {}).items() if pd.notna(v)}
     lo = np.array([max(start, since.get(t, start)) if t in known else pd.Timestamp.max for t in tickers],
                   dtype="datetime64[ns]")
+    stepped = [(column[t], steps[t]) for t in tickers if t in steps and t in known]
     hi_all = np.array([min(end, until.get(t, end)) for t in tickers], dtype="datetime64[ns]")
 
     frames = []
+    lo_t = lo.copy()
     for i, (t, group) in enumerate(members.groupby("date", sort=True)):
         names = np.array(sorted(group["ticker"]), dtype=object)
         cols = np.array([column[n] for n in names])
         r0, r1, b0, b1 = recent[0][i], recent[1][i], base[0][i], base[1][i]
+        for c, dates in stepped:                       # t까지 일어난 변경 중 마지막 날
+            k = int(np.searchsorted(dates, np.datetime64(t), side="right"))
+            lo_t[c] = max(lo[c], dates[k - 1]) if k else lo[c]
         recent_n = _range_sum(count, calendar, r0, r1, cols)
         base_n = _range_sum(count, calendar, b0, b1, cols)
         score_sum = _range_sum(score, calendar, r0, r1, cols)
         score_n = _range_sum(scored, calendar, r0, r1, cols)
         hi = hi_all[cols]
-        ok_recent = (lo[cols] <= np.datetime64(r0)) & (np.datetime64(r1) <= hi)
-        ok_all = (lo[cols] <= np.datetime64(min(r0, b0))) & (np.datetime64(max(r1, b1)) <= hi)
+        ok_recent = (lo_t[cols] <= np.datetime64(r0)) & (np.datetime64(r1) <= hi)
+        ok_all = (lo_t[cols] <= np.datetime64(min(r0, b0))) & (np.datetime64(max(r1, b1)) <= hi)
         spike = np.where(ok_all, (recent_n + 1.0) / (base_n * scale + 1.0), np.nan)
         with np.errstate(invalid="ignore", divide="ignore"):
             sent = np.where(ok_recent & (score_n > 0), score_sum / score_n, np.nan)
@@ -149,10 +166,22 @@ def analysis_articles(links: pd.DataFrame, sentiment: pd.DataFrame | None = None
 
 
 def current_name_since(renames: pd.DataFrame) -> dict[str, pd.Timestamp]:
-    """상호 변경 공시 표(`ticker`, `change_date`)에서 종목별 마지막 변경일 = 현재 상호를 쓰기 시작한 날."""
+    """상호 변경 공시 표(`ticker`, `change_date`)에서 종목별 마지막 변경일 = 현재 상호를 쓰기 시작한 날.
+
+    모든 신호일에 이 날 하나를 쓰면 신호일 뒤 변경이 과거 창을 결측으로 만든다 (DEC-35). 신호일별 판단에는
+    `name_change_dates`를 `covered_from`에 넘긴다.
+    """
     dates = pd.to_datetime(renames["change_date"], errors="coerce")
     latest = dates.groupby(renames["ticker"].astype(str)).max().dropna()
     return {ticker: day.normalize() for ticker, day in latest.items()}
+
+
+def name_change_dates(renames: pd.DataFrame) -> dict[str, list[pd.Timestamp]]:
+    """상호 변경 공시 표(`ticker`, `change_date`)에서 종목별 변경일 전부(오름차순, 중복 제거). `covered_from`에 넘기면
+    신호일 t마다 t 이하의 마지막 변경일만 쓴다 (DEC-35)."""
+    dates = pd.to_datetime(renames["change_date"], errors="coerce").dt.normalize()
+    frame = pd.DataFrame({"ticker": renames["ticker"].astype(str), "date": dates}).dropna().drop_duplicates()
+    return {t: sorted(g["date"]) for t, g in frame.groupby("ticker")}
 
 
 def _spans(days: pd.DatetimeIndex, signals: pd.DatetimeIndex, offsets: tuple[int, int]):

@@ -106,6 +106,49 @@ class FailureTest(TempRootTest):
         self.assertIn("--source-commit", log)
 
 
+class RehearsalTest(TempRootTest):
+    """--rehearsal: 1~6단계는 실제로 돌고 7단계 forward test 기록은 하지 않는다."""
+
+    def setUp(self):
+        super().setUp()
+        self.calls = []
+
+        def step(no):
+            def fn(ctx):
+                self.calls.append(no)
+            return fn
+
+        self.steps = with_entries(**{f"s{n}": step(n) for n in range(1, 7)})
+
+    def test_runs_steps_and_skips_record(self):
+        with mock.patch.object(rw.forward_test, "record") as record:
+            self.assertEqual(rw.run(DAY, self.steps, rehearsal=True), 0)
+        record.assert_not_called()
+        self.assertEqual(self.calls, [1, 2, 3, 4, 5, 6])
+        log = (self.tmp / "logs" / f"{DAY}_rehearsal.log").read_text(encoding="utf-8")
+        self.assertIn("리허설", log)
+        self.assertIn("forward test 기록(forward_log.csv, 커밋, 태그, push)을 하지 않는다", log)
+        self.assertIn("주간 실행 완료", log)
+        self.assertFalse((self.tmp / "logs" / f"{DAY}.log").exists())  # 공식 실행 로그와 섞이지 않는다
+        self.assertFalse((self.tmp / "forward_log.csv").exists())
+
+    def test_failure_still_returns_one(self):
+        def boom(ctx):
+            raise RuntimeError("x")
+
+        steps = with_entries(**{f"s{n}": (boom if n == 3 else (lambda ctx: None)) for n in range(1, 7)})
+        self.assertEqual(rw.run(DAY, steps, rehearsal=True), 1)
+
+    def test_cli_flag(self):
+        with mock.patch.object(rw, "run", return_value=0) as run:
+            self.assertEqual(rw.main(["--date", DAY, "--rehearsal"]), 0)
+        run.assert_called_once_with(DAY, source_commit=None, rehearsal=True)
+
+    def test_cli_rejects_source_commit_with_rehearsal(self):
+        with self.assertRaises(SystemExit):
+            rw.main(["--date", DAY, "--rehearsal", "--source-commit", "abc"])
+
+
 class ForwardCommitMemoTest(unittest.TestCase):
     def ctx(self, **memory):
         return rw.StepContext(date=DAY, source_commit="abc", memory=memory)
@@ -149,6 +192,7 @@ class StepsTest(unittest.TestCase):
         self.assertEqual(entries[3], "src.models.signals:m3_step")
         self.assertEqual(entries[4], "src.portfolio.weekly:m4_step")
         self.assertEqual(entries[5], "src.portfolio.weekly:m8_step")
+        self.assertEqual(entries[6], "src.rag.evidence:m6_step")
 
 
 class StubPropagationTest(TempRootTest):

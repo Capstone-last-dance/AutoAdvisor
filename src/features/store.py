@@ -89,10 +89,11 @@ def m2_step(ctx) -> None:
     A의 `build_features.build`는 1단계가 쓴 `prices`·`index`·`universe`(t까지만 있다, R-03)에서
     전체 신호일 피처를 만든다 — 신호일마다 다시 부르지 않고 t 행만 추려 쓴다.
 
-    PM 피처는 `merge_features(a, pm)`로 합칠 자리가 이미 있지만, PM이 이 단계에 넘길 표(공시·뉴스
-    피처)를 아직 정하지 않았다(issue #5, 1단계와 같은 질문). 그래서 지금은 `pm=None`으로 A 피처만
-    쓴다 — 지금 forward test 신호도 PM 피처 없이 돌고 있어 결과가 달라지지 않는다(R-08). PM이
-    표 이름·시점을 정하면 여기서 `ctx.read_table`로 읽어 넘기기만 하면 된다."""
+    PM 피처(DEC-36): ML 신호 구간(`splits.forward_test.ml_signals_from` 이후)에서는 최종 모델 입력인
+    `ev_*`를 PM의 `signal_day_event_features`로 그 자리에서 계산해 합친다. 공시는 M6와 같은 원본
+    (`data/raw/*_PM_disclosures_*`)을 신호일 t 15:30 KST 전에 받은 버전으로 읽고, 그 전에 수집이 끝나지 않았으면
+    단계가 멈춘다.
+    그 전 신호일(베이스라인)은 PM 피처 없이 A 피처만 쓴다. 최종 모델에는 뉴스 피처가 없다(A-08, 11/10 학습)."""
     from src.features.build_features import build as build_feature_matrix
 
     prices, index, universe = ctx.read_table("prices"), ctx.read_table("index"), ctx.read_table("universe")
@@ -100,4 +101,16 @@ def m2_step(ctx) -> None:
     t = features[features["date"] == pd.Timestamp(ctx.date)].reset_index(drop=True)
     if t.empty:
         raise ValueError(f"신호일 {ctx.date}의 피처 행이 없다 (universe에 그 신호일이 있는지 확인)")
-    ctx.write_table("features", merge_features(t, pm=None), date=ctx.date)
+    ctx.write_table("features", merge_features(t, pm=_pm_features(ctx, universe)), date=ctx.date)
+
+
+def _pm_features(ctx, universe: pd.DataFrame) -> pd.DataFrame | None:
+    """ML 신호 구간이면 신호일 t의 PM `ev_*`, 아니면 None (DEC-36)."""
+    from src.portfolio.params import load_prereg
+
+    cfg = load_prereg()
+    if pd.Timestamp(ctx.date) < pd.Timestamp(cfg["splits"]["forward_test"]["ml_signals_from"]):
+        return None
+    from src.features.event_features import signal_day_event_features
+
+    return signal_day_event_features(ctx.date, universe, ctx.read_table("tickers"), cfg)

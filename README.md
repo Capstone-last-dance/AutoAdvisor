@@ -455,6 +455,12 @@ python -m src.pipeline.run_weekly --date YYYY-MM-DD
 
 - 모듈과 연결되지 않은 단계는 9.3절 스키마의 빈 스텁을 `_stub/` 아래에 쓴다. 앞 단계가 스텁이면 뒤 단계의 출력도 `_stub/`에 쓴다.
 - 스텁이 하나라도 쓰인 실행은 forward test 커밋을 하지 않는다.
+- 리허설: `--rehearsal`을 붙이면 1~6단계만 실제로 돌리고 7단계 forward test 기록(`forward_log.csv`, 커밋, 태그, push)을 건너뛴다. 지난 신호일 자료로 리허설하거나 진단용 신호를 만들 때 쓴다. 로그는 `logs/{date}_rehearsal.log`에 따로 남는다. `--source-commit`과 함께 쓸 수 없다. 출력 파일(signals, positions, evidence 등)은 실제 폴더에 쓰이니 Git에 커밋하지 않는다.
+
+  ```bash
+  python -m src.pipeline.run_weekly --date YYYY-MM-DD --rehearsal
+  ```
+
 - 모듈 연결: `src/pipeline/run_weekly.py`의 `STEPS`에서 해당 단계의 `entry`에 `"모듈경로:함수이름"`을 적는다. 함수는 `fn(ctx)` 형태로, 입력은 `ctx.read_table`, 출력은 `ctx.write_table`로 다룬다. 연결할 함수가 준비되면 D에게 알려 준다.
 
 #### forward test 기록
@@ -487,6 +493,13 @@ python -m src.pipeline.run_daily_alerts --date YYYY-MM-DD
 - 정상 수집 0건이면 0행 파일을 저장한다. 미수집·실패면 파일을 쓰지 않고 종료 코드 1로 끝난다. 그래서 파일이 없으면 미수집이다.
 - 같은 날짜를 다시 돌리면 성공한 결과로만 교체한다. 저장 중 실패하면 기존 파일은 그대로다.
 - 로그는 `logs/alerts_{d}.log`에 남는다.
+- 빠진 날 다시 채우기: `--from`과 `--to`(포함)를 주면 그 기간의 달력일을 하루씩 차례로 돌린다. **앞 기간 경보 파일이 이어져 있을 때** 중간에 빠진 날을 채우는 용도다. 하루가 미수집·실패여도 다음 날은 계속 돌리고, 끝에 파일을 쓰지 못한 날짜를 출력한 뒤 종료 코드 1로 끝난다.
+
+  ```bash
+  python -m src.pipeline.run_daily_alerts --from YYYY-MM-DD --to YYYY-MM-DD
+  ```
+
+- 처음 시작할 때는 이 옵션으로 채울 수 없다. `daily_alerts(d)`는 같은 사건 판정에 d 앞 쿨다운 기간의 경보 파일을 먼저 읽어서(DEC-33), 앞 기간 파일이 없으면 첫날부터 모두 미수집이 된다. 처음 채우는 일은 PM이 M9 `backfill_alert_files(first, last)`로 한다. 첫날부터 미수집이면 실행기가 이 안내를 함께 출력한다.
 
 **실행 순서**: 주간 실행은 신호일 t의 경보 파일까지 읽는다. t일 경보 파일은 t 다음 날 08:00 이후에 만들어지므로 **일간 경보(t일까지) → 주간 실행** 순서로 돌린다. 주간을 먼저 돌리면 M9가 미수집으로 멈춘다.
 
@@ -506,6 +519,13 @@ streamlit run app/Home.py
 - 주중 경보는 범위 안 달력일 중 경보 파일이 없는 날이 있거나 읽지 못한 파일이 있으면 "확정 경보 0건" 대신 미수집 경고를 띄운다.
 - 거래일은 `index`(코스피 200 종가가 있는 날)에 확정된 날만 쓴다. 지수 갱신이 늦으면 기준일과 지연을 표시하고, 신호일이 달력보다 뒤면 후보 계산을 보류한다.
 - 파일을 읽지 못하면 그 부분에 오류를 표시하고 나머지 화면과 고지 문구는 그대로 보여 준다.
+- 성과 페이지는 `reports/final/`의 CSV 세 개를 읽는다 (D-09 제안, C 손석범 11/16 확인). 파일이 하나도 없으면 "확정된 결과 없음"만 표시하고, 일부만 있으면 있는 것만 보여 준다. 그 밖의 파일은 이름만 나열한다.
+
+  | 파일 | 필수 열 | 내용 |
+  |---|---|---|
+  | `kpi.csv` | `gate`, `kpi`, `value`, `threshold`, `verdict` (선택 `note`) | KPI 판정 표 G0~G7, 한 줄에 지표 하나 |
+  | `nav.csv` | `date`, `series`, `nav` | 일간 NAV. 포트폴리오·BM 등 series마다 날짜별 한 줄 |
+  | `periods.csv` | `period`, `start`, `end` (선택 `description`) | 분석 구간 P1~P7 |
 - 배포는 Streamlit Community Cloud에 팀원 이메일로 접속을 제한한다 (Q-16). 설정은 D-08에서 한다.
 
 실제 신호가 없을 때는 샘플 데이터로 화면을 확인한다. 샘플은 `_sample/`에만 만들어지고 Git에 올라가지 않는다. 생성기는 저장소 루트와 샘플이 아닌 기존 폴더에는 쓰지 않는다. 예전에 만든 `_sample/`이 거부되면 지우고 다시 만든다. alerts에 `generated_at` 열이 추가돼(D-06) 11/11 이전에 만든 `_sample/`은 대시보드가 읽지 못하므로 지우고 다시 만든다. 새 샘플은 경보가 없는 날에도 0행 경보 파일을 둔다.
@@ -519,6 +539,21 @@ DASHBOARD_DATA_ROOT=_sample streamlit run app/Home.py
 ```
 
 PowerShell에서는 `$env:DASHBOARD_DATA_ROOT="_sample"`을 먼저 실행한다. `DASHBOARD_DATA_ROOT`가 `_stub/`이나 그 하위 폴더면 스텁 데이터를 표시하지 않고 거부한다.
+
+#### 대시보드 배포
+
+일간·주간 실행은 담당자가 수동으로 하고, 공식 주간 기록(forward test)이 성공한 뒤 배포 스크립트를 돌린다 (Q-17, D-08). 실행에 쓴 앱 코드와 검증된 신호·비중·경보·공시 근거를 비공개 배포 저장소에 한 커밋으로 올리고, Streamlit Community Cloud가 그 저장소의 `app/Home.py`를 띄운다.
+
+```bash
+python -m src.pipeline.publish_dashboard --date YYYY-MM-DD --target ../배포저장소
+```
+
+- `--target`은 비공개 배포 저장소를 clone한 폴더다. origin이 이 공개 저장소와 같으면 거부한다.
+- 신호일이 `forward_log.csv`에 있고 태그 `ft-YYYYMMDD`가 origin에 게시돼 있어야 한다. 신호·비중은 게시된 태그에서 읽으므로 진단용·리허설 신호는 올라가지 않는다.
+- 올리는 파일은 고정돼 있다: 대시보드가 쓰는 코드(`app/`, `src/`의 일부, `configs/prereg.yaml`), 공식 기록 신호일의 signals·positions·evidence, 신호일까지의 alerts, `forward_log.csv`, `data/processed/index.parquet`, `reports/final/`. 뉴스 원문, `data/raw/`, `.env`는 올리지 않는다.
+- 앱 코드에 커밋하지 않은 변경이 있으면 거부한다. 배포 커밋 메시지에 코드 커밋 해시가 남는다.
+- 배포 저장소의 `requirements.txt`는 대시보드에 필요한 패키지(numpy, pandas, pyarrow, streamlit, PyYAML)만 이 저장소와 같은 버전으로 적는다.
+- `--no-push`를 붙이면 배포 저장소에 커밋까지만 한다.
 
 (명세서 6.11절, 6.12절)
 

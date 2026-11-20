@@ -150,6 +150,46 @@ def test_m2_step_writes_only_this_dates_rows_with_pm_none(monkeypatch):
     assert len(written) == 1 and written["ticker"].iloc[0] == "000001" and written["mom_12_1"].iloc[0] == 0.3
 
 
+def test_m2_step_merges_pm_ev_from_ml_signal_date(monkeypatch):
+    # DEC-36: ml_signals_from(2026-11-27)부터 PM ev_*를 합친다 (최종 모델 입력)
+    import src.features.store as store
+
+    t = pd.Timestamp("2026-11-27")
+    a = pd.DataFrame({"date": [t, t], "ticker": ["000001", "000002"], "mom_12_1": [0.1, 0.2]})
+    monkeypatch.setattr("src.features.build_features.build", lambda prices, index, universe: (a, {}))
+    calls = []
+
+    def fake_ev(date, universe, tickers, cfg):
+        calls.append((date, universe, tickers, cfg["splits"]["forward_test"]["ml_signals_from"]))
+        return a[["date", "ticker"]].assign(ev_buyback=pd.Series([1, 0], dtype="int8"))
+
+    monkeypatch.setattr("src.features.event_features.signal_day_event_features", fake_ev)
+    ctx = _FakeCtx("2026-11-27", {"prices": "p", "index": "i", "universe": "u", "tickers": "tk"})
+
+    store.m2_step(ctx)
+
+    _, written = ctx.written["features"]
+    assert written["ev_buyback"].tolist() == [1, 0] and calls == [("2026-11-27", "u", "tk", "2026-11-27")]
+
+
+def test_m2_step_ml_signal_date_stops_when_disclosures_not_collected(monkeypatch):
+    import src.features.store as store
+    from src.events.alerts import AlertsNotCollected
+
+    t = pd.Timestamp("2026-12-04")
+    a = pd.DataFrame({"date": [t], "ticker": ["000001"], "mom_12_1": [0.1]})
+    monkeypatch.setattr("src.features.build_features.build", lambda prices, index, universe: (a, {}))
+
+    def not_collected(*args):
+        raise AlertsNotCollected("공시 수집이 끝나지 않았다")
+
+    monkeypatch.setattr("src.features.event_features.signal_day_event_features", not_collected)
+    ctx = _FakeCtx("2026-12-04", {"prices": "p", "index": "i", "universe": "u", "tickers": "tk"})
+    with pytest.raises(AlertsNotCollected):
+        store.m2_step(ctx)
+    assert "features" not in ctx.written
+
+
 def test_m2_step_raises_if_date_has_no_feature_rows(monkeypatch):
     import src.features.store as store
 
