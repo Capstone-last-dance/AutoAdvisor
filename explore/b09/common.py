@@ -147,11 +147,13 @@ def rank_from_score(df: pd.DataFrame, col: str) -> pd.Series:
 
 def buffer_run(ctx: Ctx, snaps, buffer: BufferRuleParams | None = None, risk: RiskLayerParams | None = None,
                mode: str = "full", with_m9: bool | None = None, exposure_fn=None, block_fn=None,
-               trade_every: int = 1, choose_fn=None) -> pd.DataFrame:
+               trade_every: int = 1, choose_fn=None, hold_scale: bool = False) -> pd.DataFrame:
     """positions를 만든다. exposure_fn(i, snap, E_t, nav_hist, chosen) → 새 E_t (mode full에서만),
     block_fn(i, snap) → 추가 Step 1 차단(bool 배열, mode off에서는 쓰지 않음),
     trade_every: k주마다 리밸런싱 (사이 주는 직전 실제 보유 비중 유지, E_t는 리밸런싱 주에만 곱한다),
-    choose_fn(snap, holdings, buffer) → w_raw Series (기본 buffer_rule_weights)."""
+    choose_fn(snap, holdings, buffer) → w_raw Series (기본 buffer_rule_weights),
+    hold_scale: True면 사이 주에도 들고 있는 종목을 비례로 늘리거나 줄여 합을 그 주 E_t에 맞춘다 (종목은 바꾸지 않음).
+    들고 있는 종목이 없는 사이 주는 그 주에 바구니를 고른다. 기본 False (11/20 T7 비중 에이전트 v5용)."""
     buffer, risk = buffer or ctx.buffer, risk or ctx.risk
     with_m9 = (mode != "off") if with_m9 is None else with_m9
     engine = ctx.engine(with_m9, ledger=exposure_fn is not None)
@@ -160,9 +162,13 @@ def buffer_run(ctx: Ctx, snaps, buffer: BufferRuleParams | None = None, risk: Ri
     for i, snap in enumerate(snaps):
         cooldown = snap.cooldown if mode != "off" else np.zeros_like(snap.cooldown)
         hold_week = trade_every > 1 and i % trade_every != 0 and i > 0
+        if hold_week and hold_scale and not obs:
+            hold_week = False  # hold_scale: 현금 100%인 사이 주는 그 주에 바구니를 고른다
         if hold_week:
             w_raw = pd.Series(obs, dtype="float64")
             w_raw = w_raw[w_raw.index.isin(snap.tickers)]
+            if hold_scale and mode == "full" and float(w_raw.sum()) > 0.0:
+                w_raw = w_raw * (float(snap.exposure) / float(w_raw.sum()))  # 들고 있는 종목을 비례로 그 주 E_t에 맞춘다
         elif choose_fn is not None:
             w_raw = choose_fn(snap, holdings, buffer, cooldown)
         else:
