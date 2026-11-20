@@ -1,0 +1,10 @@
+P-b1-nocash 2016 0
+P-b1-nocash 2017 0
+P-b1-nocash 2018 0
+P-b1-nocash 2019 0
+P-b1-nocash 2020 0
+P-b1-nocash 2016 1
+P-b1-nocash 2017 1
+P-b1-nocash 2018 1
+P-b1-nocash 2019 1
+P-b1-nocash 2020 1

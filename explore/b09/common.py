@@ -74,7 +74,21 @@ class Ctx:
             self.last_period = None
         self._snaps: dict = {}
         self._close = None
+        self._alt: dict = {}
         self.load_seconds = time.perf_counter() - t0
+
+    def alt_signals(self, sig: str | None) -> pd.DataFrame:
+        """성능 트랙 신호 판 (sig_b1.py): None = v7 ML 시험 신호, b1 = A 베이스라인, b1ml = B1 rank + ML 급락."""
+        if sig is None:
+            return self.signals
+        if sig not in self._alt:
+            from sig_b1 import apply_sig, b1_table
+            b1 = b1_table(self.tables["prices"], self.tables["universe"], self.dates)
+            self._alt[sig] = apply_sig(sig, self.signals, b1)
+        return self._alt[sig]
+
+    def sig_snaps(self, sig: str | None):
+        return self.snaps() if sig is None else self.snaps(signals=self.alt_signals(sig), key=f"sig-{sig}")
 
     # ---- 입력 -------------------------------------------------------------
     def snaps(self, signals: pd.DataFrame | None = None, risk: RiskLayerParams | None = None, key: str = "base"):
@@ -136,7 +150,7 @@ def buffer_run(ctx: Ctx, snaps, buffer: BufferRuleParams | None = None, risk: Ri
                trade_every: int = 1, choose_fn=None) -> pd.DataFrame:
     """positions를 만든다. exposure_fn(i, snap, E_t, nav_hist, chosen) → 새 E_t (mode full에서만),
     block_fn(i, snap) → 추가 Step 1 차단(bool 배열, mode off에서는 쓰지 않음),
-    trade_every: k주마다 리밸런싱 (사이 주는 직전 실제 보유 비중 유지),
+    trade_every: k주마다 리밸런싱 (사이 주는 직전 실제 보유 비중 유지, E_t는 리밸런싱 주에만 곱한다),
     choose_fn(snap, holdings, buffer) → w_raw Series (기본 buffer_rule_weights)."""
     buffer, risk = buffer or ctx.buffer, risk or ctx.risk
     with_m9 = (mode != "off") if with_m9 is None else with_m9
@@ -145,7 +159,8 @@ def buffer_run(ctx: Ctx, snaps, buffer: BufferRuleParams | None = None, risk: Ri
     frames, nav_hist = [], []
     for i, snap in enumerate(snaps):
         cooldown = snap.cooldown if mode != "off" else np.zeros_like(snap.cooldown)
-        if trade_every > 1 and i % trade_every != 0 and i > 0:
+        hold_week = trade_every > 1 and i % trade_every != 0 and i > 0
+        if hold_week:
             w_raw = pd.Series(obs, dtype="float64")
             w_raw = w_raw[w_raw.index.isin(snap.tickers)]
         elif choose_fn is not None:
@@ -166,7 +181,9 @@ def buffer_run(ctx: Ctx, snaps, buffer: BufferRuleParams | None = None, risk: Ri
         blocked = snap.crash_flag | cooldown
         if block_fn is not None and mode != "off":
             blocked = blocked | block_fn(i, snap)
-        w = risk_layer_weights(w, blocked, snap.sector_code, e, risk, mode)
+        # 사이 주의 w_raw는 이미 직전 E_t가 곱해진 실제 비중이라 E_t를 다시 곱하지 않는다 (Step 1~3만).
+        # 11/20 고침: 전에는 mode full + trade_every > 1에서 두 번 곱했다 (6절 S-freq-2·S-b1+freq2가 영향을 받음, E = 1 실행은 같음)
+        w = risk_layer_weights(w, blocked, snap.sector_code, 1.0 if hold_week else e, risk, mode)
         cash = check_invariants(w, snap.sector_code, risk, mode)
         targets = {str(snap.tickers[j]): float(w[j]) for j in np.flatnonzero(w > 0.0)}
         frames.append(positions_frame(snap.date, targets, cash, "buffer", e, snap.regime_mc))

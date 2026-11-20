@@ -1,0 +1,29 @@
+{
+ "feature_start": "2010-10-20",
+ "end": "2025-12-30",
+ "n_days": 3740,
+ "n_weekly": 792,
+ "weekly_per_year_min": 11,
+ "weekly_per_year_max": 53,
+ "nan_filled_cells": 0,
+ "top_n": 200,
+ "kospi_tickers_seen": 1248,
+ "top_count_min": 200,
+ "columns": [
+  "r5",
+  "r21",
+  "r63",
+  "r126",
+  "vol20",
+  "vol60",
+  "ma50gap",
+  "ma200gap",
+  "dd126",
+  "breadth50",
+  "breadth200",
+  "adv20",
+  "disp20",
+  "valtrend"
+ ],
+ "seconds_prices": 4.6
+}

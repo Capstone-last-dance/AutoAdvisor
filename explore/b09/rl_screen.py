@@ -62,6 +62,11 @@ VARIANTS: dict[str, dict] = {
                             "why": "R-tpen-0.005 정책 + 운용 때 평활 0.5 (투자 비중 유지)"},
     "R-tpen-0.005+Ik-0.7": {"x": {"smooth": 0.7, "keep_invested": True}, "src": "R-tpen-0.005",
                             "why": "R-tpen-0.005 정책 + 운용 때 평활 0.7 (투자 비중 유지)"},
+    # 11/19 성능 트랙 1단계 (재학습 허용): 신호 판을 바꿔 사전등록 설정으로 다시 학습. 비교 버퍼도 같은 신호 (sig_b1.py)
+    "P-b1": {"sig": "b1", "why": "A 베이스라인 신호(B1 rank = mom_12_1, crash = vol_60 상위 10%)로 학습·검증·시험"},
+    "P-b1ml": {"sig": "b1ml", "why": "rank만 B1, crash_flag·crash_prob는 v7 ML (학습 rlsig, 시험 wfnews)"},
+    # 11/19 격자 1차 뒤 추가: B1 신호에서 RL이 버퍼에 진 원인이 현금(25~36%)이라 현금 로짓 없는 판 (현금은 M8만)
+    "P-b1-nocash": {"sig": "b1", "x": {"nocash": True}, "why": "B1 신호 + 현금 로짓 없음, 절단 뒤 재정규화"},
 }
 
 
@@ -142,6 +147,7 @@ def spec(vid: str) -> dict:
     v.setdefault("lam", None)
     v.setdefault("rl", {})
     v.setdefault("ckpt", "best")
+    v.setdefault("sig", None)
     return v
 
 
@@ -162,12 +168,22 @@ class Base:
         self.ends = read_label_end_dates(END_DATES)
         self.inputs = engine_inputs(*(self.tables[n] for n in ENGINE_TABLES))
         self.m9 = m9_schedule(M9_RUN, self.dates[0], self.dates[-1])
+        self._b1 = None
 
-    def fold_data(self, fold: int):
+    def b1(self) -> pd.DataFrame:
+        if self._b1 is None:
+            from sig_b1 import b1_table
+            self._b1 = b1_table(self.tables["prices"], self.tables["universe"], self.dates)
+        return self._b1
+
+    def fold_data(self, fold: int, sig: str | None = None):
         fs = fold_split(self.dates, self.bm.index, fold, self.cfg, actual_end_dates=self.ends)
         needed = sorted({pd.Timestamp(d).strftime("%Y-%m-%d") for d in list(fs.train) + list(fs.val)})
         members = members_by_date(self.tables["universe"], needed)
         signals = ml_signal_table(f"{RLSIG}_y{fold}", fs)
+        if sig is not None:  # 성능 트랙: 같은 신호일·종목에서 신호 판만 바꾼다
+            from sig_b1 import apply_sig
+            signals = apply_sig(sig, signals, self.b1())
         features = feature_table(self.tables["prices"], self.bm, members, self.risk)
         snaps = build_snapshots(needed, signals, features, self.tables["universe"], self.tables["sector"],
                                 self.inputs.bm_close, self.m9.cooldown_at, self.risk)
@@ -185,7 +201,7 @@ def train(base: Base, vid: str, fold: int, seed: int) -> dict:
     lam = official_lambda(fold) if v["lam"] is None else float(v["lam"])
     steps = v["steps"] or rl.total_timesteps_per_seed
     t0 = time.perf_counter()
-    fs, snaps, engine = base.fold_data(fold)
+    fs, snaps, engine = base.fold_data(fold, v["sig"])
     by = {s.date: s for s in snaps}
     iso = lambda ds: [pd.Timestamp(d).strftime("%Y-%m-%d") for d in ds]
     train_snaps, val_snaps = [by[d] for d in iso(fs.train)], [by[d] for d in iso(fs.val)]
@@ -215,14 +231,15 @@ def evaluate(vid: str, seed: int, ctx: Ctx | None = None, buffer_full: dict | No
         d = RUNS / v.get("src", vid) / f"y{y}_s{seed}"
         pols[y] = PPO.load(d / ("last.zip" if v["ckpt"] == "last" else "best.zip"), device=DEVICE)
     engine = ctx.engine(True, ledger=False)
-    env = XEnv(ctx.snaps(), engine, rl, ctx.risk, 0.0, "full", calendar=ctx.all_dates, x=v["x"])
+    snaps = ctx.sig_snaps(v["sig"])
+    env = XEnv(snaps, engine, rl, ctx.risk, 0.0, "full", calendar=ctx.all_dates, x=v["x"])
     run = rollout(env, lambda d: pols[int(d[:4])])
     pos = run.positions
     s = ctx.evaluate(pos, with_m9=True)
     if buffer_full is None:
-        buffer_full = ctx.evaluate(buffer_run(ctx, ctx.snaps(), mode="full"), with_m9=True)
+        buffer_full = ctx.evaluate(buffer_run(ctx, snaps, mode="full"), with_m9=True)
     g5 = g5_judgment({seed: s}, buffer_full, ctx.kpi)
-    out = {"vid": vid, "seed": seed, "years": f"{ctx.years[0]}-{ctx.years[-1]}", **brief(s),
+    out = {"vid": vid, "seed": seed, "years": f"{ctx.years[0]}-{ctx.years[-1]}", "sig": v["sig"], **brief(s),
            "buffer": brief(buffer_full), "ir_gain": g5["ir_gain"], "turnover_ratio": g5["turnover_ratio"],
            "cagr_not_lower": g5["cagr_not_lower"], "pass_by_ir": g5["pass_by_ir"],
            "pass_by_alternative": g5["pass_by_alternative"], "pass": g5["pass"]}

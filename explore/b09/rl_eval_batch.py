@@ -29,12 +29,22 @@ ready = [v for v in want if complete(v)]
 missing = [v for v in want if v not in ready]
 print("평가할 변형:", ready, "\n폴드가 덜 끝난 변형(건너뜀):", missing, flush=True)
 ctx = Ctx(SEARCH_YEARS)
-buf = ctx.evaluate(buffer_run(ctx, ctx.snaps(), mode="full"), with_m9=True)
+bufs: dict = {}
+
+
+def buffer_for(sig):
+    """G5 비교 버퍼: 사전등록 버퍼 규칙 + M8 + M9, RL 변형과 같은 신호 판."""
+    if sig not in bufs:
+        bufs[sig] = ctx.evaluate(buffer_run(ctx, ctx.sig_snaps(sig), mode="full"), with_m9=True)
+    return bufs[sig]
+
+
+buf = buffer_for(None)
 rows = []
 for vid in ready:
     ledger.plan(vid, "G5", f"학습 변형 {VARIANTS[vid].get('why', '')}", f"선별 구간 시드 {seed}")
     try:
-        r = evaluate(vid, seed, ctx, buf)
+        r = evaluate(vid, seed, ctx, buffer_for(spec(vid)["sig"]))
         if vid == "R0":
             pos = pd.read_parquet(RUNS / "R0" / f"positions_s{seed}_{r['years']}.parquet")
             off = pd.read_parquet(REPO / f"positions/wf_20261117_B_rl_wf_s{seed}.parquet")
@@ -57,5 +67,6 @@ if path.exists():  # 일부 변형만 다시 평가해도 나머지 행은 남�
     old = pd.read_csv(path)
     out = pd.concat([old[~old["vid"].isin(out["vid"])], out], ignore_index=True)
 out.to_csv(path, index=False)
-print("buffer", json.dumps(brief(buf), ensure_ascii=False, default=float))
+for k, b in bufs.items():
+    print("buffer", k, json.dumps(brief(b), ensure_ascii=False, default=float))
 print("done", len(rows))
