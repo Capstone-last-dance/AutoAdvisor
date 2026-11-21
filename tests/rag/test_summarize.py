@@ -50,6 +50,23 @@ def test_wrong_summaries_are_caught(text, title, expected):
     assert any(expected in p for p in problems), problems
 
 
+def test_citing_original_and_amendment_requires_correction():
+    rec = record("[기재정정]단일판매ㆍ공급계약체결", "단일판매ㆍ공급계약체결")
+    flattened = "단일판매·공급계약 체결을 공시했다 [1][2]."
+    assert any("정정이라고 쓰지 않은" in problem for problem in s.check(flattened, rec))
+    correct = "단일판매·공급계약 체결 공시를 정정했다 [1]. 단일판매·공급계약 체결을 공시했다 [2]."
+    assert s.check(correct, rec) == []
+
+
+@pytest.mark.parametrize("company", ["종속회사", "자회사"])
+def test_subsidiary_remains_the_subject(company):
+    title = f"타법인주식및출자증권취득결정({company}의 주요 경영사항)"
+    rec = record(title)
+    shortened = "타법인 주식 및 출자증권 취득 결정을 공시했다 [1]."
+    assert any(f"공시 주체인 '{company}'" in problem for problem in s.check(shortened, rec))
+    assert s.check(f"{company}의 타법인 주식 및 출자증권 취득 결정을 공시했다 [1].", rec) == []
+
+
 def test_every_source_cited_and_at_most_three_sentences():
     rec = record("기업설명회(IR)개최(안내공시)", "주주총회소집결의")
     assert any("인용하지 않은 출처 [2]" in p for p in s.check("기업설명회 개최를 안내했다 [1].", rec))
