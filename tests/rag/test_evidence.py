@@ -1,4 +1,8 @@
-"""합성 저장소에서 주간 M6 템플릿의 대상·공시 시점·출력을 검증한다."""
+"""합성 저장소에서 주간 M6 템플릿의 대상·공시 시점·출력을 검증한다.
+
+신호일 T(2026-02-20, 금)의 컷오프는 T 15:30 KST, 기록 마감은 2/23(월) 09:00 KST다. 공시의 수집 완료와
+버전(제목·종목코드)은 컷오프 전에 끝난 수집·받은 관측으로 정한다(6.7절, C #71 리뷰).
+"""
 from datetime import datetime
 from types import SimpleNamespace
 
@@ -18,7 +22,8 @@ T = "2026-02-20"
 DAY = pd.Timestamp(T)
 PREVIOUS = "2026-02-12"  # 합성 달력에서 전 주 금요일은 휴장
 DAYS = pd.bdate_range("2026-01-05", "2026-02-25").difference(pd.DatetimeIndex(["2026-02-13"]))
-ARCHIVE_READY = "2026-02-21T08:00:00+09:00"
+ARCHIVE_READY = "2026-02-20T08:00:00+09:00"   # 신호일 아침: t−1까지 창이 끝났다
+AFTER_CUTOFF = "2026-02-21T08:00:00+09:00"    # 컷오프 뒤, 기록 마감 전
 RECORD_DEADLINE = "2026-02-23T09:00:00+09:00"
 
 
@@ -118,7 +123,8 @@ def test_availability_is_strict_and_summary_has_at_most_three_citations(inputs, 
         pd.Timestamp(f"{T} {time}", tz=m9.KST)
         for time in ("15:30:00", "15:29:59", "15:29:58", "15:29:57", "15:29:56")
     ]).as_unit("ns")
-    observed = frame.assign(fetched_at=frame["available_at"], pblntf_ty="I", run_id="run", window_id="I")
+    # 관측은 모두 컷오프 전에 받았다고 두어, 경계는 이용 가능 시각만으로 갈리게 한다.
+    observed = frame.assign(fetched_at=ARCHIVE_READY, pblntf_ty="I", run_id="run", window_id="I")
     windows = pd.DataFrame([
         {"run_id": "run", "window_id": kind, "pblntf_ty": kind, "state": "complete",
          "bgn": "2026-01-05", "end": "2026-02-19", "accepted_attempts": [1],
@@ -187,34 +193,36 @@ def test_targets_cooldown_rank_limit_and_alert_window(inputs, client_factory):
     assert io.read_evidence(T) == records
 
 
-def test_mixed_iso_observation_times_keep_latest_before_deadline(inputs, client_factory):
+def test_mixed_iso_observation_times_keep_latest_before_cutoff(inputs, client_factory):
     old = item(day="20260219", stock_code=ticker(1), report_nm="첫 관측")
-    latest = item(day="20260219", stock_code=ticker(1), report_nm="마감 전 최신 관측")
+    latest = item(day="20260219", stock_code=ticker(1), report_nm="컷오프 전 최신 관측")
     archive_filings(client_factory, [old], day=DAY - pd.Timedelta(days=1),
-                    observed_at="2026-02-20T08:00:00.100003+09:00")
+                    observed_at="2026-02-19T20:00:00.100003+09:00")
     archive_filings(client_factory, [latest])
 
     evidence.m6_step(StepContext(T))
 
     record, = io.read_evidence(T)
-    assert [source["title"] for source in record["sources"]] == ["마감 전 최신 관측"]
+    assert [source["title"] for source in record["sources"]] == ["컷오프 전 최신 관측"]
 
 
-@pytest.mark.parametrize("observed_at", [RECORD_DEADLINE, "2026-02-26T10:00:00+09:00"])
+@pytest.mark.parametrize("observed_at", [AFTER_CUTOFF, RECORD_DEADLINE, "2026-02-26T10:00:00+09:00"])
 def test_late_archive_cannot_change_past_evidence(inputs, client_factory, observed_at):
+    """컷오프 뒤에 받은 수정본(제목·종목코드)과 새 공시는 기록 마감 전이어도 t의 근거를 바꾸지 않는다 (C #71 리뷰)."""
     tables, _ = inputs
     tables["tickers"] = pd.DataFrame({
         "ticker": [ticker(1), ticker(2)], "listing_date": pd.to_datetime(["2020-01-01"] * 2),
         "delisting_date": pd.to_datetime([None, None]),
     })
     tables["signals"] = pd.DataFrame({"ticker": [ticker(1), ticker(2)], "rank": [1, 2], "crash_flag": [1, 0]})
-    original = item(day="20260219", stock_code=ticker(1), report_nm="기록 마감 전 원본")
+    original = item(day="20260219", stock_code=ticker(1), report_nm="컷오프 전 원본")
     archive_filings(client_factory, [original])
     evidence.m6_step(StepContext(T))
     before = io.read_evidence(T)
-    assert before[0]["sources"][0]["title"] == "기록 마감 전 원본"
+    assert before[0]["sources"][0]["title"] == "컷오프 전 원본"
+    assert before[1]["sources"] == []
 
-    revised = item(day="20260219", stock_code=ticker(2), report_nm="기록 마감 뒤 제목")
+    revised = item(day="20260219", stock_code=ticker(2), report_nm="컷오프 뒤 제목")
     late_only = item(2, day="20260219", stock_code=ticker(2), report_nm="뒤늦게 발견된 공시")
     archive_filings(client_factory, [revised, late_only], day=DAY + pd.Timedelta(days=1),
                     observed_at=observed_at)
@@ -223,12 +231,16 @@ def test_late_archive_cannot_change_past_evidence(inputs, client_factory, observ
     assert io.read_evidence(T) == before
 
 
-@pytest.mark.parametrize("case", ["absent", "missing_day", "missing_type", "completed_after_deadline"])
+@pytest.mark.parametrize("case", ["absent", "missing_day", "missing_type", "completed_after_cutoff",
+                                  "completed_after_deadline"])
 def test_missing_disclosure_coverage_stops_without_writing(inputs, client_factory, case):
+    """컷오프 뒤에만 끝난 수집으로는 신호 시점의 버전을 확인할 수 없어, 기록 마감 전이어도 멈춘다."""
     if case == "missing_day":
         archive_filings(client_factory, lookback=5)
     elif case == "missing_type":
         archive_filings(client_factory, types=("B",))
+    elif case == "completed_after_cutoff":
+        archive_filings(client_factory, observed_at=AFTER_CUTOFF)
     elif case == "completed_after_deadline":
         archive_filings(client_factory, observed_at=RECORD_DEADLINE)
 
