@@ -142,7 +142,21 @@ class RehearsalTest(TempRootTest):
     def test_cli_flag(self):
         with mock.patch.object(rw, "run", return_value=0) as run:
             self.assertEqual(rw.main(["--date", DAY, "--rehearsal"]), 0)
-        run.assert_called_once_with(DAY, source_commit=None, rehearsal=True)
+        run.assert_called_once_with(DAY, source_commit=None, rehearsal=True, late=None)
+
+    def test_cli_late_passes_reason(self):
+        with mock.patch.object(rw, "run", return_value=0) as run:
+            self.assertEqual(rw.main(["--date", DAY, "--source-commit", "abc", "--late", "PM 승인"]), 0)
+        run.assert_called_once_with(DAY, source_commit="abc", rehearsal=False, late="PM 승인")
+
+    def test_cli_late_needs_source_commit(self):
+        with self.assertRaises(SystemExit):
+            rw.main(["--date", DAY, "--late", "PM 승인"])
+
+    def test_late_reaches_record(self):
+        with mock.patch.object(rw.forward_test, "record", return_value="h") as record:
+            rw.forward_test_commit(rw.StepContext(date=DAY, source_commit="abc", late="PM 승인"))
+        self.assertEqual(record.call_args.kwargs["late"], "PM 승인")
 
     def test_cli_rejects_source_commit_with_rehearsal(self):
         with self.assertRaises(SystemExit):

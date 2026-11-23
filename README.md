@@ -479,6 +479,7 @@ python -m src.pipeline.forward_test --date YYYY-MM-DD --source-commit <신호를
 - `_stub/`의 파일은 읽지 않는다. 신호 파일 외의 변경은 커밋에 넣지 않는다.
 - `--source-commit`의 커밋은 로컬에 있어야 한다 (없으면 `git fetch`). 두 커밋 메시지에 적힌다.
 - 리허설은 `--no-push`로 커밋·태그까지만 한다. push만 실패하면 안내된 `git push` 명령을 직접 실행한다.
+- 마감 후 기록: 마감이 지난 신호일은 PM이 승인하고 `docs/deviation_log.md`에 그 신호일의 "마감 후 기록" 행이 있을 때만 `--late "<사유>"`로 기록한다 (`run_weekly`에도 같은 옵션). 태그는 `ft-late-YYYYMMDD`로 정식 기록과 구분하고, 커밋 메시지에 마감과 실제 기록 시각을 남긴다. `forward_log.csv`에는 적지 않고 `past_positions` 등 정식 태그 읽기에도 들어가지 않는다. 마감 전에는 쓸 수 없다.
 
 #### 일간 경보
 
