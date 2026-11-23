@@ -1,0 +1,100 @@
+{
+  "run_id": "20261123_C_c10_v7_final",
+  "classification": "C-10 preregistered 2016-2025 v7; no 2026 holdout",
+  "input_sha256": {
+    "metrics.json": "948c20a927d5816076ce540cf82882fbd76ec029bf59888036c95f197b387df9",
+    "daily_nav.csv": "76ce6bec71c0079474d06a7e24cf2bc41fe55874b1d61a078b436c19cfae53e8",
+    "weekly_excess.csv": "f9dc49eea79b4280ae188f0b6d90b38b9020a74f313aa912b17ca0a898e66fa3",
+    "prereg.yaml": "ed4ddd1f3ee1b880a9cd0adbe73f8f672ba6a2af2b0dd2b0c5b9e1cff53250ac",
+    "positions/wf_20261118_B_buffer_wf_full.parquet": "ae882a1681dfc39e81894bb0d05d1d173a82aef4d5d6a29db927942d35a2123f",
+    "positions/wf_20261118_B_buffer_wf_no_exposure.parquet": "001fb33032967df8e147be4e4ee204baba44f4a442f37f2990dc8ad41c8c55d4",
+    "positions/wf_20261118_B_buffer_wf_off.parquet": "c965e27c1a91332b7abdc75c4d32fc287c5acd897088f6d24f92b04c2ba2545b"
+  },
+  "overall": {
+    "buffer_full": {
+      "portfolio": "buffer_full",
+      "first_day": "2016-01-11",
+      "last_day": "2025-12-30",
+      "base_day": "first_fill_pretrade",
+      "daily_returns": 2446,
+      "return": -0.5407723390929862,
+      "bm_return": 1.625222024866785,
+      "cagr": -0.07704543691763588,
+      "bm_cagr": 0.1045483388559667,
+      "annual_excess": -0.18159377577360258,
+      "mdd": 0.6871119983696123,
+      "bm_mdd": 0.4118584540920225,
+      "capture_ratio": -0.3327375157479248,
+      "weeks": 519,
+      "ir": -1.081460623361016
+    },
+    "buffer_no_exposure": {
+      "portfolio": "buffer_no_exposure",
+      "first_day": "2016-01-11",
+      "last_day": "2025-12-30",
+      "base_day": "first_fill_pretrade",
+      "daily_returns": 2446,
+      "return": -0.36060475283134563,
+      "bm_return": 1.625222024866785,
+      "cagr": -0.04503088679681355,
+      "bm_cagr": 0.1045483388559667,
+      "annual_excess": -0.14957922565278026,
+      "mdd": 0.6300104548008623,
+      "bm_mdd": 0.4118584540920225,
+      "capture_ratio": -0.22188030146890447,
+      "weeks": 519,
+      "ir": -0.6602662046171708
+    },
+    "buffer_off": {
+      "portfolio": "buffer_off",
+      "first_day": "2016-01-11",
+      "last_day": "2025-12-30",
+      "base_day": "first_fill_pretrade",
+      "daily_returns": 2446,
+      "return": -0.3547694124799259,
+      "bm_return": 1.625222024866785,
+      "cagr": -0.0441366362847645,
+      "bm_cagr": 0.1045483388559667,
+      "annual_excess": -0.1486849751407312,
+      "mdd": 0.6345323002766347,
+      "bm_mdd": 0.4118584540920225,
+      "capture_ratio": -0.21828981336196535,
+      "weeks": 519,
+      "ir": -0.6537204188124375
+    }
+  },
+  "g4_checks": {
+    "annual_excess": false,
+    "ir": false,
+    "mdd": false,
+    "double_cost_excess": false
+  },
+  "g4_passed": false,
+  "double_cost": {
+    "ir": -1.6285400442686082,
+    "cagr": -0.15544051031180983,
+    "annual_excess": -0.25998884916777654,
+    "mdd": 0.8596621087967348,
+    "annual_turnover": 21.231479383588656,
+    "mean_cash": 0.11732642140769292,
+    "weeks": 519,
+    "trading_days": 2446,
+    "first_fill": "2016-01-11",
+    "last_day": "2025-12-30",
+    "final_nav": 0.19402046797603187,
+    "last_turnover": 0.044558091285160965,
+    "excess_positive": false,
+    "base_nav_max_abs_diff": 6.8833827526759706e-15,
+    "market_sha256": {
+      "prices": "e735be46c5ca1685f922d0c8ee78f2129d8c8256bb6cfd9181723ccd0b01b5a5",
+      "status": "40812ae37f997ef5dd0b42fc2f453a15839cd9d0f4967d1b9d37fdad7e7363b3",
+      "index": "ce9ffb646c4723fe067c76eaba90a526683444369ac7ab43e53684e662e9300e",
+      "delisted": "fc14a9183780605617f72fa784f785b4ae0635fbbef46c0d7225cc539478a54c",
+      "delisted_reused": "a73192de4525b05e626bd24bff5dc30e205546d6ed963bbaf5f9c1ff7ce80a25"
+    },
+    "alerts_sha256": "f537cc819973b84a84ca1ed545288795a35d225d731fdb472726cdd14166ddc9"
+  },
+  "double_cost_status": "complete",
+  "period_rows": 21,
+  "stress_rows": 6
+}
