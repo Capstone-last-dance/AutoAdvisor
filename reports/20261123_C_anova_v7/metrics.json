@@ -1,0 +1,43 @@
+{
+  "analysis": "M12 supplementary ANOVA; p-values are not KPI pass/fail criteria",
+  "input_sha256": {
+    "reports\\20261118_B_buffer_wf\\weekly_excess.csv": "f9dc49eea79b4280ae188f0b6d90b38b9020a74f313aa912b17ca0a898e66fa3",
+    "reports\\20261117_B_rl_wf\\fold_seed_ir.csv": "07a5d5eeed6641ced080c5de572ed5b263b1599925fff529b6c762d87eabe668"
+  },
+  "anova_1": {
+    "paired_weeks": 519,
+    "rows": 1038,
+    "effects": {
+      "C(period)": {
+        "F": 1.4515565404369883,
+        "PR(>F)": 0.19181256662685242,
+        "partial_eta_sq": 0.008433485504265186
+      },
+      "C(risk_layer_on)": {
+        "F": 0.4007112059576991,
+        "PR(>F)": 0.526863526048901,
+        "partial_eta_sq": 0.0003911664659876787
+      },
+      "C(period):C(risk_layer_on)": {
+        "F": 0.2379027338968763,
+        "PR(>F)": 0.9640576967069003,
+        "partial_eta_sq": 0.0013920209081085683
+      }
+    }
+  },
+  "anova_2": {
+    "fold_seed_cells": 50,
+    "effects": {
+      "C(fold)": {
+        "F": 65.37945934536585,
+        "PR(>F)": 1.3021676480456647e-19,
+        "partial_eta_sq": 0.9423460482721796
+      },
+      "C(seed)": {
+        "F": 1.6085410654234558,
+        "PR(>F)": 0.19328088675801805,
+        "partial_eta_sq": 0.15162698202358782
+      }
+    }
+  }
+}
