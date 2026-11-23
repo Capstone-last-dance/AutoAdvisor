@@ -11,8 +11,9 @@ run_weekly 7단계도 같은 record()를 부른다.
 - forward/{YYYYMMDD} 브랜치에서만 기록한다. main에 직접 커밋하지 않는다 (DEC-04).
 - 마감은 신호일 다음 거래일 09:00 KST다 (DEC-04). 지나면 기록하지 않고, 커밋·로그 기록·push 직전마다 다시 확인한다.
 - 날짜별 입력을 커밋 전에 검사한다 (6.8절): 11/20 전 baseline만, 11/20~26 baseline+positions, 11/27부터 ML+positions.
-- 11/27부터 B 병행 모델 비중 positions/wf_{YYYYMMDD}_B_t7c53.parquet이 있으면 같은 신호 커밋·태그에 함께 넣는다
-  (PM 11/20). 없거나 쓸 수 없으면 경고만 남기고 공식 기록은 그대로 한다.
+- B 병행 모델 비중 positions/wf_{YYYYMMDD}_B_t7c53.parquet은 지금 기록하지 않는다 (보류, B 설계 11/20·PM #77 리뷰).
+  PARALLEL_FROM이 None이면 같은 날짜 파일이 있어도 공식 커밋에 넣지 않는다. PM이 시작일을 정하면 그 날짜를 넣는다.
+  켜진 뒤에도 파일이 없거나 쓸 수 없으면 경고만 남기고 공식 기록은 그대로 한다.
 - 이미 기록한 신호일은 다시 기록하지 않는다 (커밋한 신호는 고치지 않는다).
 - 스텁(_stub/)은 읽지 않는다. 실제 폴더의 파일만 커밋한다.
 - 신호를 만든 코드의 커밋 해시를 두 커밋 메시지에 적는다 (DEC-04).
@@ -45,9 +46,11 @@ ML_FROM = pd.Timestamp("2026-11-27")
 
 PUBLISHED_TAGS = "refs/forward-published"  # origin의 ft-* 태그를 받아 두는 곳
 
-# B 병행 모델 비중 (PM 11/20 결정): 11/27부터 공식 기록과 같은 커밋·태그에 함께 남긴다.
+# B 병행 모델 비중: 켜지면 그 날짜부터 공식 기록과 같은 커밋·태그에 함께 남긴다.
 # 경로 positions/wf_{YYYYMMDD}_B_{name}.parquet (io의 run_id 경로). 없으면 공식 기록만 한다.
-PARALLEL_FROM = pd.Timestamp("2026-11-27")
+# 지금은 보류다 (None): RL이 바구니의 지난 1년을 보므로 개봉 전 forward는 홀드아웃 성과를 계산하는 셈이라
+# 11/27 병행 기록은 하지 않는다 (B 설계 11/20). 개봉 뒤 시작할지는 PM이 정한다.
+PARALLEL_FROM: pd.Timestamp | None = None
 PARALLEL_NAME = "t7c53"
 
 
@@ -211,7 +214,12 @@ def _parallel_path(date: str, day: pd.Timestamp) -> str | None:
     """함께 커밋할 B 병행 모델 비중 파일 경로. 없거나 쓸 수 없으면 None (공식 기록은 그대로 한다, PM 11/20)."""
     run_id = parallel_run_id(date)
     rel = f"positions/wf_{run_id}.parquet"
-    if not (io.ROOT / rel).is_file():
+    exists = (io.ROOT / rel).is_file()
+    if PARALLEL_FROM is None:
+        if exists:
+            log.warning("병행 모델 기록은 보류 중이라 %s는 커밋하지 않는다 (B 설계 11/20)", rel)
+        return None
+    if not exists:
         if day >= PARALLEL_FROM:
             log.warning("병행 모델 비중 %s가 없어 공식 기록만 한다", rel)
         return None

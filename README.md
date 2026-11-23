@@ -476,7 +476,7 @@ python -m src.pipeline.forward_test --date YYYY-MM-DD --source-commit <신호를
 
 - `forward/YYYYMMDD` 브랜치에서만 기록한다. main에는 PR을 merge commit으로만 병합한다 (squash·rebase 금지, 해시 보존).
 - 날짜별 입력을 커밋 전에 검사한다: 11/20 전은 baseline만, 11/20~26은 baseline과 positions, 11/27부터는 ML과 positions.
-- 11/27부터 B 병행 모델(T7-80-C53) 비중 `positions/wf_{YYYYMMDD}_B_t7c53.parquet`이 있으면 같은 신호 커밋·태그에 함께 넣는다 (PM 11/20). 없거나 쓸 수 없으면 경고만 남기고 공식 기록은 그대로 한다. 지난 기록은 `past_tables(t, 표, 경로)`·`past_parallel_positions(t)`로 게시된 태그에서 읽는다.
+- B 병행 모델(T7-80-C53) 비중 `positions/wf_{YYYYMMDD}_B_t7c53.parquet`은 **지금 기록하지 않는다** (보류, B 설계 11/20). 같은 날짜 파일이 있어도 공식 커밋에 넣지 않는다. PM이 시작일을 정하면 `forward_test.PARALLEL_FROM`에 그 날짜를 넣어 켠다. 켠 뒤에는 같은 신호 커밋·태그에 함께 넣고, 없거나 쓸 수 없으면 경고만 남기고 공식 기록은 그대로 한다. 지난 기록은 `past_tables(t, 표, 경로)`·`past_parallel_positions(t)`로 게시된 태그에서 읽는다.
 - 마감은 신호일 다음 거래일 09:00 KST다 (DEC-04). 지나면 기록하지 않는다. 커밋·로그 기록·push 직전마다 다시 확인하고, 도중에 멈추면 끝난 단계와 남은 일을 알려 준다. 이미 기록한 신호일도 다시 기록하지 않는다.
 - `_stub/`의 파일은 읽지 않는다. 신호 파일 외의 변경은 커밋에 넣지 않는다.
 - `--source-commit`의 커밋은 로컬에 있어야 한다 (없으면 `git fetch`). 두 커밋 메시지에 적힌다.

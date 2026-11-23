@@ -351,11 +351,44 @@ def parallel_frame(date):
     return pos
 
 
-class ParallelRecordTest(RepoTest):
-    """B 병행 모델 비중 (PM 11/20): 11/27부터 같은 신호 커밋·태그에 넣고, 문제가 있으면 공식 기록만 한다."""
+class ParallelDeferredTest(RepoTest):
+    """병행 기록 보류 (B 설계 11/20, PM #77 리뷰): 같은 날짜의 유효한 병행 파일이 있어도 공식 기록만 한다."""
 
     ML_DAY = "2026-11-27"
     REL = "positions/wf_20261127_B_t7c53.parquet"
+
+    def test_default_is_deferred(self):
+        self.assertIsNone(ft.PARALLEL_FROM)
+
+    def test_valid_parallel_file_is_left_out(self):
+        # run_weekly는 5b 함수가 없어 건너뛰어도 include_parallel=True로 부른다. 그래도 넣지 않는다
+        self.prepare(self.ML_DAY, "lgbm_v1", positions=True)
+        io.write_table("positions", parallel_frame(self.ML_DAY), run_id=ft.parallel_run_id(self.ML_DAY))
+        with self.assertLogs("forward_test", "WARNING") as logs:
+            commit_hash = self.record(self.ML_DAY, now=lambda: pd.Timestamp(f"{self.ML_DAY} 20:00", tz=ft.KST),
+                                      include_parallel=True)
+        self.assertEqual(self.files_in(commit_hash), {f"signals/{self.ML_DAY}.parquet",
+                                                      f"positions/{self.ML_DAY}.parquet"})
+        self.assertEqual(self.git("rev-parse", "ft-20261127^{commit}"), commit_hash)   # 공식 기록은 정상
+        self.assertEqual(io.read_table("forward_log").iloc[-1]["has_positions"], 1)
+        self.assertIn("보류", "\n".join(logs.output))
+        self.assertIn("?? " + self.REL, self.git("status", "--porcelain"))            # 파일은 그대로 둔다
+
+
+class ParallelRecordTest(RepoTest):
+    """병행 기록을 켠 경우 (PM이 시작일을 정한 뒤): 같은 신호 커밋·태그에 넣고, 문제가 있으면 공식 기록만 한다."""
+
+    ML_DAY = "2026-11-27"
+    REL = "positions/wf_20261127_B_t7c53.parquet"
+
+    def setUp(self):
+        super().setUp()
+        self._from = ft.PARALLEL_FROM
+        ft.PARALLEL_FROM = pd.Timestamp(self.ML_DAY)
+
+    def tearDown(self):
+        ft.PARALLEL_FROM = self._from
+        super().tearDown()
 
     def at(self, date):
         return lambda: pd.Timestamp(f"{date} 20:00", tz=ft.KST)
