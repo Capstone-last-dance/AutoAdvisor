@@ -1,6 +1,6 @@
 # 작업 진행 현황
 
-마지막 갱신: 2026-11-17
+마지막 갱신: 2026-11-23
 
 아래 표는 전체 명세의 작업 ID 단위 상태이며 세부 단계 완료와 구분한다. 개인 작업 기록·실행 로그·수집 원본은 Git에서 제외하고, 이 문서에는 팀 진행 현황과 남은 과제를 기록한다.
 
@@ -16,9 +16,9 @@
 | PM-08 | PM 장지원 | 11/16 | 완료 | src/features/event_features.py; tests/features/test_event_features.py; reports/20261109_PM08_ev/; [PR #37](https://github.com/Capstone-last-dance/AutoAdvisor/pull/37) (11/9 병합 `9a416f9`) | `ev_*` 6개. 결측률 0, 실데이터 무작위 신호일 20개 누수 테스트 20/20, 826개 신호일 348,678행이 U_t와 일치(6.2절 완료 기준 (1)~(3)). C 승인. 11/10 A에 인계 |
 | PM-09 | PM 장지원 | 11/16 | 진행 중 | src/features/news_features.py; tests/features/test_news_features.py; [PR #56](https://github.com/Capstone-last-dance/AutoAdvisor/pull/56) (11/16 병합 `79ff49f`); reports/20261116_PM09_rename_pit/ | 코드는 C 승인 후 병합(테스트 24개). 실데이터 v6(`pm_features_20261113e`, 11/13 A 인계)는 C 확인 요청으로 신호일 뒤 상호 변경이 과거 결측 표시를 정하는 누수를 확인했다(16,044행, 4.6%, 174종목, [#56 답글](https://github.com/Capstone-last-dance/AutoAdvisor/pull/56#issuecomment-6907615460)). 11/17 v7(`pm_features_20261117`) 생성: 옛 이름 기사 보완 수집(159종목, 엑셀 17행) 반영, 9종목 전 기간 미수집, 6종목 결측 구간 해제. `covered_from`에 변경일 목록을 주면 신호일 t까지의 변경만 쓰도록 고치고 회귀 테스트를 더했다. 신호일 뒤 covered_from 행 16,044 → 0, 전 신호일 신호일 시점 재계산 일치, 독립 재계산 3,000쌍 차이 0, 무작위 20개 신호일 누수 테스트 20/20. 결측률(2011~2025) 건수 7.6% → 3.1%, 감성 33.3% → 30.9%. 한계: 187660 옛 이름 기사 0건(언론 표기 '현대ADM'), 영향 1행은 추가 수집 없이 둠(deviation_log). 11/17 A 인계 완료: A가 v7로 `20261117_A_wfnews`·`A0607_rlsig_news_20261117`을 다시 만들었다(v6 결과는 원래 설정 결과로 보존) |
 | PM-10 | PM 장지원 | 11/16 | 완료 | src/events/; reports/20261109_PM_m9_v1/; reports/20261117_PM10_manual_check/; [PR #34](https://github.com/Capstone-last-dance/AutoAdvisor/pull/34) (11/9)·[PR #51](https://github.com/Capstone-last-dance/AutoAdvisor/pull/51) (11/12) | T2~T5 제목 판정·종목 연결·쿨다운·청산 일정과 일간 경보 `daily_alerts`·`generated_at` 재생 규칙(DEC-32·33) 병합. 2015~2025 경보 2,047건(11/9 v1, 완료 기준 (1)). 백테스트 경보 `20261112_PM_m9_b07_v1`을 B-07에 전달. 11/17 유형별 표본 55건 원문 점검(완료 기준 (2)): 기존 경보 정답률 T2 9/10·T3 7/9·T4 9/10·T5 10/10, 원문 판정 T1 경보 2·아님 3, T3 아님 1, T6 경보 1·아님 6·미판정 3(점검 Codex, OpenDART 문서 69회). 오답은 내부결산 관리종목 가능성(T2), 무죄 판결(T3 2건), 신청 예정 공시(T4). 한계: v1 운영 경보는 T1·T6 원문 판정 후보(`needs_document`)를 경보로 내지 않는다. 원문 판정 구현 후보와 규칙 수정 제안은 forward 운영 중 경보 규칙을 바꾸지 않도록 11/27 이후 검토한다. 11/20 운영 경보 10/19~11/16 생성(#69). 기한 초과 사유: 수작업 점검 미착수 |
-| PM-11 | PM 장지원 | 12/4 | 진행 중 | src/rag/; tests/rag/test_evidence.py; [PR #54](https://github.com/Capstone-last-dance/AutoAdvisor/pull/54) (11/16 병합 `a1f85fd`) | 11/20 forward용 공시 템플릿 근거 요약(시각 컷오프, 경보는 `generated_at` < 기록 마감, 고지 문구) C 승인 후 병합. LLM 요약(Qwen3-1.7B 시험)은 12/4까지 |
-| PM-12 | PM 장지원 | 12/7 | 대기 | | |
-| PM-13 | PM 장지원 | 12/11 | 대기 | | |
+| PM-11 | PM 장지원 | 12/4 | 진행 중 | src/rag/; tests/rag/test_evidence.py; [템플릿 PR #54](https://github.com/Capstone-last-dance/AutoAdvisor/pull/54); [LLM PR #71](https://github.com/Capstone-last-dance/AutoAdvisor/pull/71) (11/23 병합 `2926957`) | 검사 보완 `a19b2db`와 M6 15:30 공시 버전 컷오프를 C 승인 후 병합했다. 통합 테스트 68개 및 하위 검사 19개 통과. 11/23 [#80](https://github.com/Capstone-last-dance/AutoAdvisor/pull/80)이 병합된 main에서 A의 11/20 신호로 전체 M6를 재현했다. 급락 45·진입 후보 20·경보 7건, 출처 119건의 컷오프 위반 0건. Qwen3-1.7B는 LLM 40·템플릿 대체 13·출처 없음 19건이며 출처와 메타데이터가 유지됐다. 11/20은 리허설이며 11/27 공식 근거 생성이 남았다. |
+| PM-12 | PM 장지원 | 12/7 | 완료 | [2016~2025 비교표](../reports/20261121_PM12_feature_ablation/by_period.csv), [원본 대조](../reports/20261121_PM12_feature_ablation/verification.json) | 동일 로컬 입력으로 전체·공시 제외·뉴스 제외 재학습. 뉴스 추가 시 순위 IC +0.00344(10년 중 9년 및 두 5년 구간 개선). 공시 추가 시 AUC +0.00182, 상위 10% Lift −0.02109. A v7 원본 신호 평가값을 재현했으며, 기준 랭커·게이트 자체의 재학습 차이는 별도로 기록했다. |
+| PM-13 | PM 장지원 | 12/11 | 진행 중 | 명세 6.7절, D-11 | 11/21 무작위 표본 추출·독립 채점·합의 집계 준비. 11/27·12/4 근거로 실제 50건 평가 예정 |
 | PM-14 | PM 장지원 | 12/11 | 대기 | | |
 | PM-15 | PM 장지원 | 12/14 | 대기 | | |
 | PM-16 | PM 장지원 | 매주 | 진행 중 | docs/decisions.md; docs/deviation_log.md | 주간 회의 진행, decisions·deviation 기록 갱신 중 (DEC-34까지) |

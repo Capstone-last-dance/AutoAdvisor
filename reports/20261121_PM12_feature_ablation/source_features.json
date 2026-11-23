@@ -1,0 +1,13 @@
+{
+  "signal_dates": 781,
+  "rows": 327189,
+  "ss_regime_assumed_trading_days": 900,
+  "ss_regime_assumed_signal_dates": 136,
+  "ss_regime_assumption": "4.9절 미확정 구간을 0으로 둔다 (DEC-31 확정)",
+  "source_sha256": {
+    "data\\interim\\pr1-a02-real-validation\\extracted\\data\\processed\\index.parquet": "e1e2275c044f0aa4958a2df624e36d01e840cde6aba17db513af72b2432f9a2a",
+    "data\\interim\\pr1-a02-real-validation\\extracted\\data\\processed\\universe.parquet": "b9c95256cddabff4b4bdf072193e2921f458636683e84129354194d217eab486",
+    "data\\interim\\pr1-a02-real-validation\\extracted\\data\\processed\\prices.parquet": "cfa5e6d8f691431538a20849a9c9421742d39cb08a5233bf540caf200d3a0bd1",
+    "data\\interim\\pm09-news-output\\pm_features_20261117.parquet": "6410c187175b2428b9373c4f4aab8577527c8008c72f0d46b7fc5b70603faffd"
+  }
+}
