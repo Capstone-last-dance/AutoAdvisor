@@ -1,0 +1,2 @@
+# 고정 파일은 바이트 그대로 둔다 (manifest.json의 SHA-256이 OS·autocrlf 설정과 상관없이 같게)
+* -text

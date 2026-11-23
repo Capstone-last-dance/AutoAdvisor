@@ -1,0 +1,452 @@
+{
+  "run_id": "20261118_B_buffer_wf",
+  "task": "B-07",
+  "criteria": {
+    "rl_run_complete": true,
+    "m9_applied": true,
+    "every_test_date_in_positions": true,
+    "buffer_replay_matches_run": true,
+    "rl_replay_matches_record": true,
+    "g0_violations_zero": true,
+    "g5_table_complete": true
+  },
+  "g5": {
+    "rl_mean_over_seeds": {
+      "ir": -1.1161891500191363,
+      "cagr": -0.046024432014274044,
+      "annual_turnover": 16.5704870880761
+    },
+    "buffer": {
+      "ir": -1.081460623361016,
+      "cagr": -0.07704543691763588,
+      "annual_turnover": 21.183418900792507
+    },
+    "ir_gain": -0.03472852665812032,
+    "min_ir_gain": 0.1,
+    "pass_by_ir": false,
+    "cagr_not_lower": true,
+    "turnover_ratio": 0.7822385595866288,
+    "max_turnover_ratio": 0.7,
+    "pass_by_alternative": false,
+    "pass": false
+  },
+  "g7_check": {
+    "note": "B 확인값. 판정은 C-07",
+    "mdd_applied": 0.6871119983696123,
+    "mdd_unapplied": 0.6345323002766347,
+    "mdd_reduction_rel": -0.08286370618178888,
+    "min_mdd_reduction_rel": 0.25,
+    "cagr_applied": -0.07704543691763588,
+    "cagr_unapplied": -0.0441366362847645,
+    "max_cagr_giveup": 0.02,
+    "pass": false
+  },
+  "g4_values": {
+    "note": "참고값. G4 판정은 A, 2배 비용과 노출 조절 제외 진단은 C-10",
+    "buffer_full": {
+      "annual_excess": -0.18159377577360258,
+      "ir": -1.081460623361016,
+      "mdd": 0.6871119983696123
+    },
+    "buffer_no_exposure": {
+      "annual_excess": -0.14957922565278026,
+      "ir": -0.6602662046171708,
+      "mdd": 0.6300104548008623
+    },
+    "kospi200": {
+      "cagr": 0.1045483388559667,
+      "mdd": 0.4118584540920225
+    }
+  },
+  "runs": {
+    "buffer_full": {
+      "ir": -1.081460623361016,
+      "cagr": -0.07704543691763588,
+      "annual_excess": -0.18159377577360258,
+      "mdd": 0.6871119983696123,
+      "annual_turnover": 21.183418900792507,
+      "mean_cash": 0.11732642140769292,
+      "weeks": 519,
+      "trading_days": 2446,
+      "first_fill": "2016-01-11",
+      "last_day": "2025-12-30",
+      "final_nav": 0.4592276609070138,
+      "last_turnover": 0.044661023975591276
+    },
+    "buffer_off": {
+      "ir": -0.6537204188124375,
+      "cagr": -0.0441366362847645,
+      "annual_excess": -0.1486849751407312,
+      "mdd": 0.6345323002766347,
+      "annual_turnover": 23.53732707328863,
+      "mean_cash": 6.405132834375903e-19,
+      "weeks": 519,
+      "trading_days": 2446,
+      "first_fill": "2016-01-11",
+      "last_day": "2025-12-30",
+      "final_nav": 0.6452305875200741,
+      "last_turnover": 0.061661053612953716
+    },
+    "buffer_no_exposure": {
+      "ir": -0.6602662046171708,
+      "cagr": -0.04503088679681355,
+      "annual_excess": -0.14957922565278026,
+      "mdd": 0.6300104548008623,
+      "annual_turnover": 23.5398999496712,
+      "mean_cash": 0.0024175824175824163,
+      "weeks": 519,
+      "trading_days": 2446,
+      "first_fill": "2016-01-11",
+      "last_day": "2025-12-30",
+      "final_nav": 0.6393952471686544,
+      "last_turnover": 0.06166105361295378
+    },
+    "rl_s0": {
+      "ir": -1.0927361036752987,
+      "cagr": -0.042566760862168596,
+      "annual_excess": -0.1471150997181353,
+      "mdd": 0.4465246291503725,
+      "annual_turnover": 15.423792177677095,
+      "mean_cash": 0.5641483562396997,
+      "weeks": 519,
+      "trading_days": 2446,
+      "first_fill": "2016-01-11",
+      "last_day": "2025-12-30",
+      "final_nav": 0.6555902883845346,
+      "last_turnover": 0.256002294377205
+    },
+    "rl_s1": {
+      "ir": -1.0437105254892165,
+      "cagr": -0.03438900042225135,
+      "annual_excess": -0.13893733927821805,
+      "mdd": 0.4032127704105618,
+      "annual_turnover": 16.917741299403676,
+      "mean_cash": 0.5221946317992344,
+      "weeks": 519,
+      "trading_days": 2446,
+      "first_fill": "2016-01-11",
+      "last_day": "2025-12-30",
+      "final_nav": 0.7120080237179763,
+      "last_turnover": 0.22357480153143397
+    },
+    "rl_s2": {
+      "ir": -1.2268859261369547,
+      "cagr": -0.05805812698772961,
+      "annual_excess": -0.1626064658436963,
+      "mdd": 0.5378947987921661,
+      "annual_turnover": 18.201236820211246,
+      "mean_cash": 0.503304966114073,
+      "weeks": 519,
+      "trading_days": 2446,
+      "first_fill": "2016-01-11",
+      "last_day": "2025-12-30",
+      "final_nav": 0.5595886237530462,
+      "last_turnover": 0.21671941979114517
+    },
+    "rl_s3": {
+      "ir": -0.9937340873758593,
+      "cagr": -0.030669062212503873,
+      "annual_excess": -0.13521740106847058,
+      "mdd": 0.3824310921683388,
+      "annual_turnover": 15.133276493399862,
+      "mean_cash": 0.5609583624339136,
+      "weeks": 519,
+      "trading_days": 2446,
+      "first_fill": "2016-01-11",
+      "last_day": "2025-12-30",
+      "final_nav": 0.7390830254758399,
+      "last_turnover": 0.24551203678025468
+    },
+    "rl_s4": {
+      "ir": -1.2238791074183513,
+      "cagr": -0.06443920958671678,
+      "annual_excess": -0.1689875484426835,
+      "mdd": 0.5764103404948329,
+      "annual_turnover": 17.176388649688622,
+      "mean_cash": 0.5188610428746688,
+      "weeks": 519,
+      "trading_days": 2446,
+      "first_fill": "2016-01-11",
+      "last_day": "2025-12-30",
+      "final_nav": 0.5238595286955409,
+      "last_turnover": 0.2092191906365548
+    }
+  },
+  "replay": {
+    "tolerance": 1e-12,
+    "max_abs_diff": {
+      "buffer_full": 0.0,
+      "buffer_off": 0.0,
+      "buffer_no_exposure": 0.0,
+      "rl_s0": 0.0,
+      "rl_s1": 0.0,
+      "rl_s2": 0.0,
+      "rl_s3": 0.0,
+      "rl_s4": 0.0
+    },
+    "note": "buffer는 실행 때의 a_k·회전율, rl은 RL 기록 weekly_excess.csv의 a_k와 비교"
+  },
+  "g0": {
+    "function": "src.backtest.validation.validate_g0_positions",
+    "violations": {
+      "buffer_full": 0,
+      "buffer_off": 0,
+      "buffer_no_exposure": 0,
+      "rl_s0": 0,
+      "rl_s1": 0,
+      "rl_s2": 0,
+      "rl_s3": 0,
+      "rl_s4": 0
+    },
+    "violation_dates": {}
+  },
+  "handoff": {
+    "note": "C 요청 (#58, 11/16): 실행 run_id, M8 모드, M9 경보 run_id, 원본 파일 지문",
+    "positions": {
+      "buffer_full": {
+        "run_id": "20261118_B_buffer_wf_full",
+        "path": "positions/wf_20261118_B_buffer_wf_full.parquet",
+        "sha256": "ae882a1681dfc39e81894bb0d05d1d173a82aef4d5d6a29db927942d35a2123f",
+        "rows": 10889,
+        "signal_dates": 520,
+        "constructor": "buffer",
+        "m8_mode": "full",
+        "m9_alerts_run_id": "20261112_PM_m9_b07_v1",
+        "role": "G4 포트폴리오, G5 기준선, G7 '적용'"
+      },
+      "buffer_off": {
+        "run_id": "20261118_B_buffer_wf_off",
+        "path": "positions/wf_20261118_B_buffer_wf_off.parquet",
+        "sha256": "c965e27c1a91332b7abdc75c4d32fc287c5acd897088f6d24f92b04c2ba2545b",
+        "rows": 10895,
+        "signal_dates": 520,
+        "constructor": "buffer",
+        "m8_mode": "off",
+        "m9_alerts_run_id": null,
+        "role": "G7 'M8·M9 미적용' (6.9절)"
+      },
+      "buffer_no_exposure": {
+        "run_id": "20261118_B_buffer_wf_no_exposure",
+        "path": "positions/wf_20261118_B_buffer_wf_no_exposure.parquet",
+        "sha256": "001fb33032967df8e147be4e4ee204baba44f4a442f37f2990dc8ad41c8c55d4",
+        "rows": 10889,
+        "signal_dates": 520,
+        "constructor": "buffer",
+        "m8_mode": "no_exposure",
+        "m9_alerts_run_id": "20261112_PM_m9_b07_v1",
+        "role": "G4 '노출 조절 제외' 진단 (판정에 쓰지 않음, C-10 입력)"
+      },
+      "rl_s0": {
+        "run_id": "20261117_B_rl_wf_s0",
+        "path": "positions/wf_20261117_B_rl_wf_s0.parquet",
+        "sha256": "63f993e81601d780a0dffe851c15bcbb208e6c80f938a50bdc61e6c070e26e63",
+        "rows": 10920,
+        "signal_dates": 520,
+        "constructor": "rl",
+        "m8_mode": "full",
+        "m9_alerts_run_id": "20261112_PM_m9_b07_v1",
+        "role": "G5 판정 대상 (RL + M8 + M9)"
+      },
+      "rl_s1": {
+        "run_id": "20261117_B_rl_wf_s1",
+        "path": "positions/wf_20261117_B_rl_wf_s1.parquet",
+        "sha256": "e99ff7a4876a1618f12e13f1b4649874e991d002a8bbb625beefbb31f1e1eba3",
+        "rows": 10920,
+        "signal_dates": 520,
+        "constructor": "rl",
+        "m8_mode": "full",
+        "m9_alerts_run_id": "20261112_PM_m9_b07_v1",
+        "role": "G5 판정 대상 (RL + M8 + M9)"
+      },
+      "rl_s2": {
+        "run_id": "20261117_B_rl_wf_s2",
+        "path": "positions/wf_20261117_B_rl_wf_s2.parquet",
+        "sha256": "8d664e1992beea71f5fe0bd0e299700a03ff95abba0c3cfc8c23b62360cf777e",
+        "rows": 10920,
+        "signal_dates": 520,
+        "constructor": "rl",
+        "m8_mode": "full",
+        "m9_alerts_run_id": "20261112_PM_m9_b07_v1",
+        "role": "G5 판정 대상 (RL + M8 + M9)"
+      },
+      "rl_s3": {
+        "run_id": "20261117_B_rl_wf_s3",
+        "path": "positions/wf_20261117_B_rl_wf_s3.parquet",
+        "sha256": "435f8e5f3ea2524cbb951d890d8dc7689b1032365f9c7af4528b7e72a5a0225e",
+        "rows": 10920,
+        "signal_dates": 520,
+        "constructor": "rl",
+        "m8_mode": "full",
+        "m9_alerts_run_id": "20261112_PM_m9_b07_v1",
+        "role": "G5 판정 대상 (RL + M8 + M9)"
+      },
+      "rl_s4": {
+        "run_id": "20261117_B_rl_wf_s4",
+        "path": "positions/wf_20261117_B_rl_wf_s4.parquet",
+        "sha256": "15eda96e50897b4f450dad058fe3e5893b47d445a1a1e3eea48ee8cafef6b339",
+        "rows": 10920,
+        "signal_dates": 520,
+        "constructor": "rl",
+        "m8_mode": "full",
+        "m9_alerts_run_id": "20261112_PM_m9_b07_v1",
+        "role": "G5 판정 대상 (RL + M8 + M9)"
+      }
+    },
+    "inputs": {
+      "prices": {
+        "path": "data/processed/prices.parquet",
+        "rows": 9345272,
+        "sha256": "e735be46c5ca1685f922d0c8ee78f2129d8c8256bb6cfd9181723ccd0b01b5a5"
+      },
+      "status": {
+        "path": "data/processed/status.parquet",
+        "rows": 9345272,
+        "sha256": "40812ae37f997ef5dd0b42fc2f453a15839cd9d0f4967d1b9d37fdad7e7363b3"
+      },
+      "index": {
+        "path": "data/processed/index.parquet",
+        "rows": 4146,
+        "sha256": "ce9ffb646c4723fe067c76eaba90a526683444369ac7ab43e53684e662e9300e"
+      },
+      "delisted": {
+        "path": "data/processed/delisted.parquet",
+        "rows": 932,
+        "sha256": "fc14a9183780605617f72fa784f785b4ae0635fbbef46c0d7225cc539478a54c"
+      },
+      "delisted_reused": {
+        "path": "data/processed/delisted_reused.parquet",
+        "rows": 2,
+        "sha256": "a73192de4525b05e626bd24bff5dc30e205546d6ed963bbaf5f9c1ff7ce80a25"
+      },
+      "universe": {
+        "path": "data/processed/universe.parquet",
+        "rows": 413000,
+        "sha256": "b2b892af78a83bb773b804ba3cacf673efa4f5734a8d144b1384ffce36462758"
+      },
+      "sector": {
+        "path": "data/processed/sector.parquet",
+        "rows": 3701,
+        "sha256": "e2f5ab4f5dc20a65d33c7368720f995059b2d65076a2e327246b6bdbc12fdd99"
+      }
+    },
+    "test_signals": {
+      "run_id": "20261117_A_wfnews",
+      "path": "signals/wf_20261117_A_wfnews.parquet",
+      "rows": 228422,
+      "sha256": "010cadd58c4d3bac099382761af34587a6552f67db0f7a1805d6895cb07890ae",
+      "model_version": {
+        "2016": {
+          "20261117_A_wfnews_y2016": 21109
+        },
+        "2017": {
+          "20261117_A_wfnews_y2017": 20442
+        },
+        "2018": {
+          "20261117_A_wfnews_y2018": 22267
+        },
+        "2019": {
+          "20261117_A_wfnews_y2019": 21010
+        },
+        "2020": {
+          "20261117_A_wfnews_y2020": 24226
+        },
+        "2021": {
+          "20261117_A_wfnews_y2021": 25118
+        },
+        "2022": {
+          "20261117_A_wfnews_y2022": 23275
+        },
+        "2023": {
+          "20261117_A_wfnews_y2023": 23682
+        },
+        "2024": {
+          "20261117_A_wfnews_y2024": 23498
+        },
+        "2025": {
+          "20261117_A_wfnews_y2025": 23795
+        }
+      }
+    },
+    "m9": {
+      "applied": true,
+      "alerts_run_id": "20261112_PM_m9_b07_v1",
+      "path": "alerts/wf_20261112_PM_m9_b07_v1.parquet",
+      "sha256": "f537cc819973b84a84ca1ed545288795a35d225d731fdb472726cdd14166ddc9",
+      "alerts": 2599,
+      "cooldown_days": 3681,
+      "event_liquidations": 2333
+    },
+    "costs": {
+      "sell_tax": 0.002,
+      "commission_per_side": 0.00015,
+      "slippage_per_side": 0.001,
+      "stress_multiplier": 2.0,
+      "cash_return": 0.0
+    },
+    "commit": "ee22c4ee1e618f34f75efb98c63b1eb0dbccac0f"
+  },
+  "rl_run": {
+    "run_id": "20261117_B_rl_wf",
+    "criteria": {
+      "every_fold_and_seed_trained": true,
+      "fold_runs_same_commit": true,
+      "m9_applied": true,
+      "label_end_dates_applied": true,
+      "every_test_date_in_positions": true,
+      "b07_complete": true
+    },
+    "ir_mean_over_seeds": -1.1161891500191363
+  },
+  "test": {
+    "years": [
+      2016,
+      2017,
+      2018,
+      2019,
+      2020,
+      2021,
+      2022,
+      2023,
+      2024,
+      2025
+    ],
+    "signal_dates": 520,
+    "first": "2016-01-08",
+    "last": "2025-12-26",
+    "start": "첫 시험 신호일에 현금 100%",
+    "period": {
+      "first_fill": "2016-01-11",
+      "last_signal_fill": "2025-12-29",
+      "end": "2025-12-30",
+      "note": "명세 판정 기간·design_C 5절: 마지막 시험 신호일 목표도 체결해 그 해 마지막 거래일 종가까지. 잔여 구간은 NAV·CAGR·MDD·연 회전율에 넣고 a_k·IR에서는 뺀다"
+    },
+    "nav": "첫 체결일 체결 직전 NAV 1에서 시작, 날마다 종가 NAV (daily_nav.csv는 첫 체결일 체결 뒤부터). MDD는 체결 후 일간 NAV"
+  },
+  "metric_functions": {
+    "ir": "information_ratio",
+    "cagr": "cagr",
+    "annual_excess": "annual_excess_return",
+    "mdd": "max_drawdown",
+    "annual_turnover": "annual_turnover",
+    "module": "src.backtest.metrics"
+  },
+  "generated": {
+    "features": {
+      "rows": 228422,
+      "sha256": "38ebdcc8ec31ced9a397136a67614ececee98ce45fab8cf6806e1991e925bc12"
+    }
+  },
+  "seconds": {
+    "prepare": 29.056629700004123,
+    "runs": 12.982247399981134,
+    "g0": 21.6814052000409
+  },
+  "versions": {
+    "python": "3.12.10",
+    "stable_baselines3": "2.9.2",
+    "torch": "2.15.0+cpu",
+    "gymnasium": "1.4.0",
+    "numpy": "2.5.4",
+    "pandas": "3.1.0"
+  }
+}

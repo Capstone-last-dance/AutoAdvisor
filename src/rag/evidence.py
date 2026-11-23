@@ -27,6 +27,8 @@ def m6_step(ctx) -> None:
     중복 종목은 crash > alert > rank 순으로 한 줄만 남긴다.
     공시는 t−19~t 거래일 접수분 중 t 15:30 전에 이용 가능한 최근 세 건을 인용한다.
     공시 버전과 B·I 수집 완료 여부는 다음 거래일 09:00 KST 기록 마감 전 원본으로 고정한다.
+    근거는 신호·비중에 들어가지 않는 표시용이라 마감 전 최신 관측을 쓴다. `ev_*`(`signal_day_disclosures`)는
+    t 15:30 컷오프 전 관측만 쓰므로, 컷오프와 마감 사이에 제목이 바뀐 공시는 근거와 피처의 제목이 다를 수 있다.
     뉴스와 LLM 요약은 이 템플릿 범위 밖이다.
     """
     date = ctx.date
@@ -83,12 +85,34 @@ def _recent_alert_tickers(previous: pd.Timestamp, day: pd.Timestamp, cutoff: pd.
     return set(alerts.loc[in_window & before_deadline, "ticker"])
 
 
+def signal_day_disclosures(date: str, tickers: pd.DataFrame) -> pd.DataFrame:
+    """신호일 t의 공시: t−19~t 거래일 접수분 중 t 15:30 KST 전에 이용 가능한 것 (종목 연결 포함).
+
+    PM `ev_*`의 forward 계산(DEC-36)이 쓴다. 피처는 신호 시점에 알 수 있던 것만 써야 하므로, M6(기록 마감 전 원본)와
+    달리 B·I 수집 완료 여부와 공시 버전(제목·종목코드)을 t 15:30 KST 전에 끝난 수집과 그 전에 받은 관측으로만 정한다.
+    컷오프 뒤에 바뀐 제목이나 종목 연결은 기록 마감 전에 받았어도 쓰지 않는다. 컷오프 전에 끝난 수집이 없어 신호 시점의
+    버전을 확인할 수 없으면 0으로 채우지 않고 `AlertsNotCollected`를 낸다.
+    """
+    day = pd.Timestamp(date)
+    trading_days = m9.load_trading_days()
+    position = trading_days.get_indexer([day])[0]
+    if position < 0:
+        raise ValueError(f"{date}: 거래일 달력에 신호일이 없다")
+    cutoff = day.tz_localize(m9.KST) + _CLOSE
+    receipt_days = trading_days[max(0, position - 19):position + 1]
+    return _disclosures(day, receipt_days, cutoff, cutoff, tickers)
+
+
 def _disclosures(day: pd.Timestamp, receipt_days: pd.DatetimeIndex, cutoff: pd.Timestamp,
-                 record_deadline: pd.Timestamp, tickers: pd.DataFrame) -> pd.DataFrame:
+                 version_deadline: pd.Timestamp, tickers: pd.DataFrame) -> pd.DataFrame:
+    """`cutoff` 전에 이용 가능한 공시. 수집 완료와 버전은 `version_deadline` 전 수집·관측으로만 정한다.
+
+    M6는 다음 거래일 09:00 기록 마감, `ev_*`(`signal_day_disclosures`)는 t 15:30 신호 컷오프를 넘긴다.
+    """
     raw = io.ROOT / "data" / "raw"
     runs = sorted(path.parent for path in raw.glob("*/*_PM_disclosures_*/opendart_list/manifest.json"))
     built = build_disclosures(runs, today=day.date(), tickers=tickers)
-    windows = _windows_completed_before(built.windows, record_deadline)
+    windows = _windows_completed_before(built.windows, version_deadline)
     # DEC-09의 날짜 전용 원본에서 t일 공시는 이용 가능 시각을 만족할 수 없다.
     required = receipt_days[receipt_days < day].strftime("%Y-%m-%d").tolist()
     m9._require_windows_complete(windows, required)
@@ -100,9 +124,9 @@ def _disclosures(day: pd.Timestamp, receipt_days: pd.DatetimeIndex, cutoff: pd.T
     completed = pd.MultiIndex.from_frame(windows[window_key])
     observations = observations[pd.MultiIndex.from_frame(observations[window_key]).isin(completed)]
     fetched = pd.to_datetime(observations["fetched_at"], format="ISO8601", utc=True)
-    observations = observations.assign(fetched_at=fetched).loc[fetched.lt(record_deadline)]
+    observations = observations.assign(fetched_at=fetched).loc[fetched.lt(version_deadline)]
 
-    # build_disclosures의 df는 전체 관측 중 최신 버전이다. 마감 전 관측에서
+    # build_disclosures의 df는 전체 관측 중 최신 버전이다. version_deadline 전 관측에서
     # 제목과 종목코드가 같은 버전을 가리키도록 접수번호별로 다시 선택한다.
     latest = _latest_versions(observations, receipt_days)
     frame = latest.loc[latest["rcept_date"].isin(receipt_days) & latest["available_at"].lt(cutoff)]

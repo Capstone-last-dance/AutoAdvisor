@@ -62,8 +62,9 @@ _stub/*
 /reports/*_PM_git_*/
 
 # Model weights go to the team drive run_id folder; metrics.json keeps their SHA-256 (PM, 11/10).
+# Exception: B RL checkpoints (reports/*/best.zip, ~0.76 MB each) are committed so the B runs can be
+# replayed from git (B, 11/18). Their SHA-256 in metrics.json still identifies them.
 # Do not ignore *.txt: reports/*/git_commit.txt is the R-10 record.
-best.zip
 *.joblib
 gate_*.txt
 ranker_*.txt
@@ -71,3 +72,5 @@ final_gate.txt
 final_ranker.txt
 test.ipynb
 .ipynb_checkpoints/
+# B-09 탐색 폴더는 브랜치 b09-explore에서만 추적한다 (main에는 넣지 않는다. runs/의 체크포인트 155 MB 포함)
+/explore/

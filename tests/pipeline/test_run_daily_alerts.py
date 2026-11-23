@@ -125,5 +125,78 @@ class DateTest(TempRootTest):
         run.assert_called_once_with(SAT)
 
 
+class BackfillTest(TempRootTest):
+    """--from/--to: 기간의 달력일을 하루씩 돌리고, 실패한 날이 있어도 계속한 뒤 종료 코드 1."""
+
+    DAYS = ["2026-10-30", "2026-10-31", "2026-11-01", "2026-11-02"]
+
+    def test_fills_every_calendar_day(self):
+        calls = []
+
+        def fn(d):
+            calls.append(d)
+            return alerts_frame(d, 0)
+
+        self.assertEqual(rda.backfill(self.DAYS[0], self.DAYS[-1], fn), 0)
+        self.assertEqual(calls, self.DAYS)                     # 주말 포함, 날짜순
+        self.assertEqual(io.list_dates("alerts"), self.DAYS)
+
+    def test_continues_after_missing_day_and_reports(self):
+        def fn(d):
+            if d == "2026-10-31":
+                raise AlertsNotCollected("원본 없음")
+            return alerts_frame(d, 1)
+
+        with mock.patch("sys.stderr") as err:
+            self.assertEqual(rda.backfill(self.DAYS[0], self.DAYS[-1], fn), 1)
+        printed = "".join(str(c.args[0]) for c in err.write.call_args_list)
+        self.assertIn("3/4일 저장", printed)
+        self.assertIn("2026-10-31", printed)
+        self.assertEqual(io.list_dates("alerts"), [d for d in self.DAYS if d != "2026-10-31"])
+        self.assertNotIn("backfill_alert_files", printed)   # 첫날은 저장됐으니 PM 백필 안내는 없다
+
+    def stderr_of(self, fn):
+        with mock.patch("sys.stderr") as err:
+            code = rda.backfill(self.DAYS[0], self.DAYS[-1], fn)
+        return code, "".join(str(c.args[0]) for c in err.write.call_args_list)
+
+    def test_first_day_not_collected_points_to_pm_backfill(self):
+        # 앞 기간 파일이 없으면 daily_alerts가 첫날부터 미수집이다 (DEC-33)
+        def fn(d):
+            raise AlertsNotCollected("앞 기간 파일 없음")
+
+        code, printed = self.stderr_of(fn)
+        self.assertEqual(code, 1)
+        self.assertIn("0/4일 저장", printed)
+        self.assertIn("backfill_alert_files", printed)
+
+    def test_first_day_other_failure_has_no_pm_hint(self):
+        def fn(d):
+            raise RuntimeError("x")
+
+        code, printed = self.stderr_of(fn)
+        self.assertEqual(code, 1)
+        self.assertNotIn("backfill_alert_files", printed)
+
+    def test_single_day_range(self):
+        self.assertEqual(rda.backfill(SAT, SAT, lambda d: alerts_frame(d, 0)), 0)
+        self.assertTrue(self.path().exists())
+
+    def test_reversed_range_is_rejected(self):
+        self.assertEqual(rda.main(["--from", "2026-11-02", "--to", "2026-10-30"]), 1)
+        self.assertFalse((self.tmp / "logs").exists())
+
+    def test_cli(self):
+        with mock.patch.object(rda, "backfill", return_value=0) as backfill:
+            self.assertEqual(rda.main(["--from", "2026-10-26", "--to", "2026-11-19"]), 0)
+        backfill.assert_called_once_with("2026-10-26", "2026-11-19")
+
+    def test_cli_needs_both_ends_and_no_date(self):
+        for argv in (["--from", "2026-10-26"], ["--to", "2026-11-19"],
+                     ["--date", SAT, "--from", "2026-10-26", "--to", "2026-11-19"]):
+            with self.subTest(argv=argv), self.assertRaises(SystemExit):
+                rda.main(argv)
+
+
 if __name__ == "__main__":
     unittest.main()
