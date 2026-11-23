@@ -1,0 +1,84 @@
+{
+  "a_signal_sha256": "010cadd58c4d3bac099382761af34587a6552f67db0f7a1805d6895cb07890ae",
+  "a_signal_rows": 228422,
+  "official_predictions_on_local_eval_labels": {
+    "labelled_rows": 226469,
+    "gate_roc_auc": 0.6952012332335111,
+    "gate_lift_at_10pct": 2.67704873694753,
+    "ranker_mean_rank_ic": 0.06841646587661625
+  },
+  "a_full_fit_different_rows_by_year": {
+    "2016": {
+      "crash_prob": 0,
+      "crash_flag": 0,
+      "rank_score": 0,
+      "rank": 0
+    },
+    "2017": {
+      "crash_prob": 0,
+      "crash_flag": 0,
+      "rank_score": 20442,
+      "rank": 13675
+    },
+    "2018": {
+      "crash_prob": 2,
+      "crash_flag": 0,
+      "rank_score": 0,
+      "rank": 0
+    },
+    "2019": {
+      "crash_prob": 0,
+      "crash_flag": 0,
+      "rank_score": 21010,
+      "rank": 19704
+    },
+    "2020": {
+      "crash_prob": 1,
+      "crash_flag": 0,
+      "rank_score": 0,
+      "rank": 0
+    },
+    "2021": {
+      "crash_prob": 25118,
+      "crash_flag": 1160,
+      "rank_score": 25118,
+      "rank": 23202
+    },
+    "2022": {
+      "crash_prob": 0,
+      "crash_flag": 0,
+      "rank_score": 23275,
+      "rank": 54
+    },
+    "2023": {
+      "crash_prob": 0,
+      "crash_flag": 0,
+      "rank_score": 23682,
+      "rank": 22136
+    },
+    "2024": {
+      "crash_prob": 23497,
+      "crash_flag": 572,
+      "rank_score": 23498,
+      "rank": 22519
+    },
+    "2025": {
+      "crash_prob": 0,
+      "crash_flag": 0,
+      "rank_score": 23795,
+      "rank": 20094
+    }
+  },
+  "full_model_outperforming_years": {
+    "no_disclosure": {
+      "gate_roc_auc": 7,
+      "gate_lift_at_10pct": 3,
+      "ranker_mean_rank_ic": 5
+    },
+    "no_news": {
+      "gate_roc_auc": 5,
+      "gate_lift_at_10pct": 3,
+      "ranker_mean_rank_ic": 9
+    }
+  }
+}
