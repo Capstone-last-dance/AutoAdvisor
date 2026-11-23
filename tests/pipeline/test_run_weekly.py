@@ -142,7 +142,21 @@ class RehearsalTest(TempRootTest):
     def test_cli_flag(self):
         with mock.patch.object(rw, "run", return_value=0) as run:
             self.assertEqual(rw.main(["--date", DAY, "--rehearsal"]), 0)
-        run.assert_called_once_with(DAY, source_commit=None, rehearsal=True)
+        run.assert_called_once_with(DAY, source_commit=None, rehearsal=True, late=None)
+
+    def test_cli_late_passes_reason(self):
+        with mock.patch.object(rw, "run", return_value=0) as run:
+            self.assertEqual(rw.main(["--date", DAY, "--source-commit", "abc", "--late", "PM 승인"]), 0)
+        run.assert_called_once_with(DAY, source_commit="abc", rehearsal=False, late="PM 승인")
+
+    def test_cli_late_needs_source_commit(self):
+        with self.assertRaises(SystemExit):
+            rw.main(["--date", DAY, "--late", "PM 승인"])
+
+    def test_late_reaches_record(self):
+        with mock.patch.object(rw.forward_test, "record", return_value="h") as record:
+            rw.forward_test_commit(rw.StepContext(date=DAY, source_commit="abc", late="PM 승인"))
+        self.assertEqual(record.call_args.kwargs["late"], "PM 승인")
 
     def test_cli_rejects_source_commit_with_rehearsal(self):
         with self.assertRaises(SystemExit):
@@ -203,7 +217,9 @@ class StepsTest(unittest.TestCase):
 
 
 class OptionalStepTest(TempRootTest):
-    """5b단계(B 병행)는 실패해도 멈추지 않고, 공식 기록은 병행 파일 없이 한다 (PM 11/20)."""
+    """5b단계(B 병행): 실패해도 멈추지 않는다. 7단계는 5b가 이번 실행에서 쓴 경로만 넘긴다 (PM #77 11/23)."""
+
+    REL = "positions/wf_20261106_B_t7c53.parquet"
 
     def run_with(self, parallel):
         noop = lambda ctx: None
@@ -212,33 +228,48 @@ class OptionalStepTest(TempRootTest):
             code = rw.run(DAY, steps, source_commit="abc")
         return code, record
 
-    def test_failure_keeps_official_record(self):
+    def writes(self, ctx):
+        ctx.memory[rw.PARALLEL_WRITTEN_KEY] = self.REL     # #81의 5b가 성공하면 남기는 값
+
+    def test_success_passes_written_path(self):
+        code, record = self.run_with(self.writes)
+        self.assertEqual(code, 0)
+        self.assertEqual(record.call_args.kwargs["parallel"], self.REL)
+        self.assertIsNone(record.call_args.kwargs["memo"])
+
+    def test_failure_keeps_official_record_without_parallel(self):
         def boom(ctx):
+            self.writes(ctx)                                 # 경로를 남긴 뒤 실패해도 붙이지 않는다
             raise RuntimeError("C:\\Users\\some one\\secret.parquet")
 
         code, record = self.run_with(boom)
         self.assertEqual(code, 0)
         record.assert_called_once()
-        self.assertFalse(record.call_args.kwargs["include_parallel"])
+        self.assertIsNone(record.call_args.kwargs["parallel"])
         memo = record.call_args.kwargs["memo"]
         self.assertIn("B 병행 모델 기록 실패", memo)
-        self.assertNotIn("some one", memo)                       # 공개 커밋에는 고정 문구만
+        self.assertNotIn("some one", memo)                   # 공개 커밋에는 고정 문구만
         log = self.log_text()
         self.assertIn("실패, 공식 기록은 계속한다", log)
         self.assertNotIn("스텁으로 대신한다", log)
 
-    def test_success_includes_parallel(self):
-        calls = []
-        code, record = self.run_with(lambda ctx: calls.append(ctx.date))
-        self.assertEqual((code, calls), (0, [DAY]))
-        self.assertTrue(record.call_args.kwargs["include_parallel"])
-        self.assertIsNone(record.call_args.kwargs["memo"])
+    def test_step_that_writes_nothing_passes_none(self):
+        code, record = self.run_with(lambda ctx: None)
+        self.assertEqual(code, 0)
+        self.assertIsNone(record.call_args.kwargs["parallel"])
 
     def test_unconnected_parallel_is_skipped_without_stub(self):
         code, record = self.run_with(None)
         self.assertEqual(code, 0)
-        record.assert_called_once()                                # 스텁 취급이면 기록하지 않았을 것이다
+        record.assert_called_once()                            # 스텁 취급이면 기록하지 않았을 것이다
+        self.assertIsNone(record.call_args.kwargs["parallel"])
         self.assertIn("연결된 함수가 없어 건너뛴다 (선택 단계)", self.log_text())
+
+    def test_late_is_kept(self):
+        with mock.patch.object(rw.forward_test, "record", return_value="h") as record:
+            rw.forward_test_commit(rw.StepContext(date=DAY, source_commit="abc", late="PM 승인"))
+        self.assertEqual(record.call_args.kwargs["late"], "PM 승인")
+        self.assertIsNone(record.call_args.kwargs["parallel"])
 
 
 class StubPropagationTest(TempRootTest):

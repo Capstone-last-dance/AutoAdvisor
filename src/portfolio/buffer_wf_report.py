@@ -6,17 +6,21 @@
 - 입력은 RL 시험 운용과 같다. 시험 신호와 M9 경보는 RL 기록의 run_id를 쓴다. 9.3절 표, 시험 신호, M9 경보 파일의
   지문과 B가 만든 features 지문이 RL 기록과 하나라도 다르면 멈춘다.
 - 버퍼 규칙 실행 3개 (run_buffer_rule, 6.9절). 결정적이라 시드가 없다. RL 시험 운용과 같게 첫 시험 신호일에
-  현금 100%로 시작하고, 마지막 시험 신호일은 다음 신호일이 홀드아웃이라 비중만 기록하고 체결하지 않는다.
+  현금 100%로 시작한다. 실행 자체는 RL 시험 운용처럼 마지막 시험 신호일의 비중만 기록하고 체결하지 않는다
+  (다음 신호일이 홀드아웃). 지표용 다시 체결에서는 그 목표도 체결한다 (아래 판정 기간).
   - full: 버퍼 규칙 + M8 + M9. G4 포트폴리오, G5 기준선, G7의 '적용' 쪽을 겸한다
   - off: G7 'M8·M9 미적용'. Step 2~6과 M9 청산·쿨다운을 끈다 (E_t = 1)
   - no_exposure: G4 '노출 조절 제외' 진단. Step 4~5만 끄고 M9는 켠다. 판정에 쓰지 않는다 (C-10 입력)
 - 지표: positions를 C 엔진(같은 비용, 같은 M9 일정)에 다시 넣어 일별 NAV, 주간 a_k, 체결일 회전율을 얻고 C의 M5
   함수로 계산한다 (R-05). RL positions도 같은 방법으로 다시 체결한다. 다시 체결한 a_k가 RL 기록(weekly_excess.csv)과
   같아야 하고, 버퍼 규칙도 실행 때의 a_k와 같아야 한다 (완료 기준).
-  - NAV: 첫 체결일의 체결 직전 NAV 1에서 시작해 날마다 종가 NAV를 잇는다. 거래일 수는 첫 체결일부터 마지막
-    평가일(마지막으로 체결한 구간의 끝, 마지막 시험 신호일 다음 거래일)까지의 일간 수익률 수다
-  - IR = information_ratio(a_k), CAGR = cagr(NAV), 연 초과수익 = annual_excess_return(NAV, 코스피 200),
-    MDD = max_drawdown(NAV), 연 회전율 = annual_turnover(체결일 회전율)
+  - 판정 기간 (명세 7장 판정 기간, design_C 5절): 첫 시험 신호일의 체결일부터 마지막 시험 연도의 마지막 거래일
+    종가까지다. 마지막 시험 신호일의 목표도 다음 거래일에 체결하고 그 해 마지막 거래일 종가까지 평가한다.
+    이 잔여 구간은 일간 NAV·CAGR·MDD·연 회전율에 넣고, 완료된 두 체결일이 없어 a_k·IR 표본에서는 뺀다.
+  - NAV: 첫 체결일의 체결 직전 NAV 1에서 시작해 날마다 종가 NAV(체결일은 체결 뒤)를 잇는다. 거래일 수는 첫
+    체결일부터 판정 기간 마지막 거래일까지의 일간 수익률 수다
+  - IR = information_ratio(a_k), CAGR = cagr(NAV, 시작 NAV 1), 연 초과수익 = annual_excess_return(NAV, 코스피 200),
+    MDD = max_drawdown(체결 후 일간 NAV), 연 회전율 = annual_turnover(잔여 구간까지의 체결일 회전율)
 - G5 (7장, 부록 1 kpi.G5): RL은 시드별 지표의 5시드 평균이다. IR_RL − IR_버퍼 ≥ min_ir_gain 이거나
   (CAGR_RL ≥ CAGR_버퍼 이고 연 회전율_RL ≤ max_turnover_ratio × 연 회전율_버퍼)이면 통과한다.
 - G7과 G4 수치는 B의 확인값이다. G7 판정은 C-07, G4 판정은 A, 2배 비용과 G4 진단은 C-10이 positions로 계산한다.
@@ -117,11 +121,12 @@ def different_inputs(now: Mapping[str, Any], rl: Mapping[str, Any]) -> list[str]
 class Replay:
     """positions를 C 엔진에 다시 넣은 결과."""
 
-    signal_dates: list[str]  # 체결한 신호일 (마지막 시험 신호일 제외)
+    signal_dates: list[str]  # a_k를 계산한 신호일 (마지막 시험 신호일 제외)
     excess: np.ndarray  # 구간마다 R_net − R_BM (a_k)
-    turnover: np.ndarray  # 구간마다 체결일 회전율
-    nav: pd.Series  # 첫 체결일 ~ 마지막 평가일의 종가 NAV (첫 체결일 체결 직전 NAV = 1)
-    final_nav: float  # 마지막 구간의 nav_end
+    turnover: np.ndarray  # a_k 구간마다 체결일 회전율
+    nav: pd.Series  # 첫 체결일 ~ 마지막 평가일의 종가 NAV (체결일은 체결 뒤, 첫 체결일 체결 직전 NAV = 1)
+    final_nav: float  # 마지막 평가일의 NAV
+    last_turnover: float | None = None  # 잔여 구간(마지막 시험 신호일 목표 체결)의 회전율. 잔여 구간이 없으면 None
 
 
 def targets_by_date(positions: pd.DataFrame) -> dict[str, dict[str, float]]:
@@ -145,9 +150,31 @@ def daily_nav(ledger: Sequence[Mapping[str, Any]]) -> pd.Series:
     return nav
 
 
-def replay(positions: pd.DataFrame, dates: Sequence[str], engine: Any) -> Replay:
-    """positions의 목표 비중을 현금 100%에서 신호일마다 다시 체결한다. 마지막 신호일은 체결하지 않는다.
-    engine은 record_ledger=True로 새로 만든 엔진이다 (원장이 비어 있어야 한다)."""
+def period_end(calendar: pd.DatetimeIndex, last_signal: str, year: int) -> tuple[str, str]:
+    """판정 기간의 잔여 구간: (run_period에 넘길 next_signal_date 자리, 평가 종료일).
+
+    평가 종료일은 마지막 시험 연도의 마지막 거래일이다. run_period는 next_signal_date 다음 거래일의 종가까지
+    평가하므로 그 전 거래일을 넘긴다. 마지막 시험 신호일의 체결일이 평가 종료일보다 앞서야 한다."""
+    days = pd.DatetimeIndex(calendar).sort_values()
+    in_year = days[days.year == year]
+    if len(in_year) == 0:
+        raise ValueError(f"{year}년 거래일이 없다")
+    end = in_year[-1]
+    after = days[days > pd.Timestamp(last_signal)]
+    if len(after) == 0 or not after[0] < end:
+        raise ValueError(f"마지막 시험 신호일 {last_signal}의 체결일이 {year}년 마지막 거래일 "
+                         f"{end:%Y-%m-%d}보다 앞서지 않는다")
+    return days[days.get_loc(end) - 1].strftime("%Y-%m-%d"), end.strftime("%Y-%m-%d")
+
+
+def replay(positions: pd.DataFrame, dates: Sequence[str], engine: Any,
+           last_period: tuple[str, str] | None = None) -> Replay:
+    """positions의 목표 비중을 현금 100%에서 신호일마다 다시 체결한다. engine은 record_ledger=True로 새로 만든
+    엔진이다 (원장이 비어 있어야 한다).
+
+    last_period(period_end의 결과)를 주면 마지막 신호일의 목표도 체결하고 평가 종료일까지 평가한다. 이 잔여
+    구간은 NAV와 last_turnover에만 들어가고 a_k(excess·turnover)에는 넣지 않는다. 주지 않으면 마지막 신호일은
+    체결하지 않는다."""
     if not getattr(engine, "record_ledger", False) or engine.ledger:
         raise ValueError("record_ledger=True로 새로 만든 엔진이어야 한다")
     targets = targets_by_date(positions)
@@ -159,11 +186,17 @@ def replay(positions: pd.DataFrame, dates: Sequence[str], engine: Any) -> Replay
         state, nav_end = res.state, res.nav_end
         excess.append(res.r_net - res.r_bm)
         turnover.append(res.turnover)
+    last_turnover = None
+    if last_period is not None:
+        res = engine.run_period(state, targets[dates[-1]], dates[-1], last_period[0])
+        nav_end, last_turnover = res.nav_end, float(res.turnover)
     nav = daily_nav(engine.ledger)
     if abs(nav.iloc[-1] - nav_end) > 1e-9 * max(1.0, nav_end):
         raise ValueError("원장의 마지막 NAV가 마지막 구간의 nav_end와 다르다")
+    if last_period is not None and nav.index[-1].strftime("%Y-%m-%d") != last_period[1]:
+        raise ValueError(f"원장의 마지막 날 {nav.index[-1]:%Y-%m-%d}이 평가 종료일 {last_period[1]}과 다르다")
     return Replay(list(dates[:-1]), np.asarray(excess, dtype=np.float64), np.asarray(turnover, dtype=np.float64),
-                  nav, float(nav_end))
+                  nav, float(nav_end), last_turnover)
 
 
 def summary(rep: Replay, bm: pd.Series, positions: pd.DataFrame) -> dict[str, Any]:
@@ -173,18 +206,20 @@ def summary(rep: Replay, bm: pd.Series, positions: pd.DataFrame) -> dict[str, An
     nav = np.r_[1.0, rep.nav.to_numpy()[1:]]  # cagr·연 초과수익: 시작 NAV 1 ~ 마지막 평가일 (일간 수익률 n개)
     bench = bm.reindex(days).to_numpy(dtype=np.float64)
     cash = positions.loc[positions["ticker"] == CASH, "target_weight"]
+    turns = rep.turnover if rep.last_turnover is None else np.r_[rep.turnover, rep.last_turnover]
     return {
         "ir": m5.information_ratio(rep.excess),
         "cagr": m5.cagr(nav, trading_days=n),
         "annual_excess": m5.annual_excess_return(nav, bench, trading_days=n),
-        "mdd": m5.max_drawdown(np.r_[1.0, rep.nav.to_numpy()]),  # 첫 체결 비용도 낙폭에 들어간다
-        "annual_turnover": m5.annual_turnover(rep.turnover, trading_days=n),
+        "mdd": m5.max_drawdown(rep.nav.to_numpy()),  # 체결 후 일간 NAV 시계열 (design_C 5절)
+        "annual_turnover": m5.annual_turnover(turns, trading_days=n),
         "mean_cash": float(cash.mean()),
         "weeks": len(rep.excess),
         "trading_days": n,
         "first_fill": days[0].strftime("%Y-%m-%d"),
         "last_day": days[-1].strftime("%Y-%m-%d"),
         "final_nav": rep.final_nav,
+        "last_turnover": rep.last_turnover,
     }
 
 
@@ -331,6 +366,7 @@ def main(argv: Sequence[str] | None = None) -> Path:
     same_as_rl("M9 경보 파일", [m9.record.get(k) for k in keys], [rl_m["m9"].get(k) for k in keys])
     snaps = build_snapshots(test_dates, signals, features, tables["universe"], tables["sector"], inputs.bm_close,
                             m9.cooldown_at, risk)
+    last_period = period_end(inputs.bm_close.index, test_dates[-1], years[-1])
 
     def engine(with_m9: bool, ledger: bool):
         alerts = {"cooldowns": m9.cooldowns, "event_liquidations": m9.liquidations} if with_m9 else {}
@@ -350,14 +386,14 @@ def main(argv: Sequence[str] | None = None) -> Path:
     for mode, (with_m9, _) in BUFFER_RUNS.items():
         run = run_buffer_rule(snaps, engine(with_m9, ledger=False), buffer, risk, mode)  # type: ignore[arg-type]
         runs[mode], positions[f"buffer_{mode}"] = run, run.positions
-        rep = replay(run.positions, test_dates, engine(with_m9, ledger=True))
+        rep = replay(run.positions, test_dates, engine(with_m9, ledger=True), last_period)
         replays[f"buffer_{mode}"] = rep
         replay_diff[f"buffer_{mode}"] = max(max_abs_diff(rep.excess, run.excess_returns),
                                             max_abs_diff(rep.turnover, run.turnover))
     for seed, pos in rl_positions.items():
         name = f"rl_s{seed}"
         positions[name] = pos
-        rep = replays[name] = replay(pos, test_dates, engine(True, ledger=True))
+        rep = replays[name] = replay(pos, test_dates, engine(True, ledger=True), last_period)
         recorded = rl_run.weekly[rl_run.weekly["seed"] == seed]
         same_dates = list(recorded["signal_date"]) == rep.signal_dates
         replay_diff[name] = max_abs_diff(rep.excess, recorded["a_k"]) if same_dates else float("inf")
@@ -441,8 +477,14 @@ def main(argv: Sequence[str] | None = None) -> Path:
         },
         "rl_run": {"run_id": args.rl_run_id, "criteria": rl_m["criteria"], "ir_mean_over_seeds": rl_m["ir"]["mean_over_seeds"]},
         "test": {"years": years, "signal_dates": len(test_dates), "first": test_dates[0], "last": test_dates[-1],
-                 "start": "첫 시험 신호일에 현금 100%, 마지막 시험 신호일은 체결하지 않음",
-                 "nav": "첫 체결일 체결 직전 NAV 1에서 시작, 날마다 종가 NAV (daily_nav.csv는 첫 체결일 체결 뒤부터)"},
+                 "start": "첫 시험 신호일에 현금 100%",
+                 "period": {"first_fill": _next_trading_day(inputs.bm_close.index, test_dates[0]),
+                            "last_signal_fill": _next_trading_day(inputs.bm_close.index, test_dates[-1]),
+                            "end": last_period[1],
+                            "note": "명세 판정 기간·design_C 5절: 마지막 시험 신호일 목표도 체결해 그 해 마지막 거래일 "
+                                    "종가까지. 잔여 구간은 NAV·CAGR·MDD·연 회전율에 넣고 a_k·IR에서는 뺀다"},
+                 "nav": "첫 체결일 체결 직전 NAV 1에서 시작, 날마다 종가 NAV (daily_nav.csv는 첫 체결일 체결 뒤부터). "
+                        "MDD는 체결 후 일간 NAV"},
         "metric_functions": {"ir": "information_ratio", "cagr": "cagr", "annual_excess": "annual_excess_return",
                              "mdd": "max_drawdown", "annual_turnover": "annual_turnover", "module": "src.backtest.metrics"},
         "generated": {"features": {"rows": len(features), "sha256": content_sha256(features)}},

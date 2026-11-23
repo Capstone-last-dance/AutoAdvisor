@@ -96,6 +96,21 @@ def test_cohort_exit_retries_after_lower_limit_and_buy_cost_scales_cash():
                              "cost"].iloc[0] > 0
 
 
+def test_delisted_target_is_rejected_before_first_fill_price_lookup():
+    days = pd.bdate_range("2020-01-01", periods=8)
+    closes = pd.DataFrame({"000001": [50.0] + [float("nan")] * 7,
+                           "000002": [100.0] * 8}, index=days)
+    engine = ExecutionEngine(closes, pd.Series(100.0, index=days), CostRates(0, 0, 0),
+                             delistings={"000001": (days[0].strftime("%Y-%m-%d"), 50.0)})
+    cohort = pd.DataFrame({"date": [days[0], days[0]], "ticker": ["000001", "000002"]})
+    result = simulate_retail_proxy(engine, cohort, cohort.assign(crash_flag=0),
+                                   end_date=days[-1].strftime("%Y-%m-%d"), gate=False, **GUARD)
+
+    first = result.ledger.iloc[0]
+    assert first["rejected"] == {"000001": "cooldown_or_delisted"}
+    assert first["cash"] == pytest.approx(0.875)  # 2종목 목표 중 사라진 종목의 몫은 현금
+
+
 def test_g2_does_not_claim_success_without_drawdown_or_hac_sample():
     days = pd.bdate_range("2020-01-01", periods=25)
     closes = pd.DataFrame({"000001": [100.0] * 25}, index=days)

@@ -257,10 +257,16 @@ def simulate_retail_proxy(
         for (_, ticker), qty in lots.items():
             holdings[ticker] = holdings.get(ticker, 0.0) + qty
         buying = {ticker for _, names in entries.get(i, []) for ticker in names}
-        prices = engine._prices(i, {ticker: 0.0 for ticker in set(holdings) | buying})
+        expired = {
+            ticker for ticker in buying - holdings.keys()
+            if ticker in engine.delistings
+            and engine.day_index[engine.delistings[ticker][0]] < i
+            < engine.relisting_index.get(ticker, len(engine.days))
+        }
+        prices = engine._prices(i, {ticker: 0.0 for ticker in set(holdings) | (buying - expired)})
         nav_before = portfolio_nav(holdings=holdings, closes=prices, cash=cash)
         cost_today = 0.0
-        rejected: dict[str, str] = {}
+        rejected: dict[str, str] = dict.fromkeys(expired, "cooldown_or_delisted")
 
         # 폐지 청산은 일반 가격제한폭을 거치지 않는다 (M5와 동일).
         for ticker in tuple(holdings):
@@ -303,10 +309,10 @@ def simulate_retail_proxy(
             if not names:
                 continue
             allocation = min(cohort_fraction * nav_before, cash)
-            desired = {ticker: allocation / len(names) / prices[ticker] for ticker in names}
+            desired = {ticker: allocation / len(names) / prices[ticker] for ticker in names if ticker not in expired}
             previous = {
                 ticker: (prices[ticker] if engine.relisting_index.get(ticker) == i
-                         else engine._prices(i - 1, {ticker: 0.0})[ticker]) for ticker in names
+                         else engine._prices(i - 1, {ticker: 0.0})[ticker]) for ticker in desired
             }
             allowed: dict[str, float] = {}
             for ticker, qty in desired.items():

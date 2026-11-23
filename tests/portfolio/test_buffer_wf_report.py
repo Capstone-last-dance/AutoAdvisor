@@ -156,22 +156,36 @@ def test_buffer_baseline_and_g5_table_use_the_rl_inputs(setup, synthetic):
         np.testing.assert_allclose(weekly.loc[weekly["portfolio"] == f"rl_s{s}", "a_k"],
                                    recorded.loc[recorded["seed"] == s, "a_k"], rtol=0, atol=1e-12)
 
+    # 판정 기간 끝: 마지막 시험 신호일 목표도 다음 거래일에 체결하고 그 해 마지막 거래일 종가까지 평가한다.
+    # C 엔진으로 따로 다시 돌려 맞춘다 (합성 시장: 신호일 12/27(금) → 12/30 체결 → 12/31 종가)
+    days = kept.closes.index
+    year_days = days[days.year == YEARS[-1]]
+    assert test_dates[-1] == "2013-12-27" and year_days[-1] == pd.Timestamp("2013-12-31")
+    eng = build_engine(inputs, cfg_now, record_ledger=True, cooldowns=sched.cooldowns,
+                       event_liquidations=sched.liquidations)
+    targets, state = bwf.targets_by_date(pos["full"]), eng.initial_state()
+    for d, nxt in zip(test_dates[:-1], test_dates[1:]):
+        state = eng.run_period(state, targets[d], d, nxt).state
+    last = eng.run_period(state, targets[test_dates[-1]], test_dates[-1], year_days[-2].strftime("%Y-%m-%d"))
+    assert m["test"]["period"]["end"] == "2013-12-31" and m["test"]["period"]["last_signal_fill"] == "2013-12-30"
+
     # 표의 지표는 C의 M5 함수로 다시 계산한 값과 같다
     nav = _read(out, "daily_nav.csv", index_col="date")
-    days = kept.closes.index
     assert nav.index[0] == wf._next_trading_day(days, test_dates[0])  # 첫 체결일
-    assert nav.index[-1] == wf._next_trading_day(days, test_dates[-1])  # 마지막 평가일
+    assert nav.index[-1] == "2013-12-31"  # 마지막 평가일 = 마지막 시험 연도의 마지막 거래일
+    assert nav["buffer_full"].iloc[-1] == pytest.approx(last.nav_end, rel=1e-12)
+    assert m["runs"]["buffer_full"]["last_turnover"] == pytest.approx(last.turnover) and last.turnover > 0
     n = len(nav) - 1
     table = _read(out, "g5_table.csv", dtype={"seed": str}, keep_default_na=False)
     assert list(table["portfolio"]) == ["rl"] * (len(SEEDS) + 1) + ["buffer"]
     assert list(table["seed"]) == [str(s) for s in SEEDS] + ["mean", ""]
     buf = table[table["portfolio"] == "buffer"].iloc[0]
     a = weekly[weekly["portfolio"] == "buffer_full"]
-    assert len(a) == len(test_dates) - 1  # 마지막 시험 신호일은 체결하지 않는다
+    assert len(a) == len(test_dates) - 1  # 잔여 구간은 a_k·IR 표본에 넣지 않는다
     assert buf["ir"] == pytest.approx(m5.information_ratio(a["a_k"]))
     assert buf["cagr"] == pytest.approx(nav["buffer_full"].iloc[-1] ** (252 / n) - 1)
-    assert buf["annual_turnover"] == pytest.approx(a["turnover"].sum() / (n / 252))
-    assert buf["mdd"] == pytest.approx(m5.max_drawdown(np.r_[1.0, nav["buffer_full"]]))
+    assert buf["annual_turnover"] == pytest.approx((a["turnover"].sum() + last.turnover) / (n / 252))
+    assert buf["mdd"] == pytest.approx(m5.max_drawdown(nav["buffer_full"]))  # 체결 후 일간 NAV
     bm_cagr = (nav["KOSPI200"].iloc[-1] / nav["KOSPI200"].iloc[0]) ** (252 / n) - 1
     assert buf["annual_excess"] == pytest.approx(buf["cagr"] - bm_cagr)
     mean = table[table["seed"] == "mean"].iloc[0]
@@ -304,6 +318,32 @@ def test_daily_nav_takes_the_last_record_of_each_day():
     nav = bwf.daily_nav(ledger)
     assert list(nav.index.strftime("%Y-%m-%d")) == ["2016-01-11", "2016-01-12", "2016-01-18"]
     assert list(nav) == [0.999, 1.01, 1.018]
+
+
+def test_summary_definitions():
+    """CAGR은 첫 체결 직전 NAV 1에서, MDD는 체결 후 일간 NAV로, 연 회전율은 잔여 구간 체결까지 넣어 센다."""
+    days = pd.DatetimeIndex(["2016-01-11", "2016-01-12", "2016-01-13"])
+    rep = bwf.Replay(["2016-01-08", "2016-01-11"], np.array([0.01, -0.005]), np.array([0.5, 0.1]),
+                     pd.Series([0.99, 1.0, 0.995], index=days), 0.995, last_turnover=0.2)
+    positions = pd.DataFrame({"ticker": ["CASH", "CASH"], "target_weight": [0.1, 0.3]})
+    s = bwf.summary(rep, pd.Series([100.0, 101.0, 102.0], index=days), positions)
+    assert s["mdd"] == pytest.approx(1 - 0.995 / 1.0)  # 첫 체결 비용(1 → 0.99)은 낙폭이 아니다
+    assert s["cagr"] == pytest.approx(0.995 ** (252 / 2) - 1)
+    assert s["annual_turnover"] == pytest.approx(0.8 / (2 / 252))
+    assert (s["trading_days"], s["weeks"], s["last_turnover"], s["mean_cash"]) == (2, 2, 0.2, pytest.approx(0.2))
+
+
+def test_period_end_is_the_last_trading_day_of_the_last_test_year():
+    """KRX 2025: 마지막 신호일 12/26(금) → 12/29 체결 → 12/30 종가 (12/31 휴장). run_period에는 12/29를 넘긴다."""
+    days = pd.DatetimeIndex(["2025-12-22", "2025-12-23", "2025-12-24", "2025-12-26", "2025-12-29", "2025-12-30",
+                             "2026-01-02", "2026-01-05"])
+    assert bwf.period_end(days, "2025-12-26", 2025) == ("2025-12-29", "2025-12-30")
+    assert bwf.period_end(days, "2025-12-24", 2025) == ("2025-12-29", "2025-12-30")
+    for last_signal in ("2025-12-29", "2025-12-30"):  # 체결일이 그 해 마지막 거래일이거나 다음 해다
+        with pytest.raises(ValueError, match="앞서지 않는다"):
+            bwf.period_end(days, last_signal, 2025)
+    with pytest.raises(ValueError, match="거래일이 없다"):
+        bwf.period_end(days, "2025-12-26", 2024)
 
 
 def test_replay_needs_a_fresh_engine_with_a_ledger(market, cfg):

@@ -1,0 +1,1 @@
+{"lam": 0.25, "kappa": 0.0, "fold": 2026, "seed": 4, "steps": 100000, "train_rows": 318, "train": ["2011-10-28", "2023-12-22"], "val": [2024, 2025], "best_timesteps": 10000, "best_val_score": 1.1758462979783177, "best_val_cagr": 0.1029682433602932, "best_val_mdd": 0.0875694753109576, "best_val_mean_e": 0.49999999999999994, "seconds": 84.1, "sb3": "2.9.2", "torch": "2.15.0+cpu"}

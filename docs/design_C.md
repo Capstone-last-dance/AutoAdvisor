@@ -326,6 +326,12 @@ B-01의 `IRFunction`은 `float`를 반환하고 검증 콜백은 비유한 IR을
 이 청산 재시도 해석은 실제 데이터 연결 전에 PM·B와 확인한다.
 G2 판정은 게이트 전후 동일한 NAV 날짜, 상대 MDD 축소, CAGR 비열화,
 `d_t` HAC t값이 모두 정의됐을 때만 성공/실패를 낸다.
+`src.backtest.g2_report`는 A의 고정 walk-forward 신호와 B의 인계 파일에
+기록된 입력 SHA-256을 먼저 대조한다. 실제 U_t와 신호 키가 다르거나
+520개 신호일이 아니면 멈춘다. 코호트, 일별 NAV, 신호일별 `d_t`,
+누락 건수와 G2 세 조건을 별도 실행 디렉터리에 저장한다.
+폐지된 종목이 첫 체결일에 가격이 없으면 가격 조회 전에 매수를 거부하고
+그 종목의 목표 금액은 현금으로 남긴다.
 
 ### Forward test 사후 성과 — C-04 설계
 
@@ -371,6 +377,64 @@ M9 적용 실행은 PM의 `AlertBook.engine_alerts(첫 기록일, 종료일)`을
 구현한다. C-05 이후 실제 판정에는 A의 급락 게이트·순위 모델,
 B의 M8 적용 비중, PM의 경보 결과가 필요하다. M12의 SHAP·ANOVA는
 별도 C-06·C-09 작업이다.
+
+### C-05·C-07 판정 진입점
+
+`src.backtest.kpi_report.evaluate_g1_g3`는 A의 시험 연도별
+`signals/wf_{run_id}.parquet`와 같은 실행의
+`reports/{run_id}/wf_diagnostics.parquet`, C의 `labels.parquet`을 받는다.
+신호·진단의 `(date, ticker)` 집합과 폴드 연도를 대조하고 2026년 라벨을
+거부한다. G1·G3의 모델과 기준선은 같은 유효 행에서 M5 지표 함수로
+재계산하며, 연도별·전체 수치와 빠진 행 수를 반환한다. 파일이 인계되면
+다음 명령으로 `reports/{run_id}/`에 지표 JSON, 설정 사본, Git 해시,
+입력 파일 SHA-256을 남긴다. 기존 실행 디렉터리는 덮어쓰지 않는다.
+
+```bash
+python -m src.backtest.kpi_report \
+  --signals signals/wf_<A_run_id>.parquet \
+  --diagnostics reports/<A_run_id>/wf_diagnostics.parquet \
+  --labels <C_labels_path>/labels.parquet \
+  --out-dir reports/<C_run_id>
+```
+
+`evaluate_g7`은 B가 제공할 버퍼 규칙의 M8·M9 적용/미적용 positions를
+같은 C 엔진·비용으로 운용해 얻은 **같은 날짜의 체결 후 일별 NAV**를
+비교한다. 첫 체결일의 체결 직전 NAV는 두 실행에 공통인 `initial_nav`로
+전달한다. 체결 후 일간 NAV의 MDD 감소율과 체결 직전 NAV를 시작점으로 한 CAGR 비열화를 사전등록
+값으로 판정한다. PR #63의 v6 비교 결과는 재현 대조에 쓰고,
+DEC-35에 따른 v7 재실행 뒤 실제 G7 값을 확정한다.
+
+### C-06 SHAP 실행 준비
+
+`src.analysis.shap_report`는 A의 M3a·M3b 시험 연도별 LightGBM 텍스트 모델을
+`reports/<A run_id>/models/fold_<연도>/{gate,ranker}/`에서 읽는다. 같은 실행의
+결합 피처 파일을 받아 2016~2025년 시험 연도마다 `(date, ticker)` 정렬 후
+시드 42로 최대 5,000행을 비복원 추출한다. 2026 홀드아웃은 거부한다.
+`shap.TreeExplainer`의 게이트 양성 출력과 순위 모델 회귀 출력을 사용한다.
+
+실행 명령은 `python -m src.analysis.shap_report --features <A features.parquet>
+--models reports/<A run_id>/models --output reports/<C run_id>`이다. 결과는
+`top10_by_year.csv`, `feature_importance_all.csv`, `rank_stability.csv`,
+두 모델 각각의 전체 상위 3개 피처 의존성 그림, 입력·모델 SHA-256 및 설정
+사본이다. A의 v7 폴드 모델과 대응 피처가 전달되기 전에는 표·그림의 실제
+수치를 확정하지 않는다. 실행 환경에는 사전등록 패키지 `shap`와 그림용
+`matplotlib`이 필요하다.
+
+### D-09 성과 페이지 출력 계약
+
+`reports/final/metrics.json`은 C가 확정한 KPI와 실행 근거의 원본으로 둔다.
+D-09 성과 페이지에는 이 결과에서 만든 CSV 세 개를 같은 폴더에 제공한다.
+실험 중인 실행 폴더의 결과를 `final/`에 복사하지 않는다.
+
+| 파일 | 필수 열 | C가 기록할 내용 |
+|---|---|---|
+| `kpi.csv` | `gate,kpi,value,threshold,verdict` | G0~G7 판정 근거를 지표당 한 행으로 기록. 필요하면 `note`에 판정 불가·보조 분석 이유를 적는다. |
+| `nav.csv` | `date,series,nav` | 확정 실행과 벤치마크의 같은 거래일 일별 NAV를 긴 형식으로 기록한다. |
+| `periods.csv` | `period,start,end` | P1~P7 분석 구간의 시작·종료일을 기록하고 설명은 선택 열 `description`에 둔다. |
+
+CSV는 화면 표시용이며, 값과 판정은 `metrics.json` 및 해당 실행의
+`config.yaml`·`git_commit.txt`와 대조 가능해야 한다. 실제 출력 생성은
+C-10~C-12의 최종 결과 취합 단계에서 수행한다.
 
 ## 7. 연결 전 확인할 결정
 

@@ -1,0 +1,42 @@
+{
+  "classification": "preregistered G2 evaluation; 2016-2025 walk-forward",
+  "inputs_sha256": {
+    "prices": "e735be46c5ca1685f922d0c8ee78f2129d8c8256bb6cfd9181723ccd0b01b5a5",
+    "status": "40812ae37f997ef5dd0b42fc2f453a15839cd9d0f4967d1b9d37fdad7e7363b3",
+    "index": "ce9ffb646c4723fe067c76eaba90a526683444369ac7ab43e53684e662e9300e",
+    "universe": "b2b892af78a83bb773b804ba3cacf673efa4f5734a8d144b1384ffce36462758",
+    "delisted": "fc14a9183780605617f72fa784f785b4ae0635fbbef46c0d7225cc539478a54c",
+    "delisted_reused": "a73192de4525b05e626bd24bff5dc30e205546d6ed963bbaf5f9c1ff7ce80a25",
+    "signals": "010cadd58c4d3bac099382761af34587a6552f67db0f7a1805d6895cb07890ae",
+    "labels": "e1c7acb2b8096538a38f19cc405f05586c1b4f0adc7a6270cfb613af72adcfb3",
+    "prereg": "ed4ddd1f3ee1b880a9cd0adbe73f8f672ba6a2af2b0dd2b0c5b9e1cff53250ac"
+  },
+  "signal_days": 520,
+  "cohort_rows": 15600,
+  "cohort_quality": {
+    "missing_history": 196,
+    "zero_baseline": 11,
+    "cohorts_short": 0
+  },
+  "baseline": {
+    "mdd": 0.6854058719987346,
+    "cagr": -0.07743899341997995
+  },
+  "gate": {
+    "mdd": 0.5896978571372797,
+    "cagr": -0.03951518338971294
+  },
+  "effect": {
+    "mean_d": -0.009891435271547701,
+    "hac_t": -1.6388097143073719,
+    "signal_days_used": 516,
+    "signal_days_undefined": 4,
+    "missing_pairs": 140
+  },
+  "G2": {
+    "mdd_reduction_relative": 0.13963699287016257,
+    "cagr_gate_not_lower": true,
+    "hac_t": -1.6388097143073719,
+    "passed": false
+  }
+}

@@ -11,11 +11,15 @@ run_weekly 7단계도 같은 record()를 부른다.
 - forward/{YYYYMMDD} 브랜치에서만 기록한다. main에 직접 커밋하지 않는다 (DEC-04).
 - 마감은 신호일 다음 거래일 09:00 KST다 (DEC-04). 지나면 기록하지 않고, 커밋·로그 기록·push 직전마다 다시 확인한다.
 - 날짜별 입력을 커밋 전에 검사한다 (6.8절): 11/20 전 baseline만, 11/20~26 baseline+positions, 11/27부터 ML+positions.
-- B 병행 모델 비중 positions/wf_{YYYYMMDD}_B_t7c53.parquet은 지금 기록하지 않는다 (보류, B 설계 11/20·PM #77 리뷰).
-  PARALLEL_FROM이 None이면 같은 날짜 파일이 있어도 공식 커밋에 넣지 않는다. PM이 시작일을 정하면 그 날짜를 넣는다.
-  켜진 뒤에도 파일이 없거나 쓸 수 없으면 경고만 남기고 공식 기록은 그대로 한다.
+- 11/27부터 B 병행 모델(T7-80-C53) 비중 positions/wf_{YYYYMMDD}_B_t7c53.parquet을 같은 신호 커밋·태그에 넣는다
+  (PM 11/23). 단 이번 주간 실행의 5b가 성공적으로 쓴 파일(ctx.memory["parallel_written"])만 넣는다. 5b를 건너뛰거나
+  실패한 경우, 기록기를 직접 실행한 경우에는 같은 날짜 파일이 있어도 공식 신호·비중만 기록한다.
 - 이미 기록한 신호일은 다시 기록하지 않는다 (커밋한 신호는 고치지 않는다).
 - 스텁(_stub/)은 읽지 않는다. 실제 폴더의 파일만 커밋한다.
+- 마감 후 기록(--late, PM 승인 11/23): 마감이 지난 신호일을 PM이 승인한 경우에만, deviation log에 그 신호일의
+  "마감 후 기록" 행이 있을 때 기록한다. 태그는 ft-late-{YYYYMMDD}로 정식 기록(ft-*)과 구분하고, 커밋 메시지에
+  마감과 실제 기록 시각을 남긴다. forward_log.csv에는 적지 않는다(마감 준수 기록만 둔다).
+  past_positions 등 정식 태그 읽기에는 들어가지 않는다.
 - 신호를 만든 코드의 커밋 해시를 두 커밋 메시지에 적는다 (DEC-04).
 """
 
@@ -28,6 +32,7 @@ import subprocess
 import sys
 from collections.abc import Callable, Sequence
 from io import BytesIO
+from pathlib import Path
 
 import pandas as pd
 
@@ -45,12 +50,12 @@ POSITIONS_FROM = pd.Timestamp("2026-11-20")
 ML_FROM = pd.Timestamp("2026-11-27")
 
 PUBLISHED_TAGS = "refs/forward-published"  # origin의 ft-* 태그를 받아 두는 곳
+DEVIATION_LOG = "docs/deviation_log.md"
+LATE_MARK = "마감 후 기록"  # deviation log 행과 커밋 메시지에 쓰는 표시
 
-# B 병행 모델 비중: 켜지면 그 날짜부터 공식 기록과 같은 커밋·태그에 함께 남긴다.
-# 경로 positions/wf_{YYYYMMDD}_B_{name}.parquet (io의 run_id 경로). 없으면 공식 기록만 한다.
-# 지금은 보류다 (None): RL이 바구니의 지난 1년을 보므로 개봉 전 forward는 홀드아웃 성과를 계산하는 셈이라
-# 11/27 병행 기록은 하지 않는다 (B 설계 11/20). 개봉 뒤 시작할지는 PM이 정한다.
-PARALLEL_FROM: pd.Timestamp | None = None
+# B 병행 모델 비중 (PM 11/23): 이 날짜부터 5b가 이번 실행에서 쓴 파일을 공식 기록과 같은 커밋·태그에 남긴다.
+# 경로 positions/wf_{YYYYMMDD}_B_{name}.parquet (io의 run_id 경로). None이면 넣지 않는다(보류).
+PARALLEL_FROM: pd.Timestamp | None = pd.Timestamp("2026-11-27")
 PARALLEL_NAME = "t7c53"
 
 
@@ -99,37 +104,44 @@ def _trading_days_after(date: str | pd.Timestamp) -> pd.DatetimeIndex:
 
 
 def record(date: str, source_commit: str, push: bool = True, memo: str | None = None,
-           now: Callable[[], pd.Timestamp] | None = None, include_parallel: bool = True) -> str:
+           now: Callable[[], pd.Timestamp] | None = None,
+           late: str | None = None, parallel: str | None = None) -> str:
     """신호일 date의 신호를 커밋하고 해시를 forward_log.csv에 적는다. 신호 커밋 해시를 돌려준다.
 
     source_commit: 신호를 만든 코드의 커밋 (DEC-04).
     push: False면 커밋과 태그까지만 하고 push하지 않는다 (리허설용).
     memo: 두 커밋 메시지에 덧붙일 설명. 예: universe v1의 관리종목 단계 미적용 (DEC-24).
-    include_parallel: False면 B 병행 모델 비중 파일을 커밋하지 않는다 (그 주 병행 단계가 실패한 경우).
+    late: 마감 후 기록 사유 (PM 승인). 주면 마감이 지난 경우에만, deviation log에 그 신호일의 "마감 후 기록"
+        행이 있을 때 ft-late-{YYYYMMDD} 태그로 기록하고 forward_log.csv에는 적지 않는다.
+    parallel: 이번 주간 실행의 5b가 성공적으로 쓴 B 병행 비중 파일 경로 (ctx.memory["parallel_written"]).
+        신호일 경로와 같을 때만 같은 신호 커밋·태그에 넣는다. 기본값 None(직접 실행 등)이면 공식 신호·비중만 기록한다.
     """
     io._check_date_arg(date)
     now = now or (lambda: pd.Timestamp.now(tz=KST))
     deadline = commit_deadline(date)
+    if late is not None:
+        _check_late(date, late, deadline, now())
 
     def check_deadline(done: str | None = None) -> None:
-        if now() < deadline:
+        if late is not None or now() < deadline:
             return
-        late = f"마감({deadline:%Y-%m-%d %H:%M} KST)이 지났다 (DEC-04)"
+        passed = f"마감({deadline:%Y-%m-%d %H:%M} KST)이 지났다 (DEC-04)"
         if done is None:
-            raise ForwardTestError(f"{late}. 아무것도 기록하지 않았다")
-        raise ForwardTestPartial(f"{late}. {done}. 남은 단계는 하지 않았다. PM에게 알리고 deviation log에 남긴다")
+            raise ForwardTestError(f"{passed}. 아무것도 기록하지 않았다")
+        raise ForwardTestPartial(f"{passed}. {done}. 남은 단계는 하지 않았다. PM에게 알리고 deviation log에 남긴다")
 
     check_deadline()
 
     stamp = date.replace("-", "")
-    branch, tag = f"forward/{stamp}", f"ft-{stamp}"
+    branch, tag = f"forward/{stamp}", (f"ft-late-{stamp}" if late is not None else f"ft-{stamp}")
     _git("rev-parse", "--is-inside-work-tree")
     current = _git("branch", "--show-current")
     if current != branch:
         raise ForwardTestError(f"{branch} 브랜치에서 실행한다 (지금: {current or '브랜치 없음'}). "
                                f"git switch -c {branch} origin/main")
-    if _git("tag", "--list", tag):
-        raise ForwardTestError(f"태그 {tag}가 이미 있다. 커밋한 신호는 고치지 않는다 (6.8절)")
+    for existing in {tag, f"ft-{stamp}"}:
+        if _git("tag", "--list", existing):
+            raise ForwardTestError(f"태그 {existing}가 이미 있다. 커밋한 신호는 고치지 않는다 (6.8절)")
     try:
         code_commit = _git("rev-parse", "--verify", "--quiet", f"{source_commit}^{{commit}}")
     except ForwardTestError:
@@ -160,11 +172,18 @@ def record(date: str, source_commit: str, push: bool = True, memo: str | None = 
         raise ForwardTestError(f"{date}은 {want_source} 신호를 기록하는 날인데 {source} 신호다 (6.8절)")
     if has_positions != want_positions:
         raise ForwardTestError(f"{date}은 positions {'포함' if want_positions else '없이'} 기록하는 날이다 (6.8절)")
-    parallel = _parallel_path(date, day) if include_parallel else None
-    if parallel:
-        paths.append(parallel)
+    attached = _parallel_path(date, day, parallel)
+    if attached:
+        paths.append(attached)
 
     note = f"\n\n신호를 만든 코드 커밋: {code_commit}" + (f"\n{memo}" if memo else "")
+    if late is not None:
+        note += (f"\n{LATE_MARK}: 마감 {deadline:%Y-%m-%d %H:%M} KST, 기록 시각 {now():%Y-%m-%d %H:%M} KST "
+                 f"(PM 승인, {DEVIATION_LOG})\n사유: {late}")
+        commit_hash = _commit_signals(date, paths, note, title=f"forward test ({LATE_MARK}): {date} 신호 커밋")
+        _tag_and_push(commit_hash, branch, tag, push, check_deadline)
+        log.warning("%s: %s으로 %s 태그를 남겼다. forward_log.csv에는 적지 않았다", date, LATE_MARK, tag)
+        return commit_hash
     check_deadline()
     commit_hash = _commit_signals(date, paths, note)
     check_deadline(f"신호 커밋 {commit_hash}까지 끝났고 forward_log.csv에는 적지 않았다")
@@ -192,6 +211,12 @@ def record(date: str, source_commit: str, push: bool = True, memo: str | None = 
         _git("restore", "--source=HEAD", "--staged", "--worktree", "--", "forward_log.csv")
         raise ForwardTestPartial(f"신호 커밋 {commit_hash}까지 끝났고 forward_log.csv 기록은 되돌렸다. "
                                  f"다시 실행하면 이어서 기록한다 ({exc})") from None
+    _tag_and_push(commit_hash, branch, tag, push, check_deadline)
+    return commit_hash
+
+
+def _tag_and_push(commit_hash: str, branch: str, tag: str, push: bool,
+                  check_deadline: Callable[[str | None], None]) -> None:
     try:
         _git("tag", tag, commit_hash)
     except ForwardTestError as exc:
@@ -202,29 +227,42 @@ def record(date: str, source_commit: str, push: bool = True, memo: str | None = 
         try:
             _git("push", "origin", branch, f"refs/tags/{tag}")
         except ForwardTestError as exc:
-            raise ForwardTestPartial(f"커밋과 태그는 끝났고 push만 실패했다. 마감 전에 직접 push한다: "
+            raise ForwardTestPartial(f"커밋과 태그는 끝났고 push만 실패했다. 직접 push한다: "
                                      f"git push origin {branch} {tag} ({exc})") from None
-        log.info("기록 완료: %s 신호 커밋 %s, %s·%s push", date, commit_hash, branch, tag)
+        log.info("기록 완료: 신호 커밋 %s, %s·%s push", commit_hash, branch, tag)
     else:
-        log.info("기록 완료: %s 신호 커밋 %s (push 안 함)", date, commit_hash)
-    return commit_hash
+        log.info("기록 완료: 신호 커밋 %s (push 안 함)", commit_hash)
 
 
-def _parallel_path(date: str, day: pd.Timestamp) -> str | None:
-    """함께 커밋할 B 병행 모델 비중 파일 경로. 없거나 쓸 수 없으면 None (공식 기록은 그대로 한다, PM 11/20)."""
+def _check_late(date: str, reason: str, deadline: pd.Timestamp, now: pd.Timestamp) -> None:
+    """마감 후 기록의 조건: 사유가 있고, 마감이 실제로 지났고, deviation log에 그 신호일의 행이 있다."""
+    if not reason.strip():
+        raise ForwardTestError("마감 후 기록에는 사유(PM 승인 내용)를 적는다")
+    if now < deadline:
+        raise ForwardTestError(f"마감({deadline:%Y-%m-%d %H:%M} KST) 전이다. --late 없이 정식으로 기록한다")
+    path = io.ROOT / DEVIATION_LOG
+    rows = path.read_text(encoding="utf-8").splitlines() if path.is_file() else []
+    if not any(line.startswith("|") and date in line and LATE_MARK in line for line in rows):
+        raise ForwardTestError(f"{DEVIATION_LOG}에 {date} '{LATE_MARK}' 행이 없다. PM 승인을 deviation log에 먼저 남긴다")
+
+
+def _parallel_path(date: str, day: pd.Timestamp, written: str | None) -> str | None:
+    """함께 커밋할 B 병행 모델 비중 파일 경로. 이번 실행의 5b가 쓴 신호일 파일이 아니면 None (공식 기록만 한다)."""
     run_id = parallel_run_id(date)
     rel = f"positions/wf_{run_id}.parquet"
     exists = (io.ROOT / rel).is_file()
-    if PARALLEL_FROM is None:
+    if written is None:
         if exists:
-            log.warning("병행 모델 기록은 보류 중이라 %s는 커밋하지 않는다 (B 설계 11/20)", rel)
+            log.warning("이번 실행의 5b가 쓴 파일이 아니라 %s는 커밋하지 않는다 (공식 기록만 한다)", rel)
+        return None
+    if Path(written).as_posix() != rel:
+        log.warning("5b가 쓴 경로 %s가 신호일 경로 %s와 달라 병행 파일을 커밋하지 않는다", written, rel)
+        return None
+    if PARALLEL_FROM is None or day < PARALLEL_FROM:
+        log.warning("병행 모델 기록 시작일 전이라 %s는 커밋하지 않는다", rel)
         return None
     if not exists:
-        if day >= PARALLEL_FROM:
-            log.warning("병행 모델 비중 %s가 없어 공식 기록만 한다", rel)
-        return None
-    if day < PARALLEL_FROM:
-        log.warning("병행 모델 기록은 %s부터라 %s는 커밋하지 않는다", f"{PARALLEL_FROM:%Y-%m-%d}", rel)
+        log.warning("병행 모델 비중 %s가 없어 공식 기록만 한다", rel)
         return None
     try:
         df = io.read_table("positions", run_id=run_id)
@@ -290,7 +328,7 @@ def _signal_source(signals: pd.DataFrame) -> str:
     raise ForwardTestError("한 신호일에 baseline과 ML 신호가 섞여 있다")
 
 
-def _commit_signals(date: str, paths: list[str], note: str) -> str:
+def _commit_signals(date: str, paths: list[str], note: str, title: str | None = None) -> str:
     """paths만 커밋하고 그 커밋 해시를 돌려준다. 다른 변경은 커밋에 넣지 않는다."""
     _git("add", "--", *paths)
     if not _git("diff", "--cached", "--name-only", "--", *paths):
@@ -306,7 +344,7 @@ def _commit_signals(date: str, paths: list[str], note: str) -> str:
         _git("restore", "--staged", "--", *paths)
         raise ForwardTestError(f"이미 커밋된 파일이 달라졌다: {', '.join(committed)}. "
                                "커밋한 신호는 고치지 않는다 (6.8절)")
-    _git("commit", "-m", f"forward test: {date} 신호 커밋{note}", "--", *paths)
+    _git("commit", "-m", f"{title or f'forward test: {date} 신호 커밋'}{note}", "--", *paths)
     return _git("rev-parse", "HEAD")
 
 
@@ -324,10 +362,13 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--source-commit", required=True, help="신호를 만든 코드의 커밋 해시 (DEC-04)")
     parser.add_argument("--no-push", action="store_true", help="커밋과 태그까지만 한다 (리허설용)")
     parser.add_argument("--memo", help="커밋 메시지에 덧붙일 설명")
+    parser.add_argument("--late", metavar="사유",
+                        help="마감 후 기록 (PM 승인 필요, deviation log에 그 신호일의 '마감 후 기록' 행이 있어야 한다)")
     args = parser.parse_args(argv)
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
     try:
-        commit_hash = record(args.date, source_commit=args.source_commit, push=not args.no_push, memo=args.memo)
+        commit_hash = record(args.date, source_commit=args.source_commit, push=not args.no_push, memo=args.memo,
+                             late=args.late)
     except (ForwardTestError, FileNotFoundError, ValueError) as exc:
         print(f"오류: {exc}", file=sys.stderr)
         return 1
