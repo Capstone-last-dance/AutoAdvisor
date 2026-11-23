@@ -1,0 +1,116 @@
+{
+  "source_pr": 73,
+  "source_head": "53d842cf72814ec18185d24ead42d4089f195bee",
+  "definition": "full=M8+M9; no_exposure=Step4-5 off, M9 on; off=M8 Step2-6 and M9 off",
+  "drawdowns": {
+    "buffer_full": {
+      "mdd": 0.6871119983696123,
+      "peak_date": "2016-06-08",
+      "peak_nav": 1.0191021318423237,
+      "trough_date": "2025-04-09",
+      "trough_nav": 0.3188648294894126
+    },
+    "buffer_no_exposure": {
+      "mdd": 0.6300104548008623,
+      "peak_date": "2016-01-13",
+      "peak_nav": 1.0151775749867868,
+      "trough_date": "2020-03-19",
+      "trough_nav": 0.37560508926572483
+    },
+    "buffer_off": {
+      "mdd": 0.6345323002766347,
+      "peak_date": "2016-01-13",
+      "peak_nav": 1.0151775749867868,
+      "trough_date": "2020-03-19",
+      "trough_nav": 0.37101461314116524
+    }
+  },
+  "target_cash_mean": {
+    "full": {
+      "2020": 0.26002310249610305,
+      "2025": 0.2564213055558305,
+      "all": 0.11732642140769292
+    },
+    "no_exposure": {
+      "2020": 0.0009433962264150973,
+      "2025": 0.0038461538461538455,
+      "all": 0.0024175824175824163
+    },
+    "off": {
+      "2020": 0.0,
+      "2025": 0.0,
+      "all": 6.405132834375903e-19
+    }
+  },
+  "annual_returns": {
+    "2020": {
+      "buffer_full": 0.1325930453753119,
+      "buffer_no_exposure": 0.3882704397805712,
+      "buffer_off": 0.38086744078307033
+    },
+    "2025": {
+      "buffer_full": 0.4032090575883416,
+      "buffer_no_exposure": 0.6038603212602476,
+      "buffer_off": 0.6167362552470792
+    }
+  },
+  "checkpoints": {
+    "2020-03-19": {
+      "buffer_full": {
+        "nav": 0.47291552467995757,
+        "drawdown_to_date": 0.5359488417269571
+      },
+      "buffer_no_exposure": {
+        "nav": 0.37560508926572483,
+        "drawdown_to_date": 0.6300104548008623
+      },
+      "buffer_off": {
+        "nav": 0.37101461314116524,
+        "drawdown_to_date": 0.6345323002766347
+      }
+    },
+    "2020-12-30": {
+      "buffer_full": {
+        "nav": 0.690534299946296,
+        "drawdown_to_date": 0.32240913018408246
+      },
+      "buffer_no_exposure": {
+        "nav": 0.836910912470321,
+        "drawdown_to_date": 0.17560145821659434
+      },
+      "buffer_off": {
+        "nav": 0.8303687560003421,
+        "drawdown_to_date": 0.18204580512808333
+      }
+    },
+    "2025-04-09": {
+      "buffer_full": {
+        "nav": 0.3188648294894126,
+        "drawdown_to_date": 0.6871119983696123
+      },
+      "buffer_no_exposure": {
+        "nav": 0.38477731937705884,
+        "drawdown_to_date": 0.6209753555853842
+      },
+      "buffer_off": {
+        "nav": 0.3852263507337296,
+        "drawdown_to_date": 0.6205330375439553
+      }
+    },
+    "2025-12-30": {
+      "buffer_full": {
+        "nav": 0.4592276609070138,
+        "drawdown_to_date": 0.5493801390869175
+      },
+      "buffer_no_exposure": {
+        "nav": 0.6393952471686544,
+        "drawdown_to_date": 0.3701641339181705
+      },
+      "buffer_off": {
+        "nav": 0.6452305875200741,
+        "drawdown_to_date": 0.36441603575761394
+      }
+    }
+  },
+  "interpretation": "2020 급락 당일 full은 보호됐으나 2020·2025 회복에서 높은 목표 현금과 노출 제한으로 수익을 덜 얻어 2025-04-09에 새 최대 낙폭 발생. no_exposure와 off의 MDD가 가까워 Step4-5 노출 조절이 주요 경로임을 시사. MDD는 경로 의존 지표이고 세 실행의 peak/trough가 달라 차이를 산술적으로 귀속할 수 없음."
+}

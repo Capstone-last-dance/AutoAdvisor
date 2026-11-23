@@ -1,0 +1,54 @@
+{
+  "run_id": "20261117_C_pm_features_v7_check",
+  "task": "C-05 input precheck, DEC-35 v7",
+  "input_file": "pm_features_20261117.parquet",
+  "input_sha256": "6410c187175b2428b9373c4f4aab8577527c8008c72f0d46b7fc5b70603faffd",
+  "universe_source": "A02_processed_20261108/universe.parquet",
+  "universe_sha256": "b2b892af78a83bb773b804ba3cacf673efa4f5734a8d144b1384ffce36462758",
+  "rows": 348678,
+  "signal_days": 826,
+  "tickers": 1512,
+  "first_date": "2011-01-07",
+  "last_date": "2026-11-06",
+  "duplicate_keys": 0,
+  "null_keys": 0,
+  "universe_key_mismatch": 0,
+  "preholdout": {
+    "rows": 327189,
+    "signal_days": 781,
+    "news_missing": {
+      "news_cnt_spike": 10146,
+      "news_sent_5": 101043
+    },
+    "news_missing_rate": {
+      "news_cnt_spike": 0.031009599955988742,
+      "news_sent_5": 0.30882150683549875
+    }
+  },
+  "holdout_2026": {
+    "rows": 21489,
+    "signal_days": 45,
+    "use_in_model_training": false
+  },
+  "news_missing": {
+    "news_cnt_spike": 11220,
+    "news_sent_5": 107355
+  },
+  "news_flag_and_fill_ok": {
+    "news_cnt_spike": true,
+    "news_sent_5": true
+  },
+  "news_rank_range_ok": true,
+  "event_binary_ok": {
+    "ev_earnings": true,
+    "ev_buyback": true,
+    "ev_cancel": true,
+    "ev_dividend": true,
+    "ev_rights": true,
+    "ev_cbbw": true
+  },
+  "limits": [
+    "원천 기사·상호 이력과 v6 파일은 전달되지 않아 PM의 16,044→0 주장과 과거 기사 연결을 독립 재현하지 못함",
+    "A의 v7 신호·진단과 B의 재학습 산출물은 별도 인계 필요"
+  ]
+}

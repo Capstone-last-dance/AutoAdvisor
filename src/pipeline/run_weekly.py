@@ -2,6 +2,7 @@
 
     python -m src.pipeline.run_weekly --date YYYY-MM-DD
     python -m src.pipeline.run_weekly --date YYYY-MM-DD --rehearsal   # 리허설: 7단계 기록을 건너뛴다
+    python -m src.pipeline.run_weekly --date YYYY-MM-DD --source-commit <해시> --late "<사유>"   # 마감 후 기록 (PM 승인)
 
 5.2절 1~7단계를 순서대로 실행한다.
 - 각 단계는 해당 모듈의 공개 함수만 호출한다. 연결된 함수가 없는 단계는 9.3절 스키마를 만족하는
@@ -50,6 +51,7 @@ class StepContext:
     log: logging.Logger = field(default_factory=lambda: logging.getLogger("run_weekly"))
     source_commit: str | None = None                    # 신호를 만든 코드의 커밋 (DEC-04)
     rehearsal: bool = False                             # True면 7단계 forward test 기록을 건너뛴다
+    late: str | None = None                             # 마감 후 기록 사유 (PM 승인, forward_test.record의 late)
 
     @property
     def uses_stub(self) -> bool:
@@ -136,7 +138,8 @@ def forward_test_commit(ctx: StepContext) -> None:
     deviations = ctx.memory.get("deviations") or []   # 예: M9가 없어 쿨다운 없이 기록한 주 (M4·M8)
     for note in deviations:  # 상세 사유(예외 문장 포함)는 로컬 로그에만 남긴다
         ctx.log.warning("7단계: 기록 시 이탈 사항 상세: %s", note)
-    commit_hash = forward_test.record(ctx.date, source_commit=ctx.source_commit, memo=deviation_memo(ctx.date, deviations))
+    commit_hash = forward_test.record(ctx.date, source_commit=ctx.source_commit, memo=deviation_memo(ctx.date, deviations),
+                                      late=ctx.late)
     ctx.log.info("7단계: 신호 커밋 %s를 forward_log.csv에 기록하고 push했다", commit_hash)
 
 
@@ -197,11 +200,11 @@ def resolve(entry: str | Callable | None) -> Callable[[StepContext], None] | Non
 
 
 def run(date: str, steps: Sequence[Step] = STEPS, source_commit: str | None = None,
-        rehearsal: bool = False) -> int:
+        rehearsal: bool = False, late: str | None = None) -> int:
     """주간 실행. 성공하면 0, 한 단계라도 실패하면 1. rehearsal이면 7단계 기록을 건너뛴다."""
     io._check_date_arg(date)
     log = _setup_logger(date, rehearsal)
-    ctx = StepContext(date=date, log=log, source_commit=source_commit, rehearsal=rehearsal)
+    ctx = StepContext(date=date, log=log, source_commit=source_commit, rehearsal=rehearsal, late=late)
     log.info("주간 실행 시작: 신호일 %s%s", date, " (리허설: forward test 기록 안 함)" if rehearsal else "")
 
     for step in steps:
@@ -239,13 +242,17 @@ def main(argv: Sequence[str] | None = None) -> int:
     mode.add_argument("--source-commit", help="신호를 만든 코드의 커밋 해시. forward test 커밋에 필요하다 (DEC-04)")
     mode.add_argument("--rehearsal", action="store_true",
                       help="1~6단계만 돌리고 forward test 기록(커밋, 태그, push)을 건너뛴다")
+    parser.add_argument("--late", metavar="사유",
+                        help="마감 후 기록 (PM 승인 필요). --source-commit과 함께 쓰고 ft-late-* 태그로 남긴다")
     args = parser.parse_args(argv)
+    if args.late is not None and not args.source_commit:
+        parser.error("--late는 --source-commit과 함께 쓴다")
     try:
         io._check_date_arg(args.date)
     except ValueError as exc:
         print(f"오류: {exc}", file=sys.stderr)
         return 1
-    return run(args.date, source_commit=args.source_commit, rehearsal=args.rehearsal)
+    return run(args.date, source_commit=args.source_commit, rehearsal=args.rehearsal, late=args.late)
 
 
 if __name__ == "__main__":

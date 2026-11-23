@@ -341,6 +341,63 @@ class PastPositionsTest(RepoTest):
             ft.past_positions("2026-13-01")
 
 
+class RealDeviationLogTest(unittest.TestCase):
+    """저장소의 실제 docs/deviation_log.md에 11/20 마감 후 기록 행이 있어 --late가 통과하는지 (PM #82 리뷰)."""
+
+    def test_2026_11_20_late_row_exists(self):
+        saved, io.ROOT = io.ROOT, Path(__file__).resolve().parents[2]
+        try:
+            date = "2026-11-20"
+            deadline = ft.commit_deadline(date)
+            ft._check_late(date, "PM 승인", deadline, deadline + pd.Timedelta(hours=2))
+        finally:
+            io.ROOT = saved
+
+
+class LateRecordTest(RepoTest):
+    """마감 후 기록 (PM 승인 11/23): deviation log 행이 있어야 하고, ft-late-* 태그로 남기며 forward_log에는 적지 않는다."""
+
+    def setUp(self):
+        super().setUp()
+        (self.tmp / "docs").mkdir()
+        self.dev = self.tmp / "docs" / "deviation_log.md"
+        self.dev.write_text(f"| 날짜 | 항목 |\n|---|---|\n| 2026-11-09 | forward test {DAY} 마감 후 기록 |\n",
+                            encoding="utf-8")
+        io.write_table("signals", sample("signals"), date=DAY)
+
+    def test_records_with_late_tag_and_no_log_row(self):
+        commit_hash = self.record(late="PM 승인", now=lambda: pd.Timestamp("2026-11-09 10:52", tz=ft.KST))
+        self.assertEqual(self.git("rev-parse", "ft-late-20261106^{commit}"), commit_hash)
+        self.assertFalse(self.git("tag", "--list", "ft-20261106"))
+        self.assertEqual(self.remote_ref("ft-late-20261106^{commit}"), commit_hash)
+        self.assertEqual(self.files_in(commit_hash), {f"signals/{DAY}.parquet"})
+        message = self.git("log", "-1", "--format=%B", commit_hash)
+        self.assertIn("마감 후 기록", message)
+        self.assertIn("기록 시각 2026-11-09 10:52 KST", message)
+        self.assertIn("사유: PM 승인", message)
+        self.assertTrue(io.read_table("forward_log").empty)                # 마감 준수 기록만 둔다
+        self.assertEqual(ft.past_positions("2026-12-04"), {})              # 정식 태그 읽기에 들어가지 않는다
+
+    def test_needs_deviation_log_row(self):
+        self.dev.write_text("| 날짜 | 항목 |\n|---|---|\n", encoding="utf-8")
+        with self.assertRaisesRegex(ft.ForwardTestError, "deviation_log"):
+            self.record(late="PM 승인", now=AFTER)
+        self.assertEqual(self.commits(), ["init"])
+
+    def test_before_deadline_uses_normal_record(self):
+        with self.assertRaisesRegex(ft.ForwardTestError, "마감.*전이다"):
+            self.record(late="PM 승인", now=BEFORE)
+
+    def test_needs_reason(self):
+        with self.assertRaisesRegex(ft.ForwardTestError, "사유"):
+            self.record(late="  ", now=AFTER)
+
+    def test_without_late_still_refuses_after_deadline(self):
+        with self.assertRaisesRegex(ft.ForwardTestError, "마감"):
+            self.record(now=AFTER)
+        self.assertEqual(self.commits(), ["init"])
+
+
 class LabelReadyDateTest(unittest.TestCase):
     def test_dates(self):
         # t+1+20 거래일 (4.6절)
