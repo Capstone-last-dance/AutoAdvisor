@@ -340,6 +340,83 @@ class PastPositionsTest(RepoTest):
         with self.assertRaises(ValueError):
             ft.past_positions("2026-13-01")
 
+    def test_past_tables_reads_signals(self):
+        got = ft.past_tables("2026-12-04", "signals")
+        self.assertEqual(list(got), ["2026-11-06", "2026-11-20", "2026-11-27"])
+        self.assertEqual(set(got["2026-11-27"]["model_version"]), {"lgbm_v1"})
+
+
+def parallel_frame(date):
+    pos = sample("positions"); pos["date"] = pd.Timestamp(date)
+    return pos
+
+
+class ParallelRecordTest(RepoTest):
+    """B 병행 기록 (PM 11/23): 이번 실행의 5b가 쓴 신호일 파일만 같은 신호 커밋·태그에 넣는다."""
+
+    ML_DAY = "2026-11-27"
+    REL = "positions/wf_20261127_B_t7c53.parquet"
+
+    def at(self, date):
+        return lambda: pd.Timestamp(f"{date} 20:00", tz=ft.KST)
+
+    def with_file(self, date=None, frame=None):
+        date = date or self.ML_DAY
+        self.prepare(date, "lgbm_v1" if date >= self.ML_DAY else "baseline", positions=True)
+        io.write_table("positions", parallel_frame(date) if frame is None else frame,
+                       run_id=ft.parallel_run_id(date))
+
+    def test_starts_on_11_27(self):
+        self.assertEqual(ft.PARALLEL_FROM, pd.Timestamp(self.ML_DAY))
+
+    def test_file_written_this_run_goes_into_signal_commit_and_tag(self):
+        self.with_file()
+        commit_hash = self.record(self.ML_DAY, now=self.at(self.ML_DAY), parallel=self.REL)
+        self.assertEqual(self.files_in(commit_hash), {f"signals/{self.ML_DAY}.parquet",
+                                                      f"positions/{self.ML_DAY}.parquet", self.REL})
+        self.assertEqual(self.git("rev-parse", "ft-20261127^{commit}"), commit_hash)
+        self.assertEqual(io.read_table("forward_log").iloc[-1]["has_positions"], 1)
+        self.assertEqual(list(ft.past_parallel_positions("2026-12-04")), [self.ML_DAY])
+        self.assertEqual(ft.past_parallel_positions(self.ML_DAY), {})
+        self.assertEqual(list(ft.past_positions("2026-12-04")), [self.ML_DAY])   # 공식 비중은 따로 읽힌다
+
+    def test_direct_record_leaves_existing_file_out(self):
+        # 기록기를 직접 실행하면(parallel 없음) 같은 날짜의 유효한 파일이 있어도 공식 신호·비중만 남긴다
+        self.with_file()
+        with self.assertLogs("forward_test", "WARNING") as logs:
+            commit_hash = self.record(self.ML_DAY, now=self.at(self.ML_DAY))
+        self.assertEqual(self.files_in(commit_hash), {f"signals/{self.ML_DAY}.parquet",
+                                                      f"positions/{self.ML_DAY}.parquet"})
+        self.assertEqual(self.git("rev-parse", "ft-20261127^{commit}"), commit_hash)   # 공식 기록은 정상
+        self.assertIn("5b가 쓴 파일이 아니라", "\n".join(logs.output))
+        self.assertIn("?? " + self.REL, self.git("status", "--porcelain"))            # 파일은 그대로 둔다
+
+    def test_other_path_is_not_attached(self):
+        self.with_file()
+        commit_hash = self.record(self.ML_DAY, now=self.at(self.ML_DAY),
+                                  parallel="positions/wf_20261120_B_t7c53.parquet")
+        self.assertNotIn(self.REL, self.files_in(commit_hash))
+
+    def test_missing_file_records_official_only(self):
+        self.prepare(self.ML_DAY, "lgbm_v1", positions=True)
+        with self.assertLogs("forward_test", "WARNING") as logs:
+            commit_hash = self.record(self.ML_DAY, now=self.at(self.ML_DAY), parallel=self.REL)
+        self.assertNotIn(self.REL, self.files_in(commit_hash))
+        self.assertIn("공식 기록만", "\n".join(logs.output))
+
+    def test_bad_file_records_official_only(self):
+        self.with_file(frame=parallel_frame("2026-11-20"))                  # 다른 날짜의 행
+        commit_hash = self.record(self.ML_DAY, now=self.at(self.ML_DAY), parallel=self.REL)
+        self.assertNotIn(self.REL, self.files_in(commit_hash))
+        self.assertIn(f"positions/{self.ML_DAY}.parquet", self.files_in(commit_hash))
+
+    def test_before_start_is_not_committed(self):
+        date = "2026-11-20"
+        self.with_file(date)
+        rel = f"positions/wf_{ft.parallel_run_id(date)}.parquet"
+        commit_hash = self.record(date, now=self.at(date), parallel=rel)
+        self.assertEqual(self.files_in(commit_hash), {f"signals/{date}.parquet", f"positions/{date}.parquet"})
+
 
 class RealDeviationLogTest(unittest.TestCase):
     """저장소의 실제 docs/deviation_log.md에 11/20 마감 후 기록 행이 있어 --late가 통과하는지 (PM #82 리뷰)."""

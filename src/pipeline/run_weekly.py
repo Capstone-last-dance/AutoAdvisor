@@ -10,6 +10,8 @@
 - 한 단계라도 실패하면 이후 단계를 실행하지 않고, 실패 단계와 오류를 logs/{date}.log에 남긴 뒤
   종료 코드 1로 끝낸다.
 - 스텁이 하나라도 쓰인 실행은 forward test 커밋을 하지 않는다 (7단계).
+- 선택 단계(optional, 예: 5b단계 B 병행 모델)는 실패해도 멈추지 않는다. 경고와 이탈 메모만 남기고
+  공식 기록은 그대로 한다 (PM 11/20). 연결된 함수가 없으면 스텁 없이 건너뛴다.
 - --rehearsal은 1~6단계만 실제로 돌리고 7단계 forward test 기록(forward_log.csv, 커밋, 태그, push)을 건너뛴다.
   지난 신호일 자료로 리허설하거나 진단용 신호를 만들 때 쓴다. 로그는 logs/{date}_rehearsal.log에 따로 남긴다.
 
@@ -82,11 +84,12 @@ class StepContext:
 
 @dataclass(frozen=True)
 class Step:
-    no: int
+    no: int | str                       # 선택 단계는 "5b"처럼 앞 단계 번호에 글자를 붙인다
     module: str                         # 5.2절 모듈
     name: str
     entry: str | Callable[[StepContext], None] | None
     stub: Callable[[StepContext], None]
+    optional: bool = False              # True면 실패해도 멈추지 않고 공식 기록을 그대로 한다
 
 
 # ---------------------------------------------------------------------------
@@ -139,7 +142,7 @@ def forward_test_commit(ctx: StepContext) -> None:
     for note in deviations:  # 상세 사유(예외 문장 포함)는 로컬 로그에만 남긴다
         ctx.log.warning("7단계: 기록 시 이탈 사항 상세: %s", note)
     commit_hash = forward_test.record(ctx.date, source_commit=ctx.source_commit, memo=deviation_memo(ctx.date, deviations),
-                                      late=ctx.late)
+                                      late=ctx.late, parallel=_parallel_written(ctx))
     ctx.log.info("7단계: 신호 커밋 %s를 forward_log.csv에 기록하고 push했다", commit_hash)
 
 
@@ -148,7 +151,18 @@ def forward_test_commit(ctx: StepContext) -> None:
 _DEVIATION_REASONS = (
     (re.compile(r"M9 쿨다운 없이 계산"), "M9 쿨다운 없이 계산 (PM 11/9 결정)"),
     (re.compile(r"M9 체결 지도 없이 계산"), "M9 체결 지도 없이 계산 (PM 11/9 결정)"),
+    (re.compile(r"선택 단계 실패"), "B 병행 모델 기록 실패, 공식 기록은 그대로 (PM 11/20 결정)"),
 )
+PARALLEL_FAILED_KEY = "parallel_failed"    # 선택 단계가 실패하면 그 주의 병행 파일을 커밋하지 않는다
+PARALLEL_WRITTEN_KEY = "parallel_written"  # 5b(#81)가 이번 실행에서 성공적으로 쓴 병행 비중 파일 경로
+
+
+def _parallel_written(ctx: StepContext) -> str | None:
+    """7단계에 넘길 병행 파일 경로. 5b가 이번 실행에서 쓰고 실패하지 않았을 때만 (PM #77 11/23)."""
+    if ctx.memory.get(PARALLEL_FAILED_KEY):
+        return None
+    written = ctx.memory.get(PARALLEL_WRITTEN_KEY)
+    return str(written) if written else None
 _OTHER_DEVIATION = "그 밖의 이탈"
 
 
@@ -175,6 +189,8 @@ STEPS: tuple[Step, ...] = (
     Step(3, "M3a·M3b", "급락 확률·순위 점수", "src.models.signals:m3_step", _stub_tables("signals", dated=True)),
     Step(4, "M4", "원시 목표 비중 w_raw", "src.portfolio.weekly:m4_step", _stub_w_raw),
     Step(5, "M8", "리스크 레이어", "src.portfolio.weekly:m8_step", _stub_tables("positions", dated=True)),
+    Step("5b", "B 병행", "병행 모델 목표 비중 (T7-80-C53, 11/27부터)", "src.portfolio.t7c53:step", _no_stub,
+         optional=True),
     Step(6, "M6", "근거 요약", "src.rag.evidence:m6_step", _stub_evidence),
     Step(7, "M7", "forward test 커밋", forward_test_commit, _no_stub),
 )
@@ -209,6 +225,9 @@ def run(date: str, steps: Sequence[Step] = STEPS, source_commit: str | None = No
 
     for step in steps:
         label = f"{step.no}단계 {step.module} {step.name}"
+        if step.optional:
+            _run_optional(step, label, ctx)
+            continue
         try:
             fn = resolve(step.entry)
             if fn is None:
@@ -228,6 +247,23 @@ def run(date: str, steps: Sequence[Step] = STEPS, source_commit: str | None = No
     log.info("주간 실행 완료 (스텁 사용: %s)", "예, " + ", ".join(ctx.stubbed) if ctx.uses_stub else "아니오")
     runlog.close_log(log)
     return 0
+
+
+def _run_optional(step: Step, label: str, ctx: StepContext) -> None:
+    """선택 단계: 실패해도 멈추지 않는다. 실패는 경고·이탈 메모로 남기고 병행 파일은 커밋하지 않는다."""
+    try:
+        fn = resolve(step.entry)
+        if fn is None:
+            ctx.log.info("%s: 연결된 함수가 없어 건너뛴다 (선택 단계)", label)
+            return
+        ctx.log.info("%s: 시작 (선택 단계)", label)
+        fn(ctx)
+        ctx.log.info("%s: 완료", label)
+    except Exception as exc:  # 선택 단계 실패로 공식 기록을 막지 않는다
+        ctx.log.warning("%s: 실패, 공식 기록은 계속한다 (%s: %s)\n%s", label, type(exc).__name__, exc,
+                        traceback.format_exc())
+        ctx.memory.setdefault("deviations", []).append(f"선택 단계 실패: {label} ({type(exc).__name__}: {exc})")
+        ctx.memory[PARALLEL_FAILED_KEY] = True
 
 
 def _setup_logger(date: str, rehearsal: bool = False) -> logging.Logger:
