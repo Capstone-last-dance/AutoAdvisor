@@ -1,0 +1,53 @@
+{
+  "years": [
+    2016,
+    2017,
+    2018,
+    2019,
+    2020,
+    2021,
+    2022,
+    2023,
+    2024,
+    2025
+  ],
+  "sample_size_per_year": 5000,
+  "seed": 42,
+  "h": 20,
+  "sample_rows": {
+    "2016": 5000,
+    "2017": 5000,
+    "2018": 5000,
+    "2019": 5000,
+    "2020": 5000,
+    "2021": 5000,
+    "2022": 5000,
+    "2023": 5000,
+    "2024": 5000,
+    "2025": 5000
+  },
+  "input_sha256": "45f86be38f8a0412837fe46bd97fc81544ddb74ee33428f93554236b22ecba8f",
+  "model_sha256": {
+    "fold_2016\\gate\\gate_2016.txt": "f7588e3a4f0ebdb77b241800326ed917bd7253ac4e984441a43390a5994494f4",
+    "fold_2016\\ranker\\ranker_2016_h20.txt": "08b1fdced6096b8d73ff2e2723d34cfd2ed183bf602cf03dade1339602ca401a",
+    "fold_2017\\gate\\gate_2017.txt": "701fae3431df50a4567a6a83a55c08de992beab7ca3d469b08add9e2d6bddfac",
+    "fold_2017\\ranker\\ranker_2017_h20.txt": "b9144273d642945bf0cbe126d975449ce6a30edd607e284f38d75b5acb01a842",
+    "fold_2018\\gate\\gate_2018.txt": "4c595fa7449935fa4ae356fb9d30100764337b955910ca03163d2ae67f9494d6",
+    "fold_2018\\ranker\\ranker_2018_h20.txt": "d0236487cbf88f60d82fdba73e451d72f9c3f673f7bca2dc719623e4bc421ab2",
+    "fold_2019\\gate\\gate_2019.txt": "6b171feab902a49f5a0a497d283f08a9a1c7056704caa7d7f508a5939cb59347",
+    "fold_2019\\ranker\\ranker_2019_h20.txt": "61e78d53edeb005c9e9e7415e85a4971cf1ded5287d060b1e12eaa58d1850bee",
+    "fold_2020\\gate\\gate_2020.txt": "4b6f183aa1606cb736347a8a21e90a815753b2a27c40a0e65ef8c9328d7b7be8",
+    "fold_2020\\ranker\\ranker_2020_h20.txt": "bc5e77e39d073c61b38c6c79dc58508f57b1bfe34701d63d9c2984c6bc3f9078",
+    "fold_2021\\gate\\gate_2021.txt": "d90f2c681d4b1260f925e35260869e1796585d794504a10ef70e42ea677a9628",
+    "fold_2021\\ranker\\ranker_2021_h20.txt": "f84f75f388f44812d6e5e00392d8a2174a18ed831aedee6e9e23318b6e4b44a5",
+    "fold_2022\\gate\\gate_2022.txt": "a2f5c276d322b9cdbadf3d6c5a8378944331d69c14fc8d7d14bd3a045c609429",
+    "fold_2022\\ranker\\ranker_2022_h20.txt": "e2bf831ed601aec2585b512c41e8e2ac750223dadebe60170ffc29654ff9c6f5",
+    "fold_2023\\gate\\gate_2023.txt": "2ebafedfd9e72ce553402d300f4daaf8b5eeca6a4486e63ec2b696ab7ba0c68e",
+    "fold_2023\\ranker\\ranker_2023_h20.txt": "6fb437adb92ef16a043a225368226f1212400c6a555709d56be8f84ae507e5af",
+    "fold_2024\\gate\\gate_2024.txt": "c12a00262034ee834c8bbc50bdf57fde32533781e899f927e200bcc54fc2cb25",
+    "fold_2024\\ranker\\ranker_2024_h20.txt": "9ac411d69d361f7a32de8021f6ccbcdb4f5ec12aa42f1358e6b3155eeea00e6a",
+    "fold_2025\\gate\\gate_2025.txt": "08e4b8d2c949d6fed8af75fbffb177431336032095df33f54c673ad2d37354d0",
+    "fold_2025\\ranker\\ranker_2025_h20.txt": "8ba8f525fe73dc0b80f32b94f331f7f2a1db507bd604a202091bdb5746a46a03"
+  },
+  "git_commit": "4c846f045591447071aa0877f73b1b9b8271719c"
+}
