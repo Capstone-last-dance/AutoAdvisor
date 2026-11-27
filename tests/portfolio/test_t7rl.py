@@ -165,7 +165,7 @@ def test_verify_files_detects_change(tmp_path):
         t7rl.verify_files(["models/none.bin"], tmp_path)
 
 
-@pytest.mark.parametrize("allow, run_date", [(False, date(2026, 12, 14)), (True, date(2026, 12, 10))])
+@pytest.mark.parametrize("allow, run_date", [(False, date(2026, 12, 14)), (True, date(2026, 11, 30))])
 def test_run_holdout_blocked_before_open(monkeypatch, allow, run_date):
     def no_read(*a, **k):
         raise AssertionError("가드보다 먼저 자료를 읽었다")
