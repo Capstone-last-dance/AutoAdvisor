@@ -24,7 +24,7 @@ E_t (리밸런싱 주) = 고정 PPO 정책 5개(v12, λ 0.25, 시드 0~4)가 고
 
 고정 파일 (reports/20261120_B_t7rl, DEC-37처럼 git에 둔다): 폴드 2016~2026 정책 55개(best.zip)와 표준화 값,
 2011~2025 바구니 가격, FRED 미국 4계열(2008~2025), CD 91일물 월평균(~2025-12). 모든 파일의 SHA-256은 manifest.json에 있다.
-2026 홀드아웃 실행(`run_holdout`)은 C 가드를 먼저 지난다 (개봉 2026-12-11 이후 + 허용 플래그).
+2026 홀드아웃 실행(`run_holdout`)은 C 가드를 먼저 지난다 (개봉 2026-12-01 이후 + 허용 플래그, DEC-38).
 """
 from __future__ import annotations
 
@@ -467,7 +467,7 @@ def run_holdout(signals_run_id: str, m9_run_id: str | None, fred_2026: Mapping[s
                 allow_holdout: bool, run_date: date, run_dir: Path = RUN_DIR) -> PeriodRun:
     """2026 홀드아웃 신호일(사전등록 splits.holdout_signal_range)의 T7-80-RL·T7-80-C53 목표 비중을 만든다.
 
-    가드가 먼저다: 허용 플래그와 개봉일(2026-12-11) 이후 실행이 아니면 아무것도 읽지 않고 멈춘다 (4.7절, PM-14).
+    가드가 먼저다: 허용 플래그와 개봉일(2026-12-01, DEC-38) 이후 실행이 아니면 아무것도 읽지 않고 멈춘다 (4.7절, PM-14).
     signals_run_id = 사전등록 모델과 같은 A 최종 모델의 홀드아웃 ML 신호, m9_run_id = 같은 기간 PM M9 경보.
     fred_2026·cd91_2026 = FRED 최신 내려받기 (2025-12-31 이전 값은 고정 파일을 쓰고 그 뒤 값만 붙인다).
     지표는 C가 사전등록 모델과 같은 엔진·같은 구간으로 계산한다 (positions를 넘긴다).
