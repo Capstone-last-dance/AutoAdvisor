@@ -68,6 +68,19 @@ def test_last_signal_is_not_filled_when_its_fill_is_end_close():
     assert daily["cash_fraction"].iloc[-1] == pytest.approx(1.0)
 
 
+def test_incomplete_target_weights_fail_before_trading():
+    days = pd.bdate_range("2026-01-05", periods=4)
+    close = pd.DataFrame({"005930": [100.0] * 4}, index=days)
+    bm = pd.Series([100.0] * 4, index=days)
+    engine = ExecutionEngine(close, bm, CostRates(0, 0, 0), record_ledger=True)
+    positions = pd.DataFrame([{"date": days[0], "ticker": "CASH", "target_weight": 0.5}])
+    monthly = pd.Series([0.03], index=pd.PeriodIndex(["2026-01"], freq="M"))
+    with pytest.raises(ValueError, match="합계 1"):
+        replay_candidate(positions, engine, monthly,
+                         end_date=days[-1].strftime("%Y-%m-%d"), benchmark=bm)
+    assert engine.ledger == []
+
+
 def test_record_is_fingerprinted_and_never_overwritten(tmp_path):
     cfg = tmp_path / "prereg.yaml"
     source = tmp_path / "prices.parquet"

@@ -74,9 +74,15 @@ def replay_candidate(positions: pd.DataFrame, engine: Any, monthly: pd.Series,
     weights = pd.to_numeric(frame["target_weight"], errors="coerce")
     if not np.isfinite(weights.to_numpy()).all() or (weights < 0).any():
         raise ValueError("후보 비중은 유한한 0 이상이어야 합니다")
+    frame["target_weight"] = weights.astype(float)
+    by_day = frame.groupby("date", sort=True)
+    if any("CASH" not in set(part["ticker"]) or
+           abs(float(part["target_weight"].sum()) - 1.0) > 1e-9
+           for _, part in by_day):
+        raise ValueError("각 신호일에 CASH 행과 합계 1의 목표 비중이 필요합니다")
     targets = {day: {str(row.ticker): float(row.target_weight)
                      for row in part.itertuples() if row.ticker != "CASH" and row.target_weight > 0}
-               for day, part in frame.groupby("date", sort=True)}
+               for day, part in by_day}
     dates = sorted(targets)
     calendar = list(engine.days)
     if end_date not in engine.day_index or dates[0] not in engine.day_index:
