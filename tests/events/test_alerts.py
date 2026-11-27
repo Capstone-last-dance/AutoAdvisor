@@ -1,6 +1,7 @@
 """M9 종목 연결·경보·쿨다운·청산 일정 테스트. 합성 자료만 쓴다."""
 
 import pandas as pd
+import pyarrow as pa
 import pytest
 
 from src.common import io
@@ -131,6 +132,18 @@ class TestBuildAlerts:
     def test_no_candidates(self):
         result = self.build([("1", "2026-01-06", "C1", "000001", "분기보고서")])
         assert result.alerts.empty and result.decisions.empty
+
+    @pytest.mark.parametrize("rows", [
+        [],                                                              # 공시 0건 (주말)
+        [("1", "2026-01-06", "C1", "000001", "분기보고서")],                # 경보 후보 없음
+        [("1", "2026-01-06", "C1", "000001", "[기재정정]상장폐지사유발생")],  # 후보는 있으나 경보 0건
+    ])
+    def test_zero_alerts_keep_the_parquet_types_of_an_alert_file(self, rows):
+        """0행 경보 파일도 경보가 있는 파일과 parquet 열 타입이 같다. 문자열 열이 null 타입으로 저장되면 안 된다."""
+        one = self.build([("1", "2026-01-06", "C1", "000001", "상장폐지사유발생")]).alerts
+        empty = self.build(rows).alerts
+        assert empty.empty
+        assert pa.Schema.from_pandas(empty, preserve_index=False) == pa.Schema.from_pandas(one, preserve_index=False)
 
 
 class TestCooldown:
