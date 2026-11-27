@@ -158,6 +158,9 @@ def _active_ends(history: pd.DataFrame | None, days: pd.DatetimeIndex, cooldown:
 
 def _alert_frame(rows: pd.DataFrame, generated_at: pd.Timestamp | None = None) -> pd.DataFrame:
     out = pd.DataFrame({column: rows[column] for column in ALERT_COLUMNS if column in rows.columns}).copy()
+    # 판정 후보가 없으면 빈 object 열이 되어 parquet에 null 타입으로 저장된다. 경보가 있는 파일과 같은 문자열 타입으로 둔다
+    for column in ("ticker", "trigger_type", "rcept_no", "report_nm"):
+        out[column] = out[column].astype("str")
     available = _as_kst(out["available_at"])
     out["available_at"] = available
     out["rcept_dt"] = _as_kst(out["rcept_dt"])
