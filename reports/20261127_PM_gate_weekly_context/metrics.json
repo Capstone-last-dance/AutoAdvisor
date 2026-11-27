@@ -1,0 +1,166 @@
+{
+  "scope": "historical_exploratory_walk_forward",
+  "period": [
+    2016,
+    2025
+  ],
+  "signal_dates": 520,
+  "scored_rows": 228422,
+  "labeled_rows": 226469,
+  "weeks_with_positive_and_negative_labels": 516,
+  "g1": {
+    "baseline_vol_60_auc": 0.6974596716303608,
+    "auc_threshold": 0.7274596716303608,
+    "lift_threshold": 2.0,
+    "drawdown_reference": {
+      "auc": 0.7247126884502185,
+      "within_week_auc": 0.7287636365396205,
+      "lift": 2.758454154706686,
+      "hits": 5158
+    },
+    "blend_before_week_adjustment": {
+      "auc": 0.7262498041701789,
+      "within_week_auc": 0.7294564059175913,
+      "lift": 2.7901289175081088,
+      "hits": 5217
+    },
+    "weekly_risk_adjusted": {
+      "auc": 0.7299074266101715,
+      "within_week_auc": 0.7294564059175913,
+      "lift": 2.7901289175081088,
+      "hits": 5217
+    },
+    "by_year": [
+      {
+        "year": 2016,
+        "labeled_rows": 21106,
+        "auc_before_week_adjustment": 0.7060699284719829,
+        "auc": 0.7060699284719829,
+        "within_week_auc": 0.714735717724112,
+        "lift": 2.7052977712824258,
+        "hits": 428
+      },
+      {
+        "year": 2017,
+        "labeled_rows": 20436,
+        "auc_before_week_adjustment": 0.7103178576542417,
+        "auc": 0.7217139972884653,
+        "within_week_auc": 0.7261577190277503,
+        "lift": 3.0291123558701405,
+        "hits": 324
+      },
+      {
+        "year": 2018,
+        "labeled_rows": 22263,
+        "auc_before_week_adjustment": 0.7317306404374359,
+        "auc": 0.7328049164857087,
+        "within_week_auc": 0.743464919705414,
+        "lift": 2.877880967402734,
+        "hits": 461
+      },
+      {
+        "year": 2019,
+        "labeled_rows": 21008,
+        "auc_before_week_adjustment": 0.741207646314881,
+        "auc": 0.739324195745434,
+        "within_week_auc": 0.7481961228415749,
+        "lift": 3.2010103370549468,
+        "hits": 416
+      },
+      {
+        "year": 2020,
+        "labeled_rows": 24216,
+        "auc_before_week_adjustment": 0.6569081569059043,
+        "auc": 0.6626557204249632,
+        "within_week_auc": 0.6903098168482703,
+        "lift": 2.4590317573623834,
+        "hits": 641
+      },
+      {
+        "year": 2021,
+        "labeled_rows": 25114,
+        "auc_before_week_adjustment": 0.7959676572348359,
+        "auc": 0.7925353220415156,
+        "within_week_auc": 0.7994603409161185,
+        "lift": 3.9746439773793982,
+        "hits": 553
+      },
+      {
+        "year": 2022,
+        "labeled_rows": 23269,
+        "auc_before_week_adjustment": 0.7429882450587528,
+        "auc": 0.7429882450587528,
+        "within_week_auc": 0.7532621000405889,
+        "lift": 3.558284986268724,
+        "hits": 510
+      },
+      {
+        "year": 2023,
+        "labeled_rows": 23673,
+        "auc_before_week_adjustment": 0.7733225334282543,
+        "auc": 0.7679723045712896,
+        "within_week_auc": 0.774982969134832,
+        "lift": 3.4512447102347785,
+        "hits": 590
+      },
+      {
+        "year": 2024,
+        "labeled_rows": 23495,
+        "auc_before_week_adjustment": 0.7376031251133176,
+        "auc": 0.7355497484307205,
+        "within_week_auc": 0.7484120390802808,
+        "lift": 2.6212023230396824,
+        "hits": 624
+      },
+      {
+        "year": 2025,
+        "labeled_rows": 21889,
+        "auc_before_week_adjustment": 0.6322343159396371,
+        "auc": 0.6322343159396371,
+        "within_week_auc": 0.6642894031853833,
+        "lift": 1.854296371222658,
+        "hits": 670
+      }
+    ]
+  },
+  "g2": {
+    "nav_days": 2447,
+    "weeks_with_effect": 515,
+    "no_gate": {
+      "mdd": 0.6854058719987346,
+      "cagr": -0.07743899341997995
+    },
+    "min_relative_mdd_reduction": 0.2,
+    "max_hac_t": -3.0,
+    "cash_interest_rate": 0.0,
+    "five_year_windows": 6,
+    "retain_cash": {
+      "mdd": 0.4667795282599557,
+      "cagr": -0.013435986950459222,
+      "relative_mdd_reduction": 0.3189735493529336,
+      "hac_t": -3.074030216697961,
+      "five_year_windows_passing": 0
+    },
+    "redistribute": {
+      "mdd": 0.5464566494516402,
+      "cagr": -0.014584313885836475,
+      "relative_mdd_reduction": 0.20272546271291783,
+      "hac_t": -3.074030216697961,
+      "five_year_windows_passing": 0
+    }
+  },
+  "verification": {
+    "point_in_time_percentile_recheck": {
+      "signal_days": 20,
+      "rows": 8702,
+      "max_error": 0.0
+    },
+    "flags_changed_by_week_adjustment": 0,
+    "max_daily_nav_change_by_week_adjustment": {
+      "retain_cash": 0.0,
+      "redistribute": 0.0
+    },
+    "latest_frozen_calibration_label_end": "2025-12-30",
+    "holdout_2026_evaluated": false
+  }
+}
