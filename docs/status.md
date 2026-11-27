@@ -54,7 +54,7 @@
 | C-08 | C 손석범 | 12/7 | 대기 | | |
 | C-09 | C 손석범 | 12/7 | 진행 중 | [병합 PR #25](https://github.com/Capstone-last-dance/AutoAdvisor/pull/25); `src/analysis/anova.py`; `src/analysis/anova_report.py`; `reports/20261123_C_anova_v7/` | v7 B 인계 주간 장부 519쌍과 10폴드 × 5시드 IR 50행으로 사전등록 ANOVA 1·2를 실행했다. ANOVA 1의 M8 주효과 p=0.527, 기간×M8 p=0.964로 유의하지 않았다. ANOVA 2의 폴드 효과 p=1.30e-19, 시드 효과 p=0.193이다. 입력 SHA-256과 F·p·partial η²를 기록했다. 주간 자기상관과 같은 주의 대응 구조 때문에 p값은 보조 분석이며 KPI 판정에 쓰지 않는다. 결과 리뷰·병합과 최종 보고서 반영이 남았다. |
 | C-10 | C 손석범 | 12/7 | 대기 | | |
-| C-11 | C 손석범 | 12/11 | 대기 | | |
+| C-11 | C 손석범 | 12/1 | 진행 중 | `src/backtest/cash_return.py`, [DEC-38](decisions.md) | 11/27 CD 91일물 일별 NAV 보정 함수와 B 규칙 대조 테스트 준비. 12/1 개봉 뒤 A 시세·신호, PM M9·pair32, B 후보 비중을 받아 2026년 1~11월(마지막 11/27 신호, 성과 11/30 종가) 동일 엔진으로 비교한다. 라벨 지표는 10/30 신호까지만 산출하고 실행 시각·입력 지문을 남긴다. |
 | C-12 | C 손석범 | 12/14 | 대기 | | |
 | D-01 | D 임소현 | 10/30 | 완료 | README.md; requirements.txt; requirements-lock.txt | 설치 절차·버전 고정, PM 재현 확인 |
 | D-02 | D 임소현 | 11/2 | 완료 | src/common/io.py; tests/common/test_io.py; PR #6 | io.py·스키마 검증, PM 리뷰 승인 후 병합 |
