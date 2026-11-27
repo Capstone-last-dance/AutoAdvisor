@@ -1,6 +1,6 @@
 # 작업 진행 현황
 
-마지막 갱신: 2026-11-23
+마지막 갱신: 2026-11-27
 
 아래 표는 전체 명세의 작업 ID 단위 상태이며 세부 단계 완료와 구분한다. 개인 작업 기록·실행 로그·수집 원본은 Git에서 제외하고, 이 문서에는 팀 진행 현황과 남은 과제를 기록한다.
 
@@ -54,7 +54,7 @@
 | C-08 | C 손석범 | 12/7 | 대기 | | |
 | C-09 | C 손석범 | 12/7 | 진행 중 | [병합 PR #25](https://github.com/Capstone-last-dance/AutoAdvisor/pull/25); `src/analysis/anova.py`; `src/analysis/anova_report.py`; `reports/20261123_C_anova_v7/` | v7 B 인계 주간 장부 519쌍과 10폴드 × 5시드 IR 50행으로 사전등록 ANOVA 1·2를 실행했다. ANOVA 1의 M8 주효과 p=0.527, 기간×M8 p=0.964로 유의하지 않았다. ANOVA 2의 폴드 효과 p=1.30e-19, 시드 효과 p=0.193이다. 입력 SHA-256과 F·p·partial η²를 기록했다. 주간 자기상관과 같은 주의 대응 구조 때문에 p값은 보조 분석이며 KPI 판정에 쓰지 않는다. 결과 리뷰·병합과 최종 보고서 반영이 남았다. |
 | C-10 | C 손석범 | 12/7 | 대기 | | |
-| C-11 | C 손석범 | 12/11 | 대기 | | |
+| C-11 | C 손석범 | 12/1 | 진행 중 | `src/backtest/cash_return.py`, `src/backtest/c11_report.py`, [DEC-38](decisions.md) | CD 91일물 보정, 개봉 가드, B 후보 비중의 C 엔진 재생, KST 실행 시각·코드·설정·입력 지문 기록 함수를 준비했다. 11/27 신호가 11/30 종료일에 체결되는 경우 목표를 미체결로 두고, 미공개 11월 CD 금리는 10월 값으로 연장한 사실을 남긴다. 12/1 A 시세·신호, PM M9·pair32, B 후보 비중 인계 후 같은 구간·엔진의 2026 비교를 실행한다. 라벨 지표는 10/30 신호까지만 산출한다. |
 | C-12 | C 손석범 | 12/14 | 대기 | | |
 | D-01 | D 임소현 | 10/30 | 완료 | README.md; requirements.txt; requirements-lock.txt | 설치 절차·버전 고정, PM 재현 확인 |
 | D-02 | D 임소현 | 11/2 | 완료 | src/common/io.py; tests/common/test_io.py; PR #6 | io.py·스키마 검증, PM 리뷰 승인 후 병합 |
